@@ -121,23 +121,37 @@ export const Session = {
     nick: "@voce",
   },
 
+  // Generic key/value API used across the codebase
+  set(key, value) {
+    // Keep in-memory and persist to localStorage
+    this[key] = value;
+    try {
+      Storage.set(key, value);
+    } catch (e) {
+      console.warn('Session: failed to persist key', key, e);
+    }
+  },
+
+  get(key) {
+    if (key in this && this[key] !== undefined) return this[key];
+    return Storage.get(key);
+  },
+
+  // Backwards-compatible specific helpers
   setUser(user) {
-    this.user = user;
-    Storage.set("user", user);
+    this.set('user', user);
   },
 
   getUser() {
-    return this.user || Storage.get("user");
+    return this.get('user');
   },
 
   setXP(xp) {
-    this.xp = xp;
-    Storage.set("xp", xp);
+    this.set('xp', xp);
   },
 
   setAvatar(avatar) {
-    this.avatar = avatar;
-    Storage.set("avatar", avatar);
+    this.set('avatar', avatar);
   },
 
   logout() {

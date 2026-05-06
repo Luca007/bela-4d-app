@@ -17,10 +17,19 @@ export class LoginScreen extends BaseScreen {
 
   render() {
     const screen = DOM.create('div', 'screen login-container');
-    
     const form = DOM.create('div', 'login-form');
-    
-    // Header
+
+    form.appendChild(this.renderHeader());
+    form.appendChild(this.renderFormFields());
+    form.appendChild(this.renderLoginButton());
+    form.appendChild(this.renderForgotPassword());
+    form.appendChild(this.renderFooter());
+
+    screen.appendChild(form);
+    return screen;
+  }
+
+  renderHeader() {
     const header = DOM.create('div', 'login-header');
     
     const logoContainer = DOM.create('div', 'logo-container');
@@ -29,103 +38,109 @@ export class LoginScreen extends BaseScreen {
     logoContainer.appendChild(logoText);
     
     const title = DOM.create('h1');
-    title.style.color = Colors.text;
-    title.style.fontSize = '26px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '6px';
+    DOM.setStyle(title, {
+      color: Colors.text,
+      fontSize: '26px',
+      fontWeight: '800',
+      marginBottom: '6px',
+    });
     title.textContent = 'Guia Metabólico';
     
     const subtitle = DOM.create('h2');
-    subtitle.style.color = Colors.pink;
-    subtitle.style.fontSize = '18px';
-    subtitle.style.fontWeight = '700';
-    subtitle.style.marginBottom = '10px';
+    DOM.setStyle(subtitle, {
+      color: Colors.pink,
+      fontSize: '18px',
+      fontWeight: '700',
+      marginBottom: '10px',
+    });
     subtitle.textContent = 'Personalizado';
     
     const description = DOM.create('p');
-    description.style.color = Colors.muted;
-    description.style.fontSize = '15px';
+    DOM.setStyle(description, {
+      color: Colors.muted,
+      fontSize: '15px',
+    });
     description.textContent = 'Seu acesso exclusivo ao programa';
     
     header.appendChild(logoContainer);
     header.appendChild(title);
     header.appendChild(subtitle);
     header.appendChild(description);
-    
-    form.appendChild(header);
-    
-    // Form Fields
+    return header;
+  }
+
+  renderFormFields() {
     const formGroup = DOM.create('div');
-    formGroup.style.display = 'flex';
-    formGroup.style.flexDirection = 'column';
-    formGroup.style.gap = '20px';
-    formGroup.style.marginBottom = '32px';
-    
-    // Email field
+    DOM.setStyle(formGroup, {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '20px',
+      marginBottom: '32px',
+    });
+
+    // Email
     const emailLabel = UIComponents.label('E-mail');
     const emailInput = UIComponents.emailInput('seu@email.com');
     emailInput.addEventListener('input', (e) => this.email = e.target.value);
-    
     const emailGroup = DOM.create('div');
     emailGroup.appendChild(emailLabel);
     emailGroup.appendChild(emailInput);
     formGroup.appendChild(emailGroup);
-    
-    // Password field
+
+    // Password
     const passLabel = UIComponents.label('Senha');
     const passInput = UIComponents.passwordInput('••••••••');
     passInput.addEventListener('input', (e) => this.password = e.target.value);
-    
     const passGroup = DOM.create('div');
     passGroup.appendChild(passLabel);
     passGroup.appendChild(passInput);
     formGroup.appendChild(passGroup);
-    
-    form.appendChild(formGroup);
-    
-    // Login Button
+
+    return formGroup;
+  }
+
+  renderLoginButton() {
     const loginBtn = UIComponents.primaryButton('Entrar na plataforma');
-    loginBtn.style.width = '100%';
-    loginBtn.style.marginBottom = '18px';
-    loginBtn.style.fontSize = '17px';
+    DOM.setStyle(loginBtn, {
+      width: '100%',
+      marginBottom: '18px',
+      fontSize: '17px',
+    });
     loginBtn.addEventListener('click', () => this.handleLogin());
-    
-    form.appendChild(loginBtn);
-    
-    // Forgot Password
+    this.loginBtn = loginBtn;
+    return loginBtn;
+  }
+
+  renderForgotPassword() {
     const forgotLink = DOM.create('div');
     forgotLink.style.textAlign = 'center';
     
     const forgotBtn = DOM.create('button');
-    forgotBtn.style.background = 'none';
-    forgotBtn.style.border = 'none';
-    forgotBtn.style.color = Colors.pink;
-    forgotBtn.style.cursor = 'pointer';
-    forgotBtn.style.fontSize = '15px';
-    forgotBtn.style.fontWeight = '600';
+    DOM.setStyle(forgotBtn, {
+      background: 'none',
+      border: 'none',
+      color: Colors.pink,
+      cursor: 'pointer',
+      fontSize: '15px',
+      fontWeight: '600',
+    });
     forgotBtn.textContent = 'Esqueci minha senha';
     
     forgotLink.appendChild(forgotBtn);
-    form.appendChild(forgotLink);
-    
-    // Footer
+    return forgotLink;
+  }
+
+  renderFooter() {
     const footer = DOM.create('div');
-    footer.style.marginTop = '44px';
-    footer.style.paddingTop = '24px';
-    footer.style.borderTop = `1px solid ${Colors.border}`;
-    footer.style.display = 'flex';
-    footer.style.justifyContent = 'center';
-    
-    const logoSmall = this.createLogoSmall();
-    footer.appendChild(logoSmall);
-    
-    form.appendChild(footer);
-    
-    screen.appendChild(form);
-    
-    this.loginBtn = loginBtn;
-    
-    return screen;
+    DOM.setStyle(footer, {
+      marginTop: '44px',
+      paddingTop: '24px',
+      borderTop: `1px solid ${Colors.border}`,
+      display: 'flex',
+      justifyContent: 'center',
+    });
+    footer.appendChild(this.createLogoSmall());
+    return footer;
   }
 
   createLogoSmall() {

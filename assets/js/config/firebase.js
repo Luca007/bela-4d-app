@@ -1,7 +1,7 @@
 // Firebase Configuration and Initialization
 // This module initializes Firebase through ES module imports from the Firebase CDN.
 
-import { initializeApp, getApp, getApps } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
 import { getAuth as getAuthInstance } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 import { getFirestore as getFirestoreInstance } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { getFunctions as getFunctionsInstance } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js';
@@ -27,7 +27,7 @@ let analytics = null;
 // Initialize Firebase - called after DOM is ready and Firebase SDK is loaded
 export async function initializeFirebase() {
   try {
-    app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+    app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
     auth = getAuthInstance(app);
     db = getFirestoreInstance(app);
     functions = getFunctionsInstance(app);

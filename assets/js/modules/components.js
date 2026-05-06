@@ -250,8 +250,26 @@ export const UIComponents = {
     return container;
   },
 
-  // Stat card
-  statCard(label, value, unit = '', icon = '', color = Colors.pink) {
+  // Stat card (accepts either positional arguments or a single options object)
+  statCard(labelOrOptions, value, unit = '', icon = '', color = Colors.pink) {
+    let label = '';
+    let val = '';
+    let optUnit = unit;
+    let optIcon = icon;
+    let optColor = color;
+
+    if (labelOrOptions && typeof labelOrOptions === 'object') {
+      const opts = labelOrOptions;
+      label = opts.label || '';
+      val = opts.value || '';
+      optUnit = opts.unit || '';
+      optIcon = opts.icon || '';
+      optColor = opts.color || Colors.pink;
+    } else {
+      label = labelOrOptions;
+      val = value;
+    }
+
     const card = DOM.create('div', 'stat-card');
     DOM.setStyle(card, {
       background: Colors.glass,
@@ -293,7 +311,7 @@ export const UIComponents = {
       fontWeight: '800',
       lineHeight: '1',
     });
-    valueEl.innerHTML = `${value}<span style="font-size:11px;color:${Colors.muted};margin-left:2px">${unit}</span>`;
+    valueEl.innerHTML = `${val}<span style="font-size:11px;color:${Colors.muted};margin-left:2px">${optUnit}</span>`;
 
     card.appendChild(header);
     card.appendChild(valueEl);

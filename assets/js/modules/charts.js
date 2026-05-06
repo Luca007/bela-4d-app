@@ -2,7 +2,6 @@
 import { Colors } from '../config/colors.js';
 
 export const ChartUtils = {
-  // Mini chart for dashboard
   createMiniChart(data, options = {}) {
     const {
       height = 90,
@@ -16,33 +15,32 @@ export const ChartUtils = {
     const W = 300;
     const h = height;
 
-    // Calculate min and max values
     const values = data.map(d => d[yKey]);
     const min = Math.min(...values) - 4;
     const max = Math.max(...values) + 4;
 
-    // Calculate pixel positions
     const px = (i) => (i / (data.length - 1)) * (W - 24) + 12;
     const py = (v) => h - ((v - min) / (max - min)) * (h - 16) - 4;
 
-    // Create SVG
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${h}`);
     svg.style.width = '100%';
     svg.style.height = h + 'px';
 
-    // Create path
-    const path = data
-      .map((d, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(d[yKey])}`)
-      .join(' ');
+    // Add gradient
+    svg.appendChild(this.createGradient(color, h));
 
-    // Create area
-    const area = `${path} L ${px(data.length - 1)} ${h} L ${px(0)} ${h} Z`;
+    // Add paths and data points
+    this.addAreaAndLine(svg, data, px, py, color);
+    this.addDataPoints(svg, data, px, py, xKey);
 
-    // Create defs and gradient
+    return svg;
+  },
+
+  createGradient(color, height) {
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
-    const gid = `g${color.replace('#', '')}${h}`;
+    const gid = `g${color.replace('#', '')}${height}`;
     gradient.id = gid;
     gradient.setAttribute('x1', '0');
     gradient.setAttribute('y1', '0');
@@ -62,15 +60,27 @@ export const ChartUtils = {
     gradient.appendChild(stop1);
     gradient.appendChild(stop2);
     defs.appendChild(gradient);
-    svg.appendChild(defs);
+    return defs;
+  },
 
-    // Create area path
+  addAreaAndLine(svg, data, px, py, color) {
+    const path = data
+      .map((d, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(d.v)}`)
+      .join(' ');
+
+    const areaHeight = 90; // Default height for area path
+    const gidColor = color.replace('#', '');
+
+    const area = `${path} L ${px(data.length - 1)} ${areaHeight} L ${px(0)} ${areaHeight} Z`;
+    const gid = `g${gidColor}${areaHeight}`;
+
+    // Area path
     const areaPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     areaPath.setAttribute('d', area);
     areaPath.setAttribute('fill', `url(#${gid})`);
     svg.appendChild(areaPath);
 
-    // Create line path
+    // Line path
     const linePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     linePath.setAttribute('d', path);
     linePath.setAttribute('fill', 'none');
@@ -79,22 +89,23 @@ export const ChartUtils = {
     linePath.setAttribute('stroke-linecap', 'round');
     linePath.setAttribute('stroke-linejoin', 'round');
     svg.appendChild(linePath);
+  },
 
-    // Add data points
+  addDataPoints(svg, data, px, py, xKey) {
     data.forEach((d, i) => {
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
       const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       circle.setAttribute('cx', px(i));
-      circle.setAttribute('cy', py(d[yKey]));
+      circle.setAttribute('cy', py(d.v));
       circle.setAttribute('r', i === data.length - 1 ? 5 : 3);
-      circle.setAttribute('fill', color);
+      circle.setAttribute('fill', Colors.pink);
       circle.setAttribute('opacity', i === data.length - 1 ? 1 : 0.5);
       g.appendChild(circle);
 
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       text.setAttribute('x', px(i));
-      text.setAttribute('y', h + 1);
+      text.setAttribute('y', 90);
       text.setAttribute('text-anchor', 'middle');
       text.setAttribute('fill', Colors.muted);
       text.setAttribute('font-size', '9');
@@ -103,8 +114,6 @@ export const ChartUtils = {
 
       svg.appendChild(g);
     });
-
-    return svg;
   },
 
   // Calculate XP level

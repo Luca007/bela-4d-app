@@ -66,343 +66,340 @@ export class DashboardScreen extends BaseScreen {
   }
 
   destroy() {
-    // Cleanup listeners
     if (this.recipeUnsubscribe) this.recipeUnsubscribe();
     if (this.achievementsUnsubscribe) this.achievementsUnsubscribe();
     if (this.chatUnsubscribe) this.chatUnsubscribe();
     super.destroy();
   }
 
+  // Helper to create title + subtitle
+  createTitle(text, fontSize = '21px') {
+    const title = DOM.create('h2');
+    DOM.setStyle(title, {
+      color: Colors.text,
+      fontSize,
+      fontWeight: '800',
+      marginBottom: '4px',
+    });
+    title.textContent = text;
+    return title;
+  }
+
+  createSubtitle(text) {
+    const subtitle = DOM.create('p');
+    DOM.setStyle(subtitle, {
+      color: Colors.muted,
+      fontSize: '15px',
+      marginBottom: '20px',
+    });
+    subtitle.textContent = text;
+    return subtitle;
+  }
+
+  createScreenHeader(title, subtitle = '') {
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(this.createTitle(title));
+    if (subtitle) fragment.appendChild(this.createSubtitle(subtitle));
+    return fragment;
+  }
+
   render() {
     const screen = DOM.create('div', 'dashboard');
-    
-    // Sidebar
+    screen.appendChild(this.renderSidebar());
+    screen.appendChild(this.renderMainContent());
+    return screen;
+  }
+
+  renderSidebar() {
     const sidebar = DOM.create('div', 'dashboard-sidebar');
-    
-    // Logo
+    sidebar.appendChild(this.createLogoSection());
+    sidebar.appendChild(this.createNavButtons());
+    sidebar.appendChild(this.createLogoutButton());
+    return sidebar;
+  }
+
+  createLogoSection() {
     const logo = DOM.create('div');
     logo.style.marginBottom = '18px';
-    const logocircle = DOM.create('div');
-    logocircle.style.width = '32px';
-    logocircle.style.height = '32px';
-    logocircle.style.borderRadius = '50%';
-    logocircle.style.background = 'radial-gradient(circle at 35% 35%, #1a1a2a, #08080d)';
-    logocircle.style.border = `2px solid ${Colors.pink}`;
-    logocircle.style.display = 'flex';
-    logocircle.style.alignItems = 'center';
-    logocircle.style.justifyContent = 'center';
-    logocircle.style.fontSize = '12px';
-    logocircle.style.fontWeight = '900';
-    logocircle.style.color = Colors.pink;
-    logocircle.style.boxShadow = `0 0 12px ${Colors.pinkGlow}`;
-    logocircle.textContent = 'GMP';
-    logo.appendChild(logocircle);
-    sidebar.appendChild(logo);
-    
-    // Nav buttons
-    const navContainer = DOM.create('div');
-    navContainer.style.flex = '1';
-    navContainer.style.display = 'flex';
-    navContainer.style.flexDirection = 'column';
-    navContainer.style.gap = '2px';
-    navContainer.style.width = '100%';
-    
+    const circle = DOM.create('div');
+    DOM.setStyle(circle, {
+      width: '32px',
+      height: '32px',
+      borderRadius: '50%',
+      background: 'radial-gradient(circle at 35% 35%, #1a1a2a, #08080d)',
+      border: `2px solid ${Colors.pink}`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '12px',
+      fontWeight: '900',
+      color: Colors.pink,
+      boxShadow: `0 0 12px ${Colors.pinkGlow}`,
+    });
+    circle.textContent = 'GMP';
+    logo.appendChild(circle);
+    return logo;
+  }
+
+  createNavButtons() {
+    const container = DOM.create('div');
+    DOM.setStyle(container, {
+      flex: '1',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px',
+      width: '100%',
+    });
+
     NAV_ITEMS.forEach(item => {
       const btn = DOM.create('button');
-      btn.style.width = '100%';
-      btn.style.height = '50px';
-      btn.style.border = 'none';
-      btn.style.cursor = 'pointer';
-      btn.style.display = 'flex';
-      btn.style.alignItems = 'center';
-      btn.style.justifyContent = 'center';
-      btn.style.background = this.currentNav === item.id 
-        ? 'rgba(240,5,154,0.2)'
-        : 'transparent';
-      btn.style.color = this.currentNav === item.id ? Colors.pink : Colors.muted;
-      btn.style.boxShadow = this.currentNav === item.id 
-        ? `inset 3px 0 0 ${Colors.pink}`
-        : 'none';
-      btn.style.position = 'relative';
-      btn.style.fontSize = '20px';
-      btn.style.transition = 'all 0.2s';
-      
+      const isActive = this.currentNav === item.id;
+      DOM.setStyle(btn, {
+        width: '100%',
+        height: '50px',
+        border: 'none',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: isActive ? 'rgba(240,5,154,0.2)' : 'transparent',
+        color: isActive ? Colors.pink : Colors.muted,
+        boxShadow: isActive ? `inset 3px 0 0 ${Colors.pink}` : 'none',
+        position: 'relative',
+        fontSize: '20px',
+        transition: 'all 0.2s',
+      });
+
       btn.title = item.label;
       btn.innerHTML = this.getNavIcon(item.icon);
-      
-      // Badge for ranking if needed
-      if (item.id === 'ranking' && this.currentNav !== item.id) {
+
+      if (item.id === 'ranking' && !isActive) {
         const badge = DOM.create('span');
-        badge.style.position = 'absolute';
-        badge.style.top = '8px';
-        badge.style.right = '12px';
-        badge.style.width = '8px';
-        badge.style.height = '8px';
-        badge.style.borderRadius = '50%';
-        badge.style.background = Colors.gold;
-        badge.style.boxShadow = `0 0 6px ${Colors.gold}`;
+        DOM.setStyle(badge, {
+          position: 'absolute',
+          top: '8px',
+          right: '12px',
+          width: '8px',
+          height: '8px',
+          borderRadius: '50%',
+          background: Colors.gold,
+          boxShadow: `0 0 6px ${Colors.gold}`,
+        });
         btn.appendChild(badge);
       }
-      
+
       btn.addEventListener('click', () => {
         this.currentNav = item.id;
         this.element.innerHTML = '';
         this.mount();
       });
-      
-      navContainer.appendChild(btn);
+
+      container.appendChild(btn);
     });
-    
-    sidebar.appendChild(navContainer);
-    
-    // Logout button
-    const logoutBtn = DOM.create('button');
-    logoutBtn.style.width = '100%';
-    logoutBtn.style.height = '50px';
-    logoutBtn.style.border = 'none';
-    logoutBtn.style.cursor = 'pointer';
-    logoutBtn.style.display = 'flex';
-    logoutBtn.style.alignItems = 'center';
-    logoutBtn.style.justifyContent = 'center';
-    logoutBtn.style.background = 'transparent';
-    logoutBtn.style.color = Colors.muted;
-    logoutBtn.style.fontSize = '20px';
-    logoutBtn.style.transition = 'all 0.2s';
-    logoutBtn.title = 'Sair';
-    logoutBtn.innerHTML = '🚪';
-    logoutBtn.addEventListener('click', async () => {
+
+    return container;
+  }
+
+  createLogoutButton() {
+    const btn = DOM.create('button');
+    DOM.setStyle(btn, {
+      width: '100%',
+      height: '50px',
+      border: 'none',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'transparent',
+      color: Colors.muted,
+      fontSize: '20px',
+      transition: 'all 0.2s',
+    });
+
+    btn.title = 'Sair';
+    btn.innerHTML = '🚪';
+    btn.addEventListener('click', async () => {
       try {
         await authService.logout();
-        // Navigation will be handled by auth state change listener in app.js
       } catch (error) {
         console.error('Erro ao fazer logout:', error);
       }
     });
-    sidebar.appendChild(logoutBtn);
-    
-    screen.appendChild(sidebar);
-    
-    // Main content
+
+    return btn;
+  }
+
+  renderMainContent() {
     const main = DOM.create('div', 'dashboard-main');
+    const navLabel = NAV_ITEMS.find(i => i.id === this.currentNav)?.label || 'Home';
     
-    // Header
-    const header = createHeaderBar(NAV_ITEMS.find(i => i.id === this.currentNav)?.label || 'Home', this.userAvatar);
-    main.appendChild(header);
+    main.appendChild(createHeaderBar(navLabel, this.userAvatar));
+    main.appendChild(this.createBreadcrumbSection(navLabel));
+    main.appendChild(this.renderContent(navLabel));
     
-    // Breadcrumb
-    const breadLabel = NAV_ITEMS.find(i => i.id === this.currentNav)?.label || 'Home';
-    const breadcrumb = createBreadcrumb(breadLabel);
-    
+    return main;
+  }
+
+  createBreadcrumbSection(navLabel) {
+    const breadcrumb = createBreadcrumb(navLabel);
     if (this.currentNav === 'ranking') {
       breadcrumb.appendChild(createStatusBadge('Você está em #8', Colors.gold));
     } else if (this.currentNav === 'chat') {
       breadcrumb.appendChild(createStatusBadge('IA Online', Colors.success));
     }
-    
-    main.appendChild(breadcrumb);
-    
-    // Content
+    return breadcrumb;
+  }
+
+  renderContent(navLabel) {
     const content = DOM.create('div', 'dashboard-content');
-    content.style.flex = '1';
-    content.style.overflow = 'auto';
-    content.style.padding = '24px 28px';
-    content.style.display = 'flex';
-    content.style.flexDirection = 'column';
-    content.style.gap = '20px';
-    content.style.animation = 'slideIn 0.25s cubic-bezier(0.4,0,0.2,1)';
-    
-    // Render screen content
-    if (this.currentNav === 'home') {
-      this.renderHomeScreen(content);
-    } else if (this.currentNav === 'perfil') {
-      this.renderProfileScreen(content);
-    } else if (this.currentNav === 'receitas') {
-      this.renderRecipesScreen(content);
-    } else if (this.currentNav === 'avaliador') {
-      this.renderEvaluatorScreen(content);
-    } else if (this.currentNav === 'exames') {
-      this.renderExamsScreen(content);
-    } else if (this.currentNav === 'ranking') {
-      this.renderRankingScreen(content);
-    } else if (this.currentNav === 'chat') {
-      this.renderChatScreen(content);
-    }
-    
-    main.appendChild(content);
-    screen.appendChild(main);
-    
-    return screen;
+    DOM.setStyle(content, {
+      flex: '1',
+      overflow: 'auto',
+      padding: '24px 28px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '20px',
+      animation: 'slideIn 0.25s cubic-bezier(0.4,0,0.2,1)',
+    });
+
+    const screenMap = {
+      'home': () => this.renderHomeScreen(content),
+      'perfil': () => this.renderProfileScreen(content),
+      'receitas': () => this.renderRecipesScreen(content),
+      'avaliador': () => this.renderEvaluatorScreen(content),
+      'exames': () => this.renderExamsScreen(content),
+      'ranking': () => this.renderRankingScreen(content),
+      'chat': () => this.renderChatScreen(content),
+    };
+
+    const renderer = screenMap[this.currentNav];
+    if (renderer) renderer();
+
+    return content;
   }
 
   renderHomeScreen(container) {
-    const title = DOM.create('h2');
-    title.style.color = Colors.text;
-    title.style.fontSize = '21px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '4px';
-    title.textContent = 'Bem-vinda ao seu dashboard! 🎉';
-    
-    const subtitle = DOM.create('p');
-    subtitle.style.color = Colors.muted;
-    subtitle.style.fontSize = '15px';
-    subtitle.style.marginBottom = '20px';
-    subtitle.textContent = 'Acompanhe seu progresso e gerencie seu programa personalizado';
-    
-    container.appendChild(title);
-    container.appendChild(subtitle);
-    
-    // Stats
-    const statsGrid = DOM.create('div');
-    statsGrid.style.display = 'grid';
-    statsGrid.style.gridTemplateColumns = '1fr 1fr 1fr';
-    statsGrid.style.gap = '12px';
-    statsGrid.style.marginBottom = '20px';
-    
-    [
+    container.appendChild(this.createScreenHeader('Bem-vinda ao seu dashboard! 🎉', 'Acompanhe seu progresso e gerencie seu programa personalizado'));
+    container.appendChild(this.createStatsGrid());
+    container.appendChild(this.createTipsCard());
+  }
+
+  createStatsGrid() {
+    const grid = DOM.create('div');
+    DOM.setStyle(grid, {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr 1fr',
+      gap: '12px',
+      marginBottom: '20px',
+    });
+
+    const stats = [
       { label: 'Glicemia', value: '98', unit: 'mg/dL', delta: '▼ 50', color: Colors.success },
       { label: 'Peso', value: '79.6', unit: 'kg', delta: '▼ 4.4', color: Colors.success },
       { label: 'HbA1c', value: '6.1', unit: '%', delta: '▼ 0.8%', color: Colors.success },
-    ].forEach(stat => {
-      const statCard = UIComponents.statCard(stat.label, stat.value, stat.unit, '📊', stat.color);
-      const deltaEl = DOM.create('div');
-      deltaEl.style.color = stat.color;
-      deltaEl.style.fontSize = '12px';
-      deltaEl.style.fontWeight = '700';
-      deltaEl.style.marginTop = '5px';
-      deltaEl.textContent = stat.delta;
-      statCard.appendChild(deltaEl);
-      statsGrid.appendChild(statCard);
+    ];
+
+    stats.forEach(stat => {
+      const card = UIComponents.statCard(stat.label, stat.value, stat.unit, '📊', stat.color);
+      const delta = DOM.create('div');
+      DOM.setStyle(delta, {
+        color: stat.color,
+        fontSize: '12px',
+        fontWeight: '700',
+        marginTop: '5px',
+      });
+      delta.textContent = stat.delta;
+      card.appendChild(delta);
+      grid.appendChild(card);
     });
-    
-    container.appendChild(statsGrid);
-    
-    // Info card
-    const infoCard = UIComponents.card();
-    infoCard.style.background = `linear-gradient(135deg, rgba(240,5,154,0.14) 0%, rgba(192,2,124,0.07) 100%)`;
-    infoCard.style.border = `2px solid ${Colors.pinkGlow}`;
-    
-    const infoTitle = DOM.create('h3');
-    infoTitle.style.color = Colors.pink;
-    infoTitle.style.fontSize = '16px';
-    infoTitle.style.fontWeight = '800';
-    infoTitle.style.marginBottom = '10px';
-    infoTitle.textContent = '💡 Dica do dia';
-    
-    const infoText = DOM.create('p');
-    infoText.style.color = Colors.muted;
-    infoText.style.fontSize = '14px';
-    infoText.style.lineHeight = '1.6';
-    infoText.textContent = 'Mastigue devagar! A mastigação lenta reduz picos glicêmicos em até 18%.';
-    
-    infoCard.appendChild(infoTitle);
-    infoCard.appendChild(infoText);
-    container.appendChild(infoCard);
+
+    return grid;
+  }
+
+  createTipsCard() {
+    const card = UIComponents.card();
+    DOM.setStyle(card, {
+      background: `linear-gradient(135deg, rgba(240,5,154,0.14) 0%, rgba(192,2,124,0.07) 100%)`,
+      border: `2px solid ${Colors.pinkGlow}`,
+    });
+
+    const title = DOM.create('h3');
+    DOM.setStyle(title, {
+      color: Colors.pink,
+      fontSize: '16px',
+      fontWeight: '800',
+      marginBottom: '10px',
+    });
+    title.textContent = '💡 Dica do dia';
+
+    const text = DOM.create('p');
+    DOM.setStyle(text, {
+      color: Colors.muted,
+      fontSize: '14px',
+      lineHeight: '1.6',
+    });
+    text.textContent = 'Mastigue devagar! A mastigação lenta reduz picos glicêmicos em até 18%.';
+
+    card.appendChild(title);
+    card.appendChild(text);
+    return card;
   }
 
   renderProfileScreen(container) {
-    const title = DOM.create('h2');
-    title.style.color = Colors.text;
-    title.style.fontSize = '21px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '20px';
-    title.textContent = '👤 Seu Perfil';
-    
-    container.appendChild(title);
-    
-    // Avatar Card
-    const avatarCard = UIComponents.card();
-    avatarCard.style.textAlign = 'center';
-    avatarCard.style.padding = '28px 24px';
-    
+    container.appendChild(this.createTitle('👤 Seu Perfil'));
+    const card = UIComponents.card();
+    DOM.setStyle(card, {
+      textAlign: 'center',
+      padding: '28px 24px',
+    });
+
     const avatar = UIComponents.avatar(this.userAvatar.emoji, this.userAvatar.color, 80);
     avatar.style.margin = '0 auto 14px';
-    avatarCard.appendChild(avatar);
-    
-    const nickEl = DOM.create('div');
-    nickEl.style.color = Colors.text;
-    nickEl.style.fontWeight = '800';
-    nickEl.style.fontSize = '22px';
-    nickEl.style.marginBottom = '6px';
-    nickEl.textContent = this.userAvatar.nick;
-    
-    const levelEl = DOM.create('div');
-    levelEl.style.color = Colors.pink;
-    levelEl.style.fontWeight = '700';
-    levelEl.style.fontSize = '14px';
-    levelEl.textContent = 'Nível 3 · Disciplinada';
-    
-    avatarCard.appendChild(nickEl);
-    avatarCard.appendChild(levelEl);
-    container.appendChild(avatarCard);
+    card.appendChild(avatar);
+
+    const nick = DOM.create('div');
+    DOM.setStyle(nick, {
+      color: Colors.text,
+      fontWeight: '800',
+      fontSize: '22px',
+      marginBottom: '6px',
+    });
+    nick.textContent = this.userAvatar.nick;
+
+    const level = DOM.create('div');
+    DOM.setStyle(level, {
+      color: Colors.pink,
+      fontWeight: '700',
+      fontSize: '14px',
+    });
+    level.textContent = 'Nível 3 · Disciplinada';
+
+    card.appendChild(nick);
+    card.appendChild(level);
+    container.appendChild(card);
   }
 
   renderRecipesScreen(container) {
-    const title = DOM.create('h2');
-    title.style.color = Colors.text;
-    title.style.fontSize = '21px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '4px';
-    title.textContent = '🥗 Receitas';
-    
-    const subtitle = DOM.create('p');
-    subtitle.style.color = Colors.muted;
-    subtitle.style.fontSize = '15px';
-    subtitle.style.marginBottom = '20px';
-    subtitle.textContent = 'Receitas personalizadas para seu cardápio';
-    
-    container.appendChild(title);
-    container.appendChild(subtitle);
-    
-    const recipeCard = UIComponents.card();
-    const content = DOM.create('div');
-    content.innerHTML = '<p style="color: var(--color-muted); text-align: center;">As receitas carregadas aqui são personalizadas com base no seu cardápio.</p>';
-    recipeCard.appendChild(content);
-    container.appendChild(recipeCard);
+    container.appendChild(this.createScreenHeader('🥗 Receitas', 'Receitas personalizadas para seu cardápio'));
+    const card = UIComponents.card();
+    const msg = DOM.create('p');
+    DOM.setStyle(msg, { color: Colors.muted, textAlign: 'center' });
+    msg.textContent = 'As receitas carregadas aqui são personalizadas com base no seu cardápio.';
+    card.appendChild(msg);
+    container.appendChild(card);
   }
 
   renderEvaluatorScreen(container) {
-    const title = DOM.create('h2');
-    title.style.color = Colors.text;
-    title.style.fontSize = '21px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '4px';
-    title.textContent = '🍽️ Avaliador Alimentar';
-    
-    const subtitle = DOM.create('p');
-    subtitle.style.color = Colors.muted;
-    subtitle.style.fontSize = '15px';
-    subtitle.style.marginBottom = '20px';
-    subtitle.textContent = 'A IA avalia seus alimentos e cria um plano personalizado';
-    
-    container.appendChild(title);
-    container.appendChild(subtitle);
-    
+    container.appendChild(this.createScreenHeader('🍽️ Avaliador Alimentar', 'A IA avalia seus alimentos e cria um plano personalizado'));
     const card = UIComponents.card();
-    const textarea = UIComponents.textarea('Digite seus alimentos aqui...');
-    const btn = UIComponents.primaryButton('Avaliar alimentação');
     card.appendChild(DOM.create('label')).textContent = 'Meus alimentos';
-    card.appendChild(textarea);
-    card.appendChild(btn);
+    card.appendChild(UIComponents.textarea('Digite seus alimentos aqui...'));
+    card.appendChild(UIComponents.primaryButton('Avaliar alimentação'));
     container.appendChild(card);
   }
 
   renderExamsScreen(container) {
-    const title = DOM.create('h2');
-    title.style.color = Colors.text;
-    title.style.fontSize = '21px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '4px';
-    title.textContent = '📊 Exames & Monitoramento';
-    
-    const subtitle = DOM.create('p');
-    subtitle.style.color = Colors.muted;
-    subtitle.style.fontSize = '15px';
-    subtitle.style.marginBottom = '20px';
-    subtitle.textContent = 'Acompanhe sua evolução clínica ao longo do tempo';
-    
-    container.appendChild(title);
-    container.appendChild(subtitle);
-    
+    container.appendChild(this.createScreenHeader('📊 Exames & Monitoramento', 'Acompanhe sua evolução clínica ao longo do tempo'));
     const card = UIComponents.card();
     const text = DOM.create('p');
     text.style.color = Colors.muted;
@@ -412,41 +409,32 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderRankingScreen(container) {
-    const title = DOM.create('h2');
-    title.style.color = Colors.text;
-    title.style.fontSize = '21px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '4px';
-    title.textContent = '🏆 Ranking';
-    
-    const subtitle = DOM.create('p');
-    subtitle.style.color = Colors.muted;
-    subtitle.style.fontSize = '15px';
-    subtitle.style.marginBottom = '20px';
-    subtitle.textContent = 'Veja como você está na comunidade GMP';
-    
-    container.appendChild(title);
-    container.appendChild(subtitle);
-    
+    container.appendChild(this.createScreenHeader('🏆 Ranking', 'Veja como você está na comunidade GMP'));
     const card = UIComponents.card();
     const badge = DOM.create('div');
-    badge.style.background = Colors.glass;
-    badge.style.border = `1px solid ${Colors.border}`;
-    badge.style.borderRadius = '16px';
-    badge.style.padding = '20px';
-    badge.style.textAlign = 'center';
-    
+    DOM.setStyle(badge, {
+      background: Colors.glass,
+      border: `1px solid ${Colors.border}`,
+      borderRadius: '16px',
+      padding: '20px',
+      textAlign: 'center',
+    });
+
     const pos = DOM.create('div');
-    pos.style.fontSize = '32px';
-    pos.style.fontWeight = '900';
-    pos.style.color = Colors.pink;
+    DOM.setStyle(pos, {
+      fontSize: '32px',
+      fontWeight: '900',
+      color: Colors.pink,
+    });
     pos.textContent = '#8';
-    
+
     const text = DOM.create('p');
-    text.style.color = Colors.muted;
-    text.style.marginTop = '8px';
+    DOM.setStyle(text, {
+      color: Colors.muted,
+      marginTop: '8px',
+    });
     text.textContent = 'Você está em 8º lugar com 520 XP';
-    
+
     badge.appendChild(pos);
     badge.appendChild(text);
     card.appendChild(badge);
@@ -454,35 +442,33 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderChatScreen(container) {
-    const title = DOM.create('h2');
-    title.style.color = Colors.text;
-    title.style.fontSize = '21px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '20px';
-    title.textContent = '💬 Chat IA';
-    
-    container.appendChild(title);
-    
-    const chatCard = UIComponents.card();
-    chatCard.style.minHeight = '300px';
-    chatCard.style.display = 'flex';
-    chatCard.style.flexDirection = 'column';
-    chatCard.style.justifyContent = 'center';
-    chatCard.style.alignItems = 'center';
-    
-    const chatIcon = DOM.create('div');
-    chatIcon.style.fontSize = '48px';
-    chatIcon.style.marginBottom = '16px';
-    chatIcon.textContent = '✨';
-    
-    const chatText = DOM.create('p');
-    chatText.style.color = Colors.muted;
-    chatText.style.textAlign = 'center';
-    chatText.textContent = 'Olá! Sou a IA do GMP. Pode me fazer perguntas sobre alimentação, receitas e glicemia.';
-    
-    chatCard.appendChild(chatIcon);
-    chatCard.appendChild(chatText);
-    container.appendChild(chatCard);
+    container.appendChild(this.createTitle('💬 Chat IA'));
+    const card = UIComponents.card();
+    DOM.setStyle(card, {
+      minHeight: '300px',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+    });
+
+    const icon = DOM.create('div');
+    DOM.setStyle(icon, {
+      fontSize: '48px',
+      marginBottom: '16px',
+    });
+    icon.textContent = '✨';
+
+    const text = DOM.create('p');
+    DOM.setStyle(text, {
+      color: Colors.muted,
+      textAlign: 'center',
+    });
+    text.textContent = 'Olá! Sou a IA do GMP. Pode me fazer perguntas sobre alimentação, receitas e glicemia.';
+
+    card.appendChild(icon);
+    card.appendChild(text);
+    container.appendChild(card);
   }
 
   getNavIcon(name) {

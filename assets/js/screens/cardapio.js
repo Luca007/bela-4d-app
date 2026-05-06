@@ -233,177 +233,75 @@ export class CardapioScreen extends BaseScreen {
   }
 
   createAllowedFoodsSection(card) {
-    const section = DOM.create('div');
-    
-    const title = DOM.create('h3');
-    title.style.color = Colors.text;
-    title.style.fontSize = '19px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '4px';
-    title.textContent = '🟢 Lista Verde — Liberados';
-    
-    const subtitle = DOM.create('p');
-    subtitle.style.color = Colors.muted;
-    subtitle.style.fontSize = '14px';
-    subtitle.style.marginBottom = '16px';
-    subtitle.textContent = 'Selecione o que você gosta e come com frequência';
-    
-    const foodsContainer = DOM.create('div');
-    foodsContainer.style.display = 'flex';
-    foodsContainer.style.flexWrap = 'wrap';
-    foodsContainer.style.gap = '8px';
-    
-    ALLOWED_FOODS.forEach(food => {
-      const btn = DOM.create('button');
-      btn.style.padding = '9px 16px';
-      btn.style.borderRadius = '22px';
-      btn.style.cursor = 'pointer';
-      btn.style.fontSize = '14px';
-      btn.style.fontWeight = '600';
-      btn.style.background = this.selectedAllowed.includes(food) 
-        ? `${Colors.success}20`
-        : 'rgba(255,255,255,0.05)';
-      btn.style.border = `1.5px solid ${this.selectedAllowed.includes(food) ? Colors.success : Colors.border}`;
-      btn.style.color = this.selectedAllowed.includes(food) ? Colors.success : Colors.muted;
-      btn.style.transition = 'all 0.2s';
-      
-      btn.textContent = (this.selectedAllowed.includes(food) ? '✓ ' : '') + food;
-      
-      btn.addEventListener('click', () => {
-        if (this.selectedAllowed.includes(food)) {
-          this.selectedAllowed = this.selectedAllowed.filter(f => f !== food);
-        } else {
-          this.selectedAllowed.push(food);
-        }
-        this.element.innerHTML = '';
-        this.mount();
-      });
-      
-      foodsContainer.appendChild(btn);
+    this.createFoodSection(card, {
+      title: '🟢 Lista Verde — Liberados',
+      subtitle: 'Selecione o que você gosta e come com frequência',
+      foods: ALLOWED_FOODS,
+      selected: this.selectedAllowed,
+      color: Colors.success,
+      key: 'selectedAllowed'
     });
-    
-    section.appendChild(title);
-    section.appendChild(subtitle);
-    section.appendChild(foodsContainer);
-    card.appendChild(section);
   }
 
   createModerateFoodsSection(card) {
-    const section = DOM.create('div');
-    
-    const title = DOM.create('h3');
-    title.style.color = Colors.text;
-    title.style.fontSize = '19px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '4px';
-    title.textContent = '🟡 Lista Amarela — Moderação';
-    
-    const subtitle = DOM.create('p');
-    subtitle.style.color = Colors.muted;
-    subtitle.style.fontSize = '14px';
-    subtitle.style.marginBottom = '16px';
-    subtitle.textContent = 'Itens que pode consumir em pequenas quantidades';
-    
-    const foodsContainer = DOM.create('div');
-    foodsContainer.style.display = 'flex';
-    foodsContainer.style.flexWrap = 'wrap';
-    foodsContainer.style.gap = '8px';
-    
-    MODERATE_FOODS.forEach(food => {
-      const btn = DOM.create('button');
-      btn.style.padding = '9px 16px';
-      btn.style.borderRadius = '22px';
-      btn.style.cursor = 'pointer';
-      btn.style.fontSize = '14px';
-      btn.style.fontWeight = '600';
-      btn.style.background = this.selectedModerate.includes(food) 
-        ? `${Colors.warning}20`
-        : 'rgba(255,255,255,0.05)';
-      btn.style.border = `1.5px solid ${this.selectedModerate.includes(food) ? Colors.warning : Colors.border}`;
-      btn.style.color = this.selectedModerate.includes(food) ? Colors.warning : Colors.muted;
-      
-      btn.textContent = (this.selectedModerate.includes(food) ? '✓ ' : '') + food;
-      
-      btn.addEventListener('click', () => {
-        if (this.selectedModerate.includes(food)) {
-          this.selectedModerate = this.selectedModerate.filter(f => f !== food);
-        } else {
-          this.selectedModerate.push(food);
-        }
-        this.element.innerHTML = '';
-        this.mount();
-      });
-      
-      foodsContainer.appendChild(btn);
+    this.createFoodSection(card, {
+      title: '🟡 Lista Amarela — Moderação',
+      subtitle: 'Itens que pode consumir em pequenas quantidades',
+      foods: MODERATE_FOODS,
+      selected: this.selectedModerate,
+      color: Colors.warning,
+      key: 'selectedModerate'
     });
-    
-    section.appendChild(title);
-    section.appendChild(subtitle);
-    section.appendChild(foodsContainer);
-    card.appendChild(section);
   }
 
   createForbiddenFoodsSection(card) {
     const section = DOM.create('div');
     
     const title = DOM.create('h3');
-    title.style.color = Colors.text;
-    title.style.fontSize = '19px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '4px';
+    DOM.setStyle(title, {
+      color: Colors.text,
+      fontSize: '19px',
+      fontWeight: '800',
+      marginBottom: '4px',
+    });
     title.textContent = '🔴 Lista Vermelha — Contraindicados';
     
     const subtitle = DOM.create('p');
-    subtitle.style.color = Colors.muted;
-    subtitle.style.fontSize = '14px';
-    subtitle.style.marginBottom = '16px';
+    DOM.setStyle(subtitle, {
+      color: Colors.muted,
+      fontSize: '14px',
+      marginBottom: '16px',
+    });
     subtitle.textContent = 'Selecione o que costuma comer — será justificado no plano';
     
     const alert = DOM.create('div');
-    alert.style.background = 'rgba(244,63,94,0.04)';
-    alert.style.border = `1px solid rgba(244,63,94,0.25)`;
-    alert.style.borderRadius = '12px';
-    alert.style.padding = '12px 16px';
-    alert.style.marginBottom = '14px';
+    DOM.setStyle(alert, {
+      background: 'rgba(244,63,94,0.04)',
+      border: `1px solid rgba(244,63,94,0.25)`,
+      borderRadius: '12px',
+      padding: '12px 16px',
+      marginBottom: '14px',
+    });
     
     const alertText = DOM.create('p');
-    alertText.style.color = Colors.muted;
-    alertText.style.fontSize = '14px';
+    DOM.setStyle(alertText, {
+      color: Colors.muted,
+      fontSize: '14px',
+    });
     alertText.innerHTML = `<span style="color: ${Colors.danger}; font-weight: 700; margin-right: 5px;">⚠️</span>
     Estes alimentos serão avaliados pela IA, que explicará porque foram excluídos e sugerirá alternativas.`;
     
     alert.appendChild(alertText);
     
     const foodsContainer = DOM.create('div');
-    foodsContainer.style.display = 'flex';
-    foodsContainer.style.flexWrap = 'wrap';
-    foodsContainer.style.gap = '8px';
+    DOM.setStyle(foodsContainer, {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '8px',
+    });
     
     RED_LIST.forEach(food => {
-      const btn = DOM.create('button');
-      btn.style.padding = '9px 16px';
-      btn.style.borderRadius = '22px';
-      btn.style.cursor = 'pointer';
-      btn.style.fontSize = '14px';
-      btn.style.fontWeight = '600';
-      btn.style.background = this.selectedForbidden.includes(food) 
-        ? 'rgba(244,63,94,0.18)'
-        : 'rgba(255,255,255,0.04)';
-      btn.style.border = `1.5px solid ${this.selectedForbidden.includes(food) ? Colors.danger : Colors.border}`;
-      btn.style.color = this.selectedForbidden.includes(food) ? Colors.danger : Colors.muted;
-      
-      btn.textContent = (this.selectedForbidden.includes(food) ? '⚠️ ' : '') + food;
-      
-      btn.addEventListener('click', () => {
-        if (this.selectedForbidden.includes(food)) {
-          this.selectedForbidden = this.selectedForbidden.filter(f => f !== food);
-        } else {
-          this.selectedForbidden.push(food);
-        }
-        this.element.innerHTML = '';
-        this.mount();
-      });
-      
+      const btn = this.createFoodButton(food, this.selectedForbidden, Colors.danger, 'selectedForbidden');
       foodsContainer.appendChild(btn);
     });
     
@@ -412,6 +310,75 @@ export class CardapioScreen extends BaseScreen {
     section.appendChild(alert);
     section.appendChild(foodsContainer);
     card.appendChild(section);
+  }
+
+  createFoodSection(card, { title, subtitle, foods, selected, color, key }) {
+    const section = DOM.create('div');
+    
+    const titleEl = DOM.create('h3');
+    DOM.setStyle(titleEl, {
+      color: Colors.text,
+      fontSize: '19px',
+      fontWeight: '800',
+      marginBottom: '4px',
+    });
+    titleEl.textContent = title;
+    
+    const subtitleEl = DOM.create('p');
+    DOM.setStyle(subtitleEl, {
+      color: Colors.muted,
+      fontSize: '14px',
+      marginBottom: '16px',
+    });
+    subtitleEl.textContent = subtitle;
+    
+    const foodsContainer = DOM.create('div');
+    DOM.setStyle(foodsContainer, {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '8px',
+    });
+    
+    foods.forEach(food => {
+      const btn = this.createFoodButton(food, selected, color, key);
+      foodsContainer.appendChild(btn);
+    });
+    
+    section.appendChild(titleEl);
+    section.appendChild(subtitleEl);
+    section.appendChild(foodsContainer);
+    card.appendChild(section);
+  }
+
+  createFoodButton(food, selectedList, color, key) {
+    const btn = DOM.create('button');
+    const isSelected = selectedList.includes(food);
+    DOM.setStyle(btn, {
+      padding: '9px 16px',
+      borderRadius: '22px',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: '600',
+      background: isSelected ? `${color}20` : 'rgba(255,255,255,0.05)',
+      border: `1.5px solid ${isSelected ? color : Colors.border}`,
+      color: isSelected ? color : Colors.muted,
+      transition: 'all 0.2s',
+    });
+    
+    const prefix = isSelected ? '✓ ' : (key === 'selectedForbidden' ? '⚠️ ' : '');
+    btn.textContent = prefix + food;
+    
+    btn.addEventListener('click', () => {
+      if (isSelected) {
+        this[key] = this[key].filter(f => f !== food);
+      } else {
+        this[key].push(food);
+      }
+      this.element.innerHTML = '';
+      this.mount();
+    });
+    
+    return btn;
   }
 
   createLogoSmall() {
