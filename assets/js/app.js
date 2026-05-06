@@ -9,6 +9,7 @@ import { LoginScreen } from './screens/login.js';
 import { OnboardingScreen } from './screens/onboarding.js';
 import { CardapioScreen } from './screens/cardapio.js';
 import { DashboardScreen } from './screens/dashboard.js';
+import { FormsScreen } from './screens/forms.js';
 
 class App {
   constructor() {
@@ -25,6 +26,7 @@ class App {
     this.screens.set(SCREENS.ONBOARDING, OnboardingScreen);
     this.screens.set(SCREENS.CARDAPIO, CardapioScreen);
     this.screens.set(SCREENS.DASHBOARD, DashboardScreen);
+    this.screens.set('forms', FormsScreen);
   }
 
   navigate(screenId, params = {}) {
@@ -62,6 +64,7 @@ class App {
       [SCREENS.ONBOARDING]: 'Onboarding | GMP',
       [SCREENS.CARDAPIO]: 'Cardápio | GMP',
       [SCREENS.DASHBOARD]: 'Dashboard | GMP',
+      'forms': 'Formulários | GMP',
     };
     document.title = titles[screenId] || 'GMP - Guia Metabólico Personalizado';
   }

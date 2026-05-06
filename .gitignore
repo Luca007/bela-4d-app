@@ -1,4 +1,5 @@
 /.playwright-mcp
+/.ref
 
 4d-mentoria.jsx.backup
 
@@ -7,3 +8,5 @@ FIREBASE_FUNCTIONS.md
 FIREBASE_INTEGRATION.md
 FIRESTORE_SCHEMA.md
 SECURITY_GUIDE.md
+
+test-forms.html

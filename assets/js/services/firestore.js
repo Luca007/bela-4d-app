@@ -374,6 +374,92 @@ export class FirestoreService {
       return false;
     }
   }
+
+  /**
+   * Save form progress temporarily
+   * @param {string} userId - User ID
+   * @param {object} formData - Form data to save
+   */
+  async saveFormProgress(userId, formData) {
+    try {
+      const formProgressRef = doc(this.getDb(), 'formProgress', userId);
+      await setDoc(formProgressRef, {
+        userId,
+        ...formData,
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+      return true;
+    } catch (error) {
+      console.error('Error saving form progress:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get saved form progress
+   * @param {string} userId - User ID
+   */
+  async getFormProgress(userId) {
+    try {
+      const formProgressRef = doc(this.getDb(), 'formProgress', userId);
+      const snapshot = await getDoc(formProgressRef);
+      return snapshot.exists() ? snapshot.data() : null;
+    } catch (error) {
+      console.error('Error retrieving form progress:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Submit completed forms
+   * @param {string} userId - User ID
+   * @param {object} formData - Complete form data
+   */
+  async submitFormsComplete(userId, formData) {
+    try {
+      const userDocRef = doc(this.getDb(), 'users', userId);
+      
+      // Save to user document
+      await setDoc(userDocRef, {
+        formData: {
+          form1: formData.form1,
+          form2: formData.form2,
+          form3: formData.form3,
+          examUploadedAt: formData.examUpload.uploadedAt,
+          completedAt: serverTimestamp(),
+          status: 'submitted'
+        }
+      }, { merge: true });
+
+      // Clear temporary form progress
+      const formProgressRef = doc(this.getDb(), 'formProgress', userId);
+      await deleteDoc(formProgressRef);
+
+      return true;
+    } catch (error) {
+      console.error('Error submitting forms:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if user has completed forms
+   * @param {string} userId - User ID
+   */
+  async checkFormsCompleted(userId) {
+    try {
+      const userDocRef = doc(this.getDb(), 'users', userId);
+      const snapshot = await getDoc(userDocRef);
+      
+      if (!snapshot.exists()) return false;
+      
+      const userData = snapshot.data();
+      return userData.formData?.status === 'submitted';
+    } catch (error) {
+      console.error('Error checking forms status:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

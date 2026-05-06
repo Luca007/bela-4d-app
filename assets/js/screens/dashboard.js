@@ -114,6 +114,35 @@ export class DashboardScreen extends BaseScreen {
     const sidebar = DOM.create('div', 'dashboard-sidebar');
     sidebar.appendChild(this.createLogoSection());
     sidebar.appendChild(this.createNavButtons());
+    
+    // Add forms button
+    const formsBtn = DOM.create('button');
+    formsBtn.title = 'Formulários';
+    formsBtn.style.width = '56px';
+    formsBtn.style.height = '56px';
+    formsBtn.style.border = 'none';
+    formsBtn.style.background = 'rgba(255,255,255,0.1)';
+    formsBtn.style.color = Colors.pink;
+    formsBtn.style.borderRadius = '12px';
+    formsBtn.style.cursor = 'pointer';
+    formsBtn.style.fontSize = '24px';
+    formsBtn.style.display = 'flex';
+    formsBtn.style.alignItems = 'center';
+    formsBtn.style.justifyContent = 'center';
+    formsBtn.style.transition = 'all 0.3s';
+    formsBtn.textContent = '📋';
+    formsBtn.addEventListener('click', () => this.app.navigate('forms'));
+    formsBtn.addEventListener('mouseover', () => {
+      formsBtn.style.background = 'rgba(240, 5, 154, 0.2)';
+      formsBtn.style.transform = 'scale(1.05)';
+    });
+    formsBtn.addEventListener('mouseout', () => {
+      formsBtn.style.background = 'rgba(255,255,255,0.1)';
+      formsBtn.style.transform = 'scale(1)';
+    });
+    sidebar.style.marginTop = 'auto';
+    sidebar.appendChild(formsBtn);
+    
     sidebar.appendChild(this.createLogoutButton());
     return sidebar;
   }
