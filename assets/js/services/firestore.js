@@ -373,6 +373,28 @@ export class FirestoreService {
       return [];
     }
   }
+
+  /**
+   * Real-time listener para chat history
+   * @param {string} uid
+   * @param {Function} callback — chamado com array de mensagens quando muda
+   * @returns {Function} unsubscriber
+   */
+  onChatHistoryUpdate(uid, callback) {
+    try {
+      const q = query(
+        this.subCol(uid, 'chatHistory'),
+        orderBy('timestamp', 'asc')
+      );
+      return onSnapshot(q, (snap) => {
+        const messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        callback(messages);
+      });
+    } catch (error) {
+      console.error('[FirestoreService] onChatHistoryUpdate:', error);
+      return () => {}; // noop unsubscriber
+    }
+  }
 }
 
 // Export singleton instance

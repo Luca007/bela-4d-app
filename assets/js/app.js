@@ -29,6 +29,7 @@ import { HealthFormScreen } from './screens/health-form.js';
 import { OnboardingScreen } from './screens/onboarding.js';
 import { CardapioScreen }   from './screens/cardapio.js';
 import { DashboardScreen }  from './screens/dashboard.js';
+import { ChatScreen }       from './screens/chat.js';
 import { FormsScreen }      from './screens/forms.js';
 
 class App {
@@ -47,6 +48,7 @@ class App {
       [SCREENS.ONBOARDING,  OnboardingScreen],
       [SCREENS.CARDAPIO,    CardapioScreen],
       [SCREENS.DASHBOARD,   DashboardScreen],
+      ['chat',              ChatScreen],
       ['forms',             FormsScreen],
     ]);
   }
