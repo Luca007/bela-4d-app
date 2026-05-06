@@ -30,6 +30,7 @@ import { OnboardingScreen } from './screens/onboarding.js';
 import { CardapioScreen }   from './screens/cardapio.js';
 import { DashboardScreen }  from './screens/dashboard.js';
 import { ChatScreen }       from './screens/chat.js';
+import { RecipesScreen }    from './screens/recipes.js';
 import { FormsScreen }      from './screens/forms.js';
 
 class App {
@@ -49,8 +50,43 @@ class App {
       [SCREENS.CARDAPIO,    CardapioScreen],
       [SCREENS.DASHBOARD,   DashboardScreen],
       [SCREENS.CHAT,        ChatScreen],
+      [SCREENS.RECIPES,     RecipesScreen],
       [SCREENS.FORMS,       FormsScreen],
     ]);
+
+    this.statusRoutes = {
+      [USER_STATUS.AWAITING_ONBOARDING]: async () => {
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_ONBOARDING });
+      },
+      [USER_STATUS.PENDING_BLOOD_TEST]: async () => {
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.PENDING_BLOOD_TEST });
+      },
+      [USER_STATUS.PROCESSING_BLOOD_TEST]: async (uid) => {
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.PROCESSING_BLOOD_TEST });
+        this._watchUserStatus(uid);
+      },
+      [USER_STATUS.EXAM_REQUEST_SENT]: async (uid) => {
+        const examRequest = await firestoreService.getLatestExamRequest(uid);
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.EXAM_REQUEST_SENT, examRequest });
+      },
+      [USER_STATUS.FILLING_HEALTH_FORM]: async (uid) => {
+        const bloodTest = await firestoreService.getLatestBloodTest(uid);
+        const aiPrefillData = bloodTest?.extractedData || null;
+        this.navigate(SCREENS.HEALTH_FORM, { aiPrefillData });
+      },
+      [USER_STATUS.AWAITING_MENU_FORM]: async () => {
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_MENU_FORM });
+      },
+      [USER_STATUS.FILLING_MENU_FORM]: async () => {
+        this.navigate(SCREENS.CARDAPIO);
+      },
+      [USER_STATUS.ACTIVE]: async () => {
+        this.navigate(SCREENS.DASHBOARD);
+      },
+      default: async () => {
+        this.navigate(SCREENS.DASHBOARD);
+      },
+    };
   }
 
   // ────────────────────────────────────────────────
@@ -98,58 +134,10 @@ class App {
   async routeByStatus(uid) {
     const profile = State.get('userProfile');
     const status = profile?.status || USER_STATUS.AWAITING_ONBOARDING;
+    const handler = this.statusRoutes[status] || this.statusRoutes.default;
 
     console.log(`[App] Status do usuário: ${status}`);
-
-    switch (status) {
-      // ── Aguardando reunião ──
-      case USER_STATUS.AWAITING_ONBOARDING:
-        this.navigate(SCREENS.AWAITING, { status });
-        break;
-
-      // ── Tem exame, precisa enviar ──
-      case USER_STATUS.PENDING_BLOOD_TEST:
-        this.navigate(SCREENS.AWAITING, { status });
-        break;
-
-      // ── Exame sendo processado pela IA ──
-      case USER_STATUS.PROCESSING_BLOOD_TEST:
-        this.navigate(SCREENS.AWAITING, { status });
-        // Fica escutando mudança de status em tempo real
-        this._watchUserStatus(uid);
-        break;
-
-      // ── Pedido de exame enviado ao médico ──
-      case USER_STATUS.EXAM_REQUEST_SENT: {
-        const examRequest = await firestoreService.getLatestExamRequest(uid);
-        this.navigate(SCREENS.AWAITING, { status, examRequest });
-        break;
-      }
-
-      // ── Pronto para preencher/confirmar Form 1 ──
-      case USER_STATUS.FILLING_HEALTH_FORM: {
-        const bloodTest = await firestoreService.getLatestBloodTest(uid);
-        const aiPrefillData = bloodTest?.extractedData || null;
-        this.navigate(SCREENS.HEALTH_FORM, { aiPrefillData });
-        break;
-      }
-
-      // ── Form 1 pronto, aguardando semana 3 ──
-      case USER_STATUS.AWAITING_MENU_FORM:
-        this.navigate(SCREENS.AWAITING, { status });
-        break;
-
-      // ── Semana 3: preencher Form Pré-Cardápio ──
-      case USER_STATUS.FILLING_MENU_FORM:
-        this.navigate(SCREENS.CARDAPIO);
-        break;
-
-      // ── Tudo completo: dashboard ──
-      case USER_STATUS.ACTIVE:
-      default:
-        this.navigate(SCREENS.DASHBOARD);
-        break;
-    }
+    await handler(uid, status);
   }
 
   /** Escuta mudanças de status no Firestore (para detectar fim do processamento do exame) */
@@ -195,6 +183,7 @@ class App {
         const profile = await firestoreService.getUserProfile(user.uid);
         State.set('userProfile', profile);
         this._watchPendingActions(user.uid);
+        this._watchNotifications(user.uid);
         await this.routeByStatus(user.uid);
       } else {
         console.log('[App] Usuário desconectado');
@@ -213,6 +202,17 @@ class App {
         console.log('[App] Nova ação pendente:', latestAction.type);
         // Aqui você pode disparar notificações ou redirecionar o usuário
         // this.showNotification(latestAction);
+      }
+    });
+    if (unsubscribe) this.dataUnsubscribers.push(unsubscribe);
+  }
+
+  /** Escuta notificações do usuário para exibição futura na UI */
+  _watchNotifications(uid) {
+    const unsubscribe = firestoreService.onNotificationsChange?.(uid, (notifications) => {
+      State.set('notifications', notifications || []);
+      if (notifications?.length) {
+        console.log('[App] Notificações atualizadas:', notifications.length);
       }
     });
     if (unsubscribe) this.dataUnsubscribers.push(unsubscribe);

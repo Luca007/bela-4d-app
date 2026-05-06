@@ -436,6 +436,58 @@ export class FirestoreService {
   onChatHistoryChange(uid, callback) {
     return this.onChatHistoryUpdate(uid, callback);
   }
+
+  /**
+   * Real-time listener para mudanças do perfil/status do usuário.
+   * Compatibilidade com App._watchUserStatus.
+   */
+  onUserStatusChange(uid, callback) {
+    try {
+      return onSnapshot(this.userRef(uid), (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        callback(data.status, data);
+      });
+    } catch (error) {
+      console.error('[FirestoreService] onUserStatusChange:', error);
+      return () => {};
+    }
+  }
+
+  /**
+   * Real-time listener para notificações do usuário.
+   */
+  onNotificationsChange(uid, callback) {
+    try {
+      const q = query(this.subCol(uid, 'notifications'), orderBy('createdAt', 'desc'));
+      return onSnapshot(q, (snap) => {
+        const notifications = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        callback(notifications);
+      });
+    } catch (error) {
+      console.error('[FirestoreService] onNotificationsChange:', error);
+      return () => {};
+    }
+  }
+
+  /**
+   * Real-time listener para ações pendentes geradas pela equipe/IA.
+   */
+  onPendingActionsChange(uid, callback) {
+    try {
+      const q = query(
+        this.subCol(uid, 'pendingActions'),
+        orderBy('createdAt', 'desc')
+      );
+      return onSnapshot(q, (snap) => {
+        const actions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        callback(actions);
+      });
+    } catch (error) {
+      console.error('[FirestoreService] onPendingActionsChange:', error);
+      return () => {};
+    }
+  }
 }
 
 // Export singleton instance

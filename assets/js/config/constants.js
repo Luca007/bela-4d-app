@@ -15,6 +15,7 @@ export const SCREENS = {
   CARDAPIO: "cardapio",           // Cardápio / Form 3 (semana 3)
   DASHBOARD: "dashboard",
   CHAT: "chat",                   // Chat com IA Guardiã
+  RECIPES: "recipes",             // Galeria de Receitas
   FORMS: "forms",                 // Formulários legados (multi-step)
 };
 

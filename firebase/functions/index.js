@@ -337,6 +337,102 @@ exports.evaluateFood = onCall({ region: REGION }, async (request) => {
  * Quando um exame de sangue é criado, notifica o n8n automaticamente.
  * Isso complementa o fluxo manual via processBloodTest().
  */
+const STATUS_NOTIFICATION_MAP = {
+  awaiting_onboarding: {
+    title: 'Seu onboarding está aguardando',
+    message: 'Quando sua reunião de onboarding acontecer, vamos começar a personalizar seu programa.',
+    type: 'status_update',
+  },
+  pending_blood_test: {
+    title: 'Envio do exame necessário',
+    message: 'Sua Guardiã identificou que precisamos do seu exame de sangue para seguir com o pré-preenchimento.',
+    type: 'status_update',
+  },
+  processing_blood_test: {
+    title: 'Seu exame está em processamento',
+    message: 'Recebemos seu exame e estamos analisando os resultados para atualizar seus formulários.',
+    type: 'processing',
+  },
+  exam_request_sent: {
+    title: 'Pedido de exames enviado',
+    message: 'Seu pedido de exames já foi preparado e está disponível para acompanhamento pela equipe.',
+    type: 'status_update',
+  },
+  filling_health_form: {
+    title: 'Formulário de saúde pronto',
+    message: 'O formulário de saúde foi pré-preenchido com os dados do exame. Falta pouco para finalizar.',
+    type: 'action_required',
+  },
+  awaiting_menu_form: {
+    title: 'Aguardando o cardápio',
+    message: 'Seu próximo formulário será liberado no momento certo. Continue acompanhando o app.',
+    type: 'status_update',
+  },
+  filling_menu_form: {
+    title: 'Formulário de cardápio liberado',
+    message: 'Já é possível responder ao formulário de cardápio e ajustar sua rotina alimentar.',
+    type: 'action_required',
+  },
+  active: {
+    title: 'Seu programa está ativo',
+    message: 'Tudo pronto. Você já pode seguir com o acompanhamento completo no dashboard.',
+    type: 'success',
+  },
+};
+
+async function sendWhatsAppNotification(uid, profile, notification, metadata = {}) {
+  const payload = {
+    uid,
+    patient: {
+      uid,
+      name: profile?.name || null,
+      phone: profile?.phone || profile?.whatsapp || null,
+      email: profile?.email || null,
+      status: profile?.status || null,
+    },
+    notification: {
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      priority: notification.priority || 'normal',
+      metadata,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  const result = await callN8n('4d-send-whatsapp-notification', payload);
+
+  await db.collection(`users/${uid}/notifications`).add({
+    channel: 'whatsapp',
+    title: notification.title,
+    message: notification.message,
+    type: notification.type,
+    priority: notification.priority || 'normal',
+    status: 'sent',
+    providerResponse: result || null,
+    metadata,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  return result;
+}
+
+exports.sendPatientNotification = onCall({ region: REGION }, async (request) => {
+  requireAuth(request.auth);
+  const uid = request.auth.uid;
+  const { title, message, type = 'manual', priority = 'normal', metadata = {} } = request.data || {};
+
+  if (!message?.trim()) {
+    throw new HttpsError('invalid-argument', 'message é obrigatório');
+  }
+
+  const userDoc = await db.doc(`users/${uid}`).get();
+  const profile = userDoc.exists ? userDoc.data() : {};
+
+  const result = await sendWhatsAppNotification(uid, profile, { title: title || 'Atualização do Programa 4D', message, type, priority }, metadata);
+  return { success: true, result };
+});
+
 exports.onBloodTestCreated = onDocumentCreated(
   { document: 'users/{uid}/bloodTests/{testId}', region: REGION },
   async (event) => {
@@ -357,5 +453,30 @@ exports.onBloodTestCreated = onDocumentCreated(
         console.error('[Trigger] onBloodTestCreated n8n error:', e.message);
       }
     }
+  }
+);
+
+exports.onUserStatusUpdated = onDocumentUpdated(
+  { document: 'users/{uid}', region: REGION },
+  async (event) => {
+    const before = event.data.before.data() || {};
+    const after = event.data.after.data() || {};
+    const uid = event.params.uid;
+
+    if (!before || !after || before.status === after.status) {
+      return;
+    }
+
+    const notification = STATUS_NOTIFICATION_MAP[after.status];
+    if (!notification) {
+      return;
+    }
+
+    const profile = { ...after, status: after.status };
+    await sendWhatsAppNotification(uid, profile, notification, {
+      statusFrom: before.status || null,
+      statusTo: after.status,
+      source: 'firestore_status_trigger',
+    });
   }
 );
