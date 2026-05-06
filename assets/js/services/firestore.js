@@ -488,6 +488,207 @@ export class FirestoreService {
       return () => {};
     }
   }
+
+  // ─────────────────────────────────────────────
+  // RECEITAS
+  // ─────────────────────────────────────────────
+
+  async getAllRecipes(uid) {
+    try {
+      const q = query(this.subCol(uid, 'recipes'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      console.error('[Firestore] getAllRecipes:', e);
+      return [];
+    }
+  }
+
+  async saveRecipe(uid, recipeData) {
+    try {
+      const ref = await addDoc(this.subCol(uid, 'recipes'), {
+        ...recipeData,
+        createdAt: serverTimestamp(),
+      });
+      await this.incrementCounter(uid, 'totalRecipes');
+      await this.awardXp(uid, XP_EVENTS.RECIPE_GENERATED, 'recipe_generated');
+      return ref.id;
+    } catch (e) {
+      console.error('[Firestore] saveRecipe:', e);
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // AVALIAÇÕES DE ALIMENTOS
+  // ─────────────────────────────────────────────
+
+  async saveFoodEvaluation(uid, evaluationData) {
+    try {
+      const ref = await addDoc(this.subCol(uid, 'foodEvaluations'), {
+        ...evaluationData,
+        createdAt: serverTimestamp(),
+      });
+      await this.awardXp(uid, XP_EVENTS.FOOD_EVALUATED, 'food_evaluated');
+      return ref.id;
+    } catch (e) {
+      console.error('[Firestore] saveFoodEvaluation:', e);
+      return null;
+    }
+  }
+
+  async getFoodEvaluations(uid, limit_ = 50) {
+    try {
+      const q = query(
+        this.subCol(uid, 'foodEvaluations'),
+        orderBy('createdAt', 'desc'),
+        limit(limit_)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      console.error('[Firestore] getFoodEvaluations:', e);
+      return [];
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // DADOS DO USUÁRIO (genérico)
+  // ─────────────────────────────────────────────
+
+  async getUserData(uid, path) {
+    try {
+      // Se path contém /, trata como subcoleção/documento
+      if (path.includes('/')) {
+        const [subCollection, docId] = path.split('/');
+        const snap = await getDoc(this.subDoc(uid, subCollection, docId));
+        return snap.exists() ? snap.data() : null;
+      } else {
+        // Caso contrário, trata como campo do perfil do usuário
+        const profile = await this.getUserProfile(uid);
+        return profile ? profile[path] : null;
+      }
+    } catch (e) {
+      console.error('[Firestore] getUserData:', e);
+      return null;
+    }
+  }
+
+  async saveUserData(uid, path, data) {
+    try {
+      if (path.includes('/')) {
+        const [subCollection, docId] = path.split('/');
+        const ref = this.subDoc(uid, subCollection, docId);
+        await setDoc(ref, { ...data, updatedAt: serverTimestamp() }, { merge: true });
+      } else {
+        await this.saveUserProfile(uid, { [path]: data });
+      }
+      return true;
+    } catch (e) {
+      console.error('[Firestore] saveUserData:', e);
+      return false;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // CLOUD FUNCTIONS
+  // ─────────────────────────────────────────────
+
+  async callCloudFunction(functionName, data) {
+    try {
+      const idToken = await this._getIdToken();
+      const response = await fetch(
+        `${this._getFunctionsUrl()}/${functionName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify(data),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Cloud Function error: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[Firestore] callCloudFunction:', error);
+      throw error;
+    }
+  }
+
+  _getFunctionsUrl() {
+    // Substitua com sua URL real do Firebase
+    return 'https://southamerica-east1-YOUR-PROJECT.cloudfunctions.net';
+  }
+
+  async _getIdToken() {
+    try {
+      // Obter token do usuário autenticado
+      const { getAuth } = await import('../config/firebase.js');
+      const auth = getAuth();
+      return await auth.currentUser?.getIdToken();
+    } catch (error) {
+      console.error('[Firestore] _getIdToken:', error);
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────────
+
+  async incrementCounter(uid, fieldName) {
+    try {
+      const { increment } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js');
+      await updateDoc(this.userRef(uid), { [fieldName]: increment(1) });
+    } catch (e) {
+      console.error('[Firestore] incrementCounter:', e);
+    }
+  }
+
+  async awardXp(uid, xpAmount, eventId = null) {
+    try {
+      const { increment } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js');
+      const profile = await this.getUserProfile(uid);
+      const newXp = (profile?.xp || 0) + xpAmount;
+      const newLevel = getLevelForXp(newXp);
+
+      const updates = { xp: newXp };
+      if (newLevel.level !== (profile?.level || 1)) {
+        updates.level = newLevel.level;
+      }
+
+      await updateDoc(this.userRef(uid), updates);
+
+      // Log do evento
+      if (eventId) {
+        await addDoc(collection(this.getDb(), 'users', uid, 'xpLog'), {
+          eventId,
+          xpAwarded: xpAmount,
+          totalXp: newXp,
+          timestamp: serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      console.error('[Firestore] awardXp:', e);
+    }
+  }
+
+  async logXPEvent(uid, eventType, details = {}) {
+    try {
+      await addDoc(this.subCol(uid, 'xpEvents'), {
+        eventType,
+        details,
+        timestamp: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('[Firestore] logXPEvent:', e);
+    }
+  }
 }
 
 // Export singleton instance

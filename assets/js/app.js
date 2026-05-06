@@ -31,6 +31,7 @@ import { CardapioScreen }   from './screens/cardapio.js';
 import { DashboardScreen }  from './screens/dashboard.js';
 import { ChatScreen }       from './screens/chat.js';
 import { RecipesScreen }    from './screens/recipes.js';
+import { FoodSearchScreen } from './screens/food-search.js';
 import { FormsScreen }      from './screens/forms.js';
 
 class App {
@@ -51,6 +52,7 @@ class App {
       [SCREENS.DASHBOARD,   DashboardScreen],
       [SCREENS.CHAT,        ChatScreen],
       [SCREENS.RECIPES,     RecipesScreen],
+      [SCREENS.FOOD_SEARCH, FoodSearchScreen],
       [SCREENS.FORMS,       FormsScreen],
     ]);
 

@@ -16,6 +16,7 @@ export const SCREENS = {
   DASHBOARD: "dashboard",
   CHAT: "chat",                   // Chat com IA Guardiã
   RECIPES: "recipes",             // Galeria de Receitas
+  FOOD_SEARCH: "food-search",     // Avaliador de Alimentos
   FORMS: "forms",                 // Formulários legados (multi-step)
 };
 
