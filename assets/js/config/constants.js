@@ -1,88 +1,73 @@
 // Application constants
-export const APP_NAME = "Guia Metabólico Personalizado";
-export const APP_ACRONYM = "GMP";
+export const APP_NAME = "Programa 4D";
+export const APP_ACRONYM = "4D";
+export const APP_SUBTITLE = "Bela Nutrição";
 
+// ============================================================
+// SCREENS
+// ============================================================
 export const SCREENS = {
   LOGIN: "login",
-  ONBOARDING: "onboarding",
-  CARDAPIO: "cardapio",
+  AWAITING: "awaiting",           // Aguardando reunião de onboarding
+  EXAM_UPLOAD: "exam-upload",     // Upload do exame de sangue
+  HEALTH_FORM: "health-form",     // Formulário de Saúde (Form 1)
+  ONBOARDING: "onboarding",       // Onboarding clássico (fallback)
+  CARDAPIO: "cardapio",           // Cardápio / Form 3 (semana 3)
   DASHBOARD: "dashboard",
 };
 
-export const ONBOARDING_STEPS = [
-  "Identificação",
-  "Clínico",
-  "Glicemia",
-  "Estilo de Vida",
-];
+// ============================================================
+// USER STATUS — controla o fluxo pós-login
+// ============================================================
+export const USER_STATUS = {
+  // Conta criada mas reunião de onboarding ainda não aconteceu
+  AWAITING_ONBOARDING: "awaiting_onboarding",
 
-export const DIAGNOSTIC_OPTIONS = [
-  "Diabetes tipo 2",
-  "Pré-diabetes",
-  "Resistência à insulina",
-  "Hipertensão arterial",
-  "Colesterol elevado",
-  "Hipotireoidismo",
-  "SOP",
-  "Doença renal crônica",
-  "Doença cardíaca",
-  "Esteatose hepática",
-];
+  // Reunião feita. IA detectou que tem exame → aguardando upload
+  PENDING_BLOOD_TEST: "pending_blood_test",
 
-export const GENDER_OPTIONS = ["Feminino", "Masculino"];
+  // Exame enviado, sendo processado pela IA no n8n
+  PROCESSING_BLOOD_TEST: "processing_blood_test",
 
-export const ACTIVITY_LEVELS = [
-  "Sedentário — sem exercício",
-  "Caminhada leve eventual",
-  "Regular 1 a 2× por semana",
-  "Regular 3 a 4× por semana",
-  "Treino intenso 5+ vezes/semana",
-];
+  // Pronto para preencher / confirmar o Formulário de Saúde (Form 1)
+  FILLING_HEALTH_FORM: "filling_health_form",
 
-export const OBJECTIVE_OPTIONS = [
-  { icon: "📉", label: "Perda de peso" },
-  { icon: "💪", label: "Ganho de massa" },
-  { icon: "📊", label: "Controle glicêmico" },
-  { icon: "⚡", label: "Mais energia" },
-];
+  // Form 1 completo. Aguardando semana 3 para Formulário Pré-Cardápio
+  AWAITING_MENU_FORM: "awaiting_menu_form",
 
-export const MEAL_TIMES = [
-  { icon: "☀️", label: "Café da manhã", time: "07:00" },
-  { icon: "🍎", label: "Lanche manhã", time: "10:00" },
-  { icon: "🍽️", label: "Almoço", time: "12:30" },
-  { icon: "🌤️", label: "Lanche tarde", time: "15:30" },
-  { icon: "🌙", label: "Jantar", time: "19:00" },
-  { icon: "🌛", label: "Ceia", time: "21:30" },
-];
+  // Semana 3: preenchendo o Formulário Pré-Cardápio (Form 3)
+  FILLING_MENU_FORM: "filling_menu_form",
 
-export const RED_LIST = [
-  "Açúcar branco", "Refrigerante", "Pão branco / francês",
-  "Farinha branca", "Macarrão comum", "Biscoito / bolacha",
-  "Bolo e doces", "Sorvete", "Margarina", "Salsicha / linguiça",
-  "Mel", "Suco de fruta coado", "Cerveja / álcool", "Tapioca",
-  "Cuscuz", "Pizza", "Hambúrguer", "Miojo", "Achocolatado",
-  "Leite condensado",
-];
+  // Reunião feita, sem exame → pedido gerado para o médico
+  EXAM_REQUEST_SENT: "exam_request_sent",
 
-export const AVATAR_EMOJIS = ["🌸", "⚡", "🦋", "🌺", "💎", "🔥", "🌙", "⭐", "🌿", "🦁", "🌊", "🍀"];
+  // Tudo completo — acesso total ao dashboard
+  ACTIVE: "active",
+};
 
-export const AVATAR_COLORS = [
-  "#f0059a", // pink
-  "#a78bfa", // purple
-  "#1fcc74", // success
-  "#f59e0b", // warning
-  "#38bdf8", // blue
-  "#fb7185",
-  "#34d399",
-  "#fbbf24",
-];
+// ============================================================
+// GAMIFICAÇÃO — XP por evento
+// ============================================================
+export const XP_EVENTS = {
+  DAILY_LOGIN: 10,
+  HEALTH_FORM_COMPLETED: 150,
+  BLOOD_TEST_UPLOADED: 200,
+  MENU_FORM_COMPLETED: 100,
+  CHAT_MESSAGE_SENT: 5,
+  RECIPE_SAVED: 15,
+  RECIPE_TRIED: 25,
+  EXAM_UPLOADED: 50,
+  STREAK_7_DAYS: 75,
+  STREAK_14_DAYS: 150,
+  STREAK_30_DAYS: 300,
+  PROFILE_COMPLETE: 50,
+  FIRST_RECIPE: 30,
+  SHARE_ACHIEVEMENT: 20,
+};
 
-export const NAV_ITEMS = [
-  { id: "home", label: "Home", icon: "home" },
-  { id: "perfil", label: "Perfil", icon: "user" },
-  { id: "receitas", label: "Receitas", icon: "book-open" },
-  { id: "avaliador", label: "Avaliador", icon: "utensils" },
-  { id: "exames", label: "Exames", icon: "bar-chart-2" },
-  { id: "ranking", label: "Ranking", icon: "trophy" },
-  { id: "chat", label: "Chat IA", icon: "message-circle" },
-];
+// Níveis de progressão
+export const LEVELS = [
+  { level: 1, title: "Iniciante",          minXp: 0,     maxXp: 499,   color: "#6b7280", emoji: "🌱" },
+  { level: 2, title: "Aprendiz",           minXp: 500,   maxXp: 1499,  color: "#10b981", emoji: "🌿" },
+  { level: 3, title: "Comprometido",       minXp: 1500,  maxXp: 2999,  color: "#3b82f6", emoji: "💪" },
+  { level: 4, tit

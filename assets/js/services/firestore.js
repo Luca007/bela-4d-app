@@ -1,5 +1,19 @@
-// Firestore Service
-// Manages all Firestore operations for user data, achievements, chat history, and recipes
+/**
+ * Firestore Service — Programa 4D
+ *
+ * Schema de coleções:
+ *   users/{uid}                    → perfil + status + gamificação
+ *   users/{uid}/healthForm/data    → Formulário de Saúde (Form 1)
+ *   users/{uid}/onboardingInterview/data → dados extraídos da reunião (interno)
+ *   users/{uid}/menuForm/data      → Formulário Pré-Cardápio (Form 3)
+ *   users/{uid}/bloodTests/{id}    → exames de sangue enviados + dados extraídos
+ *   users/{uid}/examRequests/{id}  → pedidos de exame gerados para o médico
+ *   users/{uid}/chatHistory/{id}   → histórico do agente de IA
+ *   users/{uid}/recipes/{id}       → receitas personalizadas geradas
+ *   users/{uid}/achievements/{id}  → conquistas desbloqueadas
+ *   users/{uid}/examTracking/{id}  → exames de acompanhamento (HbA1c, glicemia etc.)
+ */
+
 import { getFirestore } from '../config/firebase.js';
 import {
   addDoc,
@@ -14,7 +28,32 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
+  where,
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+
+import { LEVELS, ACHIEVEMENTS_CATALOG, XP_EVENTS } from '../config/constants.js';
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+
+function getLevelForXp(xp) {
+  for (let i = LEVELS.length - 1; i >= 0; i--) {
+    if (xp >= LEVELS[i].minXp) return LEVELS[i];
+  }
+  return LEVELS[0];
+}
+
+function xpToNextLevel(xp) {
+  const current = getLevelForXp(xp);
+  if (!current.maxXp) return null; // nível máximo
+  return current.maxXp - xp + 1;
+}
+
+// ─────────────────────────────────────────────
+// FirestoreService
+// ─────────────────────────────────────────────
 
 export class FirestoreService {
   constructor() {
@@ -28,439 +67,305 @@ export class FirestoreService {
       this.db = getFirestore();
       this.initialized = true;
     } catch (error) {
-      console.error('Error initializing Firestore:', error);
+      console.error('[Firestore] Error initializing:', error);
     }
   }
 
   getDb() {
-    if (!this.db) {
-      this.db = getFirestore();
-    }
-
+    if (!this.db) this.db = getFirestore();
     return this.db;
   }
 
-  getUserRef(uid) {
-    return doc(this.getDb(), 'users', uid);
-  }
+  // Refs helpers
+  userRef(uid)                   { return doc(this.getDb(), 'users', uid); }
+  subCol(uid, name)              { return collection(this.getDb(), 'users', uid, name); }
+  subDoc(uid, name, docId)       { return doc(this.getDb(), 'users', uid, name, docId); }
 
-  getUserSubcollectionRef(uid, subcollectionName) {
-    return collection(this.getDb(), 'users', uid, subcollectionName);
-  }
+  // ─────────────────────────────────────────────
+  // PERFIL DO USUÁRIO
+  // ─────────────────────────────────────────────
 
-  /**
-   * USERS COLLECTION
-   * Stores user profile information
-   */
-
-  /**
-   * Get user profile
-   * @param {string} uid - User ID
-   */
   async getUserProfile(uid) {
     try {
-      const userSnapshot = await getDoc(this.getUserRef(uid));
-      return userSnapshot.exists() ? userSnapshot.data() : null;
-    } catch (error) {
-      console.error('Error getting user profile:', error);
+      const snap = await getDoc(this.userRef(uid));
+      return snap.exists() ? snap.data() : null;
+    } catch (e) {
+      console.error('[Firestore] getUserProfile:', e);
       return null;
     }
   }
 
-  /**
-   * Create or update user profile
-   * @param {string} uid - User ID
-   * @param {Object} profileData - User profile data
-   */
-  async saveUserProfile(uid, profileData) {
+  async saveUserProfile(uid, data) {
     try {
-      const dataToSave = {
-        ...profileData,
-        updatedAt: serverTimestamp(),
-      };
-
-      const existingSnapshot = await getDoc(this.getUserRef(uid));
-      if (!existingSnapshot.exists()) {
-        dataToSave.createdAt = serverTimestamp();
+      const toSave = { ...data, updatedAt: serverTimestamp() };
+      const existing = await getDoc(this.userRef(uid));
+      if (!existing.exists()) {
+        toSave.createdAt = serverTimestamp();
+        // Gamificação inicial
+        toSave.xp = 0;
+        toSave.level = 1;
+        toSave.streak = 0;
+        toSave.lastActivityDate = null;
+        toSave.totalRecipes = 0;
+        toSave.totalChatMessages = 0;
+        toSave.status = 'awaiting_onboarding';
       }
-
-      await setDoc(this.getUserRef(uid), dataToSave, { merge: true });
+      await setDoc(this.userRef(uid), toSave, { merge: true });
       return true;
-    } catch (error) {
-      console.error('Error saving user profile:', error);
+    } catch (e) {
+      console.error('[Firestore] saveUserProfile:', e);
       return false;
     }
   }
 
-  /**
-   * ONBOARDING DATA
-   * Stores onboarding form responses
-   */
-
-  /**
-   * Save onboarding data (steps 1-4)
-   * @param {string} uid - User ID
-   * @param {Object} onboardingData - Onboarding form data
-   */
-  async saveOnboardingData(uid, onboardingData) {
+  /** Atualiza só o status do usuário */
+  async updateUserStatus(uid, status) {
     try {
-      const onboardingRef = doc(this.getDb(), 'users', uid, 'onboarding', 'data');
-
-      await setDoc(onboardingRef, {
-        ...onboardingData,
-        completedAt: serverTimestamp(),
-      }, { merge: true });
-
+      await updateDoc(this.userRef(uid), { status, updatedAt: serverTimestamp() });
       return true;
-    } catch (error) {
-      console.error('Error saving onboarding data:', error);
+    } catch (e) {
+      console.error('[Firestore] updateUserStatus:', e);
       return false;
     }
   }
 
-  /**
-   * Get onboarding data
-   * @param {string} uid - User ID
-   */
-  async getOnboardingData(uid) {
+  // ─────────────────────────────────────────────
+  // FORMULÁRIO DE SAÚDE — Form 1
+  // ─────────────────────────────────────────────
+
+  async getHealthForm(uid) {
     try {
-      const onboardingRef = doc(this.getDb(), 'users', uid, 'onboarding', 'data');
-      const snapshot = await getDoc(onboardingRef);
-      return snapshot.exists() ? snapshot.data() : null;
-    } catch (error) {
-      console.error('Error getting onboarding data:', error);
+      const snap = await getDoc(this.subDoc(uid, 'healthForm', 'data'));
+      return snap.exists() ? snap.data() : null;
+    } catch (e) {
+      console.error('[Firestore] getHealthForm:', e);
       return null;
     }
   }
 
   /**
-   * CHAT HISTORY
-   * Stores conversation history with AI
+   * Salva o Formulário de Saúde.
+   * @param {string} uid
+   * @param {Object} formData  — dados do formulário
+   * @param {boolean} aiPrefilled — se foi pré-preenchido pela IA
+   * @param {boolean} completed   — se o usuário confirmou/completou
    */
-
-  /**
-   * Add message to chat history
-   * @param {string} uid - User ID
-   * @param {Object} message - Message object {role, content, timestamp}
-   */
-  async addChatMessage(uid, message) {
+  async saveHealthForm(uid, formData, { aiPrefilled = false, completed = false } = {}) {
     try {
-      const chatRef = this.getUserSubcollectionRef(uid, 'chatHistory');
-
-      const messageToSave = {
-        ...message,
-        timestamp: serverTimestamp(),
-      };
-
-      const docRef = await addDoc(chatRef, messageToSave);
-      return docRef.id;
-    } catch (error) {
-      console.error('Error adding chat message:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Get chat history
-   * @param {string} uid - User ID
-   * @param {number} limit - Number of messages to retrieve (default: 50)
-   */
-  async getChatHistory(uid, maxResults = 50) {
-    try {
-      const chatRef = this.getUserSubcollectionRef(uid, 'chatHistory');
-      const snapshot = await getDocs(query(chatRef, orderBy('timestamp', 'desc'), limit(maxResults)));
-
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        timestamp: doc.data().timestamp?.toDate?.() || new Date(doc.data().timestamp)
-      })).reverse();
-    } catch (error) {
-      console.error('Error getting chat history:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Listen to chat history in real-time
-   * @param {string} uid - User ID
-   * @param {Function} callback - Function to call when data changes
-   */
-  onChatHistoryChange(uid, callback) {
-    try {
-      const chatRef = this.getUserSubcollectionRef(uid, 'chatHistory');
-
-      return onSnapshot(query(chatRef, orderBy('timestamp', 'desc'), limit(50)), (snapshot) => {
-          const messages = snapshot.docs
-            .map(doc => ({
-              id: doc.id,
-              ...doc.data(),
-              timestamp: doc.data().timestamp?.toDate?.() || new Date(doc.data().timestamp)
-            }))
-            .reverse();
-          callback(messages);
-        }, (error) => {
-          console.error('Error listening to chat history:', error);
-          callback([]);
-        });
-    } catch (error) {
-      console.error('Error setting up chat history listener:', error);
-    }
-  }
-
-  /**
-   * RECIPES
-   * Stores personalized recipes for user
-   */
-
-  /**
-   * Save recipe
-   * @param {string} uid - User ID
-   * @param {Object} recipe - Recipe object
-   */
-  async saveRecipe(uid, recipe) {
-    try {
-      const recipesRef = this.getUserSubcollectionRef(uid, 'recipes');
-
-      const recipeToSave = {
-        ...recipe,
-        createdAt: recipe.createdAt || serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-
-      if (recipe.id) {
-        // Update existing recipe
-        await setDoc(doc(recipesRef, recipe.id), recipeToSave, { merge: true });
-        return recipe.id;
-      } else {
-        // Create new recipe
-        const docRef = await addDoc(recipesRef, recipeToSave);
-        return docRef.id;
-      }
-    } catch (error) {
-      console.error('Error saving recipe:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Get all recipes for user
-   * @param {string} uid - User ID
-   */
-  async getRecipes(uid) {
-    try {
-      const recipesRef = this.getUserSubcollectionRef(uid, 'recipes');
-      const snapshot = await getDocs(query(recipesRef, orderBy('createdAt', 'desc')));
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
-        updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt)
-      }));
-    } catch (error) {
-      console.error('Error getting recipes:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Listen to recipes in real-time
-   * @param {string} uid - User ID
-   * @param {Function} callback - Function to call when data changes
-   */
-  onRecipesChange(uid, callback) {
-    try {
-      const recipesRef = this.getUserSubcollectionRef(uid, 'recipes');
-
-      return onSnapshot(query(recipesRef, orderBy('createdAt', 'desc')), (snapshot) => {
-        const recipes = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
-          updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt)
-        }));
-        callback(recipes);
-      }, (error) => {
-        console.error('Error listening to recipes:', error);
-        callback([]);
-      });
-    } catch (error) {
-      console.error('Error setting up recipes listener:', error);
-    }
-  }
-
-  /**
-   * ACHIEVEMENTS
-   * Stores user achievements and milestones
-   */
-
-  /**
-   * Add achievement
-   * @param {string} uid - User ID
-   * @param {Object} achievement - Achievement object
-   */
-  async addAchievement(uid, achievement) {
-    try {
-      const achievementsRef = this.getUserSubcollectionRef(uid, 'achievements');
-
-      const achievementToSave = {
-        ...achievement,
-        unlockedAt: serverTimestamp(),
-      };
-
-      const docRef = await addDoc(achievementsRef, achievementToSave);
-      return docRef.id;
-    } catch (error) {
-      console.error('Error adding achievement:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Get all achievements for user
-   * @param {string} uid - User ID
-   */
-  async getAchievements(uid) {
-    try {
-      const achievementsRef = this.getUserSubcollectionRef(uid, 'achievements');
-      const snapshot = await getDocs(query(achievementsRef, orderBy('unlockedAt', 'desc')));
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        unlockedAt: doc.data().unlockedAt?.toDate?.() || new Date(doc.data().unlockedAt)
-      }));
-    } catch (error) {
-      console.error('Error getting achievements:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Listen to achievements in real-time
-   * @param {string} uid - User ID
-   * @param {Function} callback - Function to call when data changes
-   */
-  onAchievementsChange(uid, callback) {
-    try {
-      const achievementsRef = this.getUserSubcollectionRef(uid, 'achievements');
-
-      return onSnapshot(query(achievementsRef, orderBy('unlockedAt', 'desc')), (snapshot) => {
-        const achievements = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          unlockedAt: doc.data().unlockedAt?.toDate?.() || new Date(doc.data().unlockedAt)
-        }));
-        callback(achievements);
-      }, (error) => {
-        console.error('Error listening to achievements:', error);
-        callback([]);
-      });
-    } catch (error) {
-      console.error('Error setting up achievements listener:', error);
-    }
-  }
-
-  /**
-   * Delete data with error handling
-   * @param {string} collectionPath - Path to collection
-   * @param {string} docId - Document ID
-   */
-  async deleteDocument(collectionPath, docId) {
-    try {
-      await deleteDoc(doc(this.getDb(), collectionPath, docId));
-      return true;
-    } catch (error) {
-      console.error('Error deleting document:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Save form progress temporarily
-   * @param {string} userId - User ID
-   * @param {object} formData - Form data to save
-   */
-  async saveFormProgress(userId, formData) {
-    try {
-      const formProgressRef = doc(this.getDb(), 'formProgress', userId);
-      await setDoc(formProgressRef, {
-        userId,
+      const ref = this.subDoc(uid, 'healthForm', 'data');
+      const existing = await getDoc(ref);
+      const toSave = {
         ...formData,
-        lastUpdated: serverTimestamp()
-      }, { merge: true });
+        aiPrefilled,
+        completed,
+        updatedAt: serverTimestamp(),
+      };
+      if (!existing.exists()) toSave.createdAt = serverTimestamp();
+      await setDoc(ref, toSave, { merge: true });
+
+      if (completed) {
+        await this.updateUserStatus(uid, 'awaiting_menu_form');
+        await this.awardXp(uid, XP_EVENTS.HEALTH_FORM_COMPLETED, 'health_form_done');
+      }
       return true;
-    } catch (error) {
-      console.error('Error saving form progress:', error);
+    } catch (e) {
+      console.error('[Firestore] saveHealthForm:', e);
       return false;
     }
   }
 
-  /**
-   * Get saved form progress
-   * @param {string} userId - User ID
-   */
-  async getFormProgress(userId) {
+  // ─────────────────────────────────────────────
+  // ENTREVISTA DE ONBOARDING (interno — Guardiã)
+  // Dados extraídos pelo n8n da transcrição do Google Meet
+  // ─────────────────────────────────────────────
+
+  async getOnboardingInterview(uid) {
     try {
-      const formProgressRef = doc(this.getDb(), 'formProgress', userId);
-      const snapshot = await getDoc(formProgressRef);
-      return snapshot.exists() ? snapshot.data() : null;
-    } catch (error) {
-      console.error('Error retrieving form progress:', error);
+      const snap = await getDoc(this.subDoc(uid, 'onboardingInterview', 'data'));
+      return snap.exists() ? snap.data() : null;
+    } catch (e) {
+      console.error('[Firestore] getOnboardingInterview:', e);
       return null;
     }
   }
 
-  /**
-   * Submit completed forms
-   * @param {string} userId - User ID
-   * @param {object} formData - Complete form data
-   */
-  async submitFormsComplete(userId, formData) {
+  async saveOnboardingInterview(uid, data) {
     try {
-      const userDocRef = doc(this.getDb(), 'users', userId);
-      
-      // Save to user document
-      await setDoc(userDocRef, {
-        formData: {
-          form1: formData.form1,
-          form2: formData.form2,
-          form3: formData.form3,
-          examUploadedAt: formData.examUpload.uploadedAt,
-          completedAt: serverTimestamp(),
-          status: 'submitted'
-        }
+      const ref = this.subDoc(uid, 'onboardingInterview', 'data');
+      await setDoc(ref, {
+        ...data,
+        processedAt: serverTimestamp(),
       }, { merge: true });
-
-      // Clear temporary form progress
-      const formProgressRef = doc(this.getDb(), 'formProgress', userId);
-      await deleteDoc(formProgressRef);
-
       return true;
-    } catch (error) {
-      console.error('Error submitting forms:', error);
+    } catch (e) {
+      console.error('[Firestore] saveOnboardingInterview:', e);
       return false;
     }
   }
 
-  /**
-   * Check if user has completed forms
-   * @param {string} userId - User ID
-   */
-  async checkFormsCompleted(userId) {
+  // ─────────────────────────────────────────────
+  // FORMULÁRIO PRÉ-CARDÁPIO — Form 3 (semana 3)
+  // ─────────────────────────────────────────────
+
+  async getMenuForm(uid) {
     try {
-      const userDocRef = doc(this.getDb(), 'users', userId);
-      const snapshot = await getDoc(userDocRef);
-      
-      if (!snapshot.exists()) return false;
-      
-      const userData = snapshot.data();
-      return userData.formData?.status === 'submitted';
-    } catch (error) {
-      console.error('Error checking forms status:', error);
+      const snap = await getDoc(this.subDoc(uid, 'menuForm', 'data'));
+      return snap.exists() ? snap.data() : null;
+    } catch (e) {
+      console.error('[Firestore] getMenuForm:', e);
+      return null;
+    }
+  }
+
+  async saveMenuForm(uid, formData, completed = false) {
+    try {
+      const ref = this.subDoc(uid, 'menuForm', 'data');
+      const existing = await getDoc(ref);
+      const toSave = { ...formData, completed, updatedAt: serverTimestamp() };
+      if (!existing.exists()) toSave.createdAt = serverTimestamp();
+      await setDoc(ref, toSave, { merge: true });
+
+      if (completed) {
+        await this.updateUserStatus(uid, 'active');
+        await this.awardXp(uid, XP_EVENTS.MENU_FORM_COMPLETED, 'menu_form_done');
+      }
+      return true;
+    } catch (e) {
+      console.error('[Firestore] saveMenuForm:', e);
       return false;
     }
   }
-}
 
-// Export singleton instance
-export const firestoreService = new FirestoreService();
+  // ─────────────────────────────────────────────
+  // EXAMES DE SANGUE
+  // ─────────────────────────────────────────────
+
+  async saveBloodTest(uid, { fileUrl, fileName, fileSize, extractedData = null, status = 'pending' }) {
+    try {
+      const ref = await addDoc(this.subCol(uid, 'bloodTests'), {
+        fileUrl,
+        fileName,
+        fileSize,
+        extractedData,   // null até o n8n processar
+        status,          // pending | processing | done | error
+        uploadedAt: serverTimestamp(),
+        processedAt: null,
+      });
+
+      // Atualiza status do usuário para "processando"
+      await this.updateUserStatus(uid, 'processing_blood_test');
+      await this.awardXp(uid, XP_EVENTS.BLOOD_TEST_UPLOADED, 'blood_test_uploaded');
+
+      return ref.id;
+    } catch (e) {
+      console.error('[Firestore] saveBloodTest:', e);
+      return null;
+    }
+  }
+
+  /** Chamado pelo n8n após processar o exame */
+  async updateBloodTestExtraction(uid, bloodTestId, extractedData) {
+    try {
+      await updateDoc(this.subDoc(uid, 'bloodTests', bloodTestId), {
+        extractedData,
+        status: 'done',
+        processedAt: serverTimestamp(),
+      });
+      // Avança para preenchimento do Form 1
+      await this.updateUserStatus(uid, 'filling_health_form');
+      return true;
+    } catch (e) {
+      console.error('[Firestore] updateBloodTestExtraction:', e);
+      return false;
+    }
+  }
+
+  async getLatestBloodTest(uid) {
+    try {
+      const q = query(this.subCol(uid, 'bloodTests'), orderBy('uploadedAt', 'desc'), limit(1));
+      const snap = await getDocs(q);
+      if (snap.empty) return null;
+      const d = snap.docs[0];
+      return { id: d.id, ...d.data() };
+    } catch (e) {
+      console.error('[Firestore] getLatestBloodTest:', e);
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // PEDIDOS DE EXAME (gerados quando não tem exame)
+  // ─────────────────────────────────────────────
+
+  async saveExamRequest(uid, { fileUrl, fileName, preFilledData }) {
+    try {
+      const ref = await addDoc(this.subCol(uid, 'examRequests'), {
+        fileUrl,
+        fileName,
+        preFilledData,
+        createdAt: serverTimestamp(),
+      });
+      await this.updateUserStatus(uid, 'exam_request_sent');
+      return ref.id;
+    } catch (e) {
+      console.error('[Firestore] saveExamRequest:', e);
+      return null;
+    }
+  }
+
+  async getLatestExamRequest(uid) {
+    try {
+      const q = query(this.subCol(uid, 'examRequests'), orderBy('createdAt', 'desc'), limit(1));
+      const snap = await getDocs(q);
+      if (snap.empty) return null;
+      const d = snap.docs[0];
+      return { id: d.id, ...d.data() };
+    } catch (e) {
+      console.error('[Firestore] getLatestExamRequest:', e);
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // CHAT IA
+  // ─────────────────────────────────────────────
+
+  async saveChatMessage(uid, { role, content, type = 'text', conversationId = null }) {
+    try {
+      const ref = await addDoc(this.subCol(uid, 'chatHistory'), {
+        role,          // 'user' | 'assistant'
+        content,
+        type,          // 'text' | 'recipe' | 'advice'
+        conversationId,
+        processed: false,
+        processingStatus: 'pending',
+        timestamp: serverTimestamp(),
+      });
+
+      // Gamificação por interação com IA
+      if (role === 'user') {
+        await this.incrementCounter(uid, 'totalChatMessages');
+        const profile = await this.getUserProfile(uid);
+        const total = (profile?.totalChatMessages ?? 0) + 1;
+        if (total === 10)  await this.awardXp(uid, XP_EVENTS.CHAT_MESSAGE_SENT * 10, 'chat_10');
+        if (total === 50)  await this.awardXp(uid, XP_EVENTS.CHAT_MESSAGE_SENT * 20, 'chat_50');
+        else               await this.awardXp(uid, XP_EVENTS.CHAT_MESSAGE_SENT);
+      }
+
+      return ref.id;
+    } catch (e) {
+      console.error('[Firestore] saveChatMessage:', e);
+      return null;
+    }
+  }
+
+  async getChatHistory(uid, maxMessages = 50) {
+    try {
+      const q = query(
+        this.subCol(uid, 'chatHistory'),
+        orderBy('timestamp', 'desc'),
+        limit(maxMessages)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
+    }
