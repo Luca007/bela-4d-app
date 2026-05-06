@@ -89,6 +89,11 @@ export const State = {
   reset() {
     this.data = {};
   },
+
+  clear() {
+    this.data = {};
+    this.notify();
+  },
 };
 
 // Local storage management
@@ -156,6 +161,13 @@ export const Session = {
 
   logout() {
     this.user = null;
+    Storage.clear();
+  },
+
+  clear() {
+    this.user = null;
+    this.xp = 0;
+    this.avatar = null;
     Storage.clear();
   },
 };

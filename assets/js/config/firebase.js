@@ -73,9 +73,9 @@ export function getAnalytics() {
   return analytics;
 }
 
-// export function getApp() {
-//   if (!app) {
-//     throw new Error('Firebase App not initialized. Call initializeFirebase() first.');
-//   }
-//   return app;
-// }
+export function getApp() {
+  if (!app) {
+    throw new Error('Firebase App not initialized. Call initializeFirebase() first.');
+  }
+  return app;
+}

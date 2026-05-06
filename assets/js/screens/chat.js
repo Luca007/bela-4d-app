@@ -1,13 +1,13 @@
-import BaseScreen from '../modules/components.js';
+import { BaseScreen } from '../modules/navigator.js';
 import { UIComponents } from '../modules/components.js';
 import { Colors } from '../config/colors.js';
 import { SCREENS, XP_EVENTS } from '../config/constants.js';
 import { firestoreService } from '../services/firestore.js';
 import { authService } from '../services/auth.js';
+import { getFunctions } from '../config/firebase.js';
 import { buildChatPayload } from '../config/n8n.js';
 
-const functions = window.firebase.functions();
-const chatFunction = functions.httpsCallable('agentChatMessage');
+let chatFunction = null;
 
 /**
  * ChatScreen — Chat com IA Guardiã
@@ -19,7 +19,7 @@ const chatFunction = functions.httpsCallable('agentChatMessage');
  * - Trackeia XP ganho por interações
  * - Estados: loading, error, success
  */
-export default class ChatScreen extends BaseScreen {
+export class ChatScreen extends BaseScreen {
   constructor() {
     super({
       id: SCREENS.CHAT,
@@ -35,6 +35,12 @@ export default class ChatScreen extends BaseScreen {
 
   async mount() {
     try {
+      // Inicializa Cloud Function reference
+      if (!chatFunction) {
+        const functions = getFunctions();
+        chatFunction = functions.httpsCallable('agentChatMessage');
+      }
+
       // Carrega histórico do Firestore
       await this.loadChatHistory();
 

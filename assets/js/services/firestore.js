@@ -395,6 +395,47 @@ export class FirestoreService {
       return () => {}; // noop unsubscriber
     }
   }
+
+  /**
+   * Real-time listener para receitas do usuário.
+   * Compatibilidade com telas que usam onRecipesChange.
+   */
+  onRecipesChange(uid, callback) {
+    try {
+      const q = query(this.subCol(uid, 'recipes'), orderBy('createdAt', 'desc'));
+      return onSnapshot(q, (snap) => {
+        const recipes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        callback(recipes);
+      });
+    } catch (error) {
+      console.error('[FirestoreService] onRecipesChange:', error);
+      return () => {};
+    }
+  }
+
+  /**
+   * Real-time listener para conquistas do usuário.
+   * Compatibilidade com telas que usam onAchievementsChange.
+   */
+  onAchievementsChange(uid, callback) {
+    try {
+      const q = query(this.subCol(uid, 'achievements'), orderBy('unlockedAt', 'desc'));
+      return onSnapshot(q, (snap) => {
+        const achievements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        callback(achievements);
+      });
+    } catch (error) {
+      console.error('[FirestoreService] onAchievementsChange:', error);
+      return () => {};
+    }
+  }
+
+  /**
+   * Alias de compatibilidade para histórico do chat em tempo real.
+   */
+  onChatHistoryChange(uid, callback) {
+    return this.onChatHistoryUpdate(uid, callback);
+  }
 }
 
 // Export singleton instance
