@@ -48,8 +48,8 @@ class App {
       [SCREENS.ONBOARDING,  OnboardingScreen],
       [SCREENS.CARDAPIO,    CardapioScreen],
       [SCREENS.DASHBOARD,   DashboardScreen],
-      ['chat',              ChatScreen],
-      ['forms',             FormsScreen],
+      [SCREENS.CHAT,        ChatScreen],
+      [SCREENS.FORMS,       FormsScreen],
     ]);
   }
 

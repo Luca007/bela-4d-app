@@ -1,9 +1,9 @@
 // Forms Screen - Multi-step questionnaire system
-import { DOM } from '../utils/helpers.js';
+import { DOM, State, Session } from '../utils/helpers.js';
 import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
-import { State, Session } from '../utils/helpers.js';
+import { SCREENS } from '../config/constants.js';
 import { firestoreService } from '../services/firestore.js';
 
 export class FormsScreen extends BaseScreen {
@@ -262,6 +262,6 @@ export class FormsScreen extends BaseScreen {
   }
 
   async submitAllForms() {
-    try { await firestoreService.submitFormsComplete(this.userId, this.formData); alert('✅ Formulários enviados com sucesso!\n\nSua inscrição foi concluída. Em breve você receberá contato da nossa equipe.'); this.app.navigate('dashboard'); } catch (error) { console.error('Error submitting forms:', error); alert('Erro ao enviar formulários. Tente novamente.'); }
+    try { await firestoreService.submitFormsComplete(this.userId, this.formData); alert('✅ Formulários enviados com sucesso!\n\nSua inscrição foi concluída. Em breve você receberá contato da nossa equipe.'); this.params.onNavigate(SCREENS.DASHBOARD); } catch (error) { console.error('Error submitting forms:', error); alert('Erro ao enviar formulários. Tente novamente.'); }
   }
 }

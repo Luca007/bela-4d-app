@@ -20,14 +20,10 @@ let chatFunction = null;
  * - Estados: loading, error, success
  */
 export class ChatScreen extends BaseScreen {
-  constructor() {
-    super({
-      id: SCREENS.CHAT,
-      title: 'Chat com Guardiã',
-      allowBack: true,
-    });
+  constructor(params = {}) {
+    super(params);
 
-    this.sessionId = `${authService.currentUser.uid}_${Date.now()}`;
+    this.sessionId = `${authService.currentUser?.uid || 'anon'}_${Date.now()}`;
     this.chatHistory = [];
     this.isLoading = false;
     this.unsubscribers = [];
@@ -210,13 +206,17 @@ export class ChatScreen extends BaseScreen {
   }
 
   render() {
-    super.render();
-
-    const container = document.getElementById(this.id);
-    container.innerHTML = this.renderHTML();
-
-    this.attachEventListeners();
-    this.scrollToBottom();
+    if (this.element) {
+      // Re-render in-place (updates from sendMessage / onSnapshot)
+      this.element.innerHTML = this.renderHTML();
+      this.attachEventListeners();
+      this.scrollToBottom();
+      return this.element;
+    }
+    // First render: create the root element for BaseScreen.mount()
+    const el = DOM.create('div', 'chat-screen');
+    el.innerHTML = this.renderHTML();
+    return el;
   }
 
   renderHTML() {
@@ -427,6 +427,16 @@ export class ChatScreen extends BaseScreen {
     // Navegar para tela de receita ou abrir modal
     console.log('Going to recipe:', recipeId);
     // TODO: Implementar navegação
+  }
+
+  showError(message) {
+    if (this.element) {
+      this.element.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:40px;color:${Colors.danger};text-align:center;">
+          <p>⚠️ ${message}</p>
+        </div>
+      `;
+    }
   }
 
   destroy() {

@@ -16,6 +16,7 @@ export const Colors = {
   danger: "#f43f5e",
   
   // Accent colors
+  xp: "#eab308",
   gold: "#eab308",
   silver: "#94a3b8",
   bronze: "#b45309",

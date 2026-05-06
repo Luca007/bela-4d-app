@@ -14,6 +14,8 @@ export const SCREENS = {
   ONBOARDING: "onboarding",       // Onboarding clássico (fallback)
   CARDAPIO: "cardapio",           // Cardápio / Form 3 (semana 3)
   DASHBOARD: "dashboard",
+  CHAT: "chat",                   // Chat com IA Guardiã
+  FORMS: "forms",                 // Formulários legados (multi-step)
 };
 
 // ============================================================
