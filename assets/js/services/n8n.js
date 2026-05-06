@@ -10,9 +10,8 @@
  * As Firebase Functions estão em /firebase/functions/index.js
  */
 
-import { getFunctions, httpsCallable } from
-  'https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js';
-import { getApp } from '../config/firebase.js';
+import { getFunctions as getFunctionsSDK, httpsCallable } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js';
+import { getFunctions, getApp } from '../config/firebase.js';
 
 class N8nService {
   constructor() {
@@ -23,7 +22,7 @@ class N8nService {
   initialize() {
     if (this.initialized) return;
     try {
-      this.functions = getFunctions(getApp(), 'southamerica-east1');
+      this.functions = getFunctions();
       this.initialized = true;
     } catch (e) {
       console.error('[N8N] init error:', e);

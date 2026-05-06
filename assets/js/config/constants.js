@@ -14,6 +14,8 @@ export const SCREENS = {
   ONBOARDING: "onboarding",       // Onboarding clássico (fallback)
   CARDAPIO: "cardapio",           // Cardápio / Form 3 (semana 3)
   DASHBOARD: "dashboard",
+  CHAT: "chat",                   // Chat com IA Guardiã
+  FORMS: "forms",                 // Formulários legados (multi-step)
 };
 
 // ============================================================
@@ -174,4 +176,118 @@ export const ACHIEVEMENTS_CATALOG = [
     icon: "👑",
     condition: { event: "LEVEL_REACHED", level: 5 },
   },
+];
+
+// ============================================================
+// HEALTH FORM — Formulário de Saúde (7 seções)
+// ============================================================
+export const HEALTH_FORM_SECTIONS = [
+  { icon: '📝', title: 'Identificação e Medidas' },
+  { icon: '🩺', title: 'Diagnóstico e Medicamentos' },
+  { icon: '📋', title: 'Histórico de Saúde' },
+  { icon: '📊', title: 'Controle Glicêmico' },
+  { icon: '🏃', title: 'Estilo de Vida' },
+  { icon: '👥', title: 'Contexto de Vida' },
+  { icon: '⚕️', title: 'Médico e Suporte' },
+];
+
+// Diagnósticos que podem ser selecionados no Form 1
+export const DIAGNOSTIC_OPTIONS = [
+  'Diabetes tipo 1',
+  'Diabetes tipo 2',
+  'Pré-diabetes',
+  'Hipertensão arterial',
+  'Obesidade',
+  'Sobrepeso',
+  'Síndrome metabólica',
+  'SOP',
+  'Colesterol alto',
+  'Triglicerídeos altos',
+  'Doença cardiovascular',
+  'Asma',
+  'Artrite',
+  'Osteoporose',
+  'Depressão',
+  'Ansiedade',
+  'Insônia',
+  'Hipotireoidismo',
+  'Hipertireoidismo',
+];
+
+// Opções de gênero para onboarding
+export const GENDER_OPTIONS = [
+  'Feminino',
+  'Masculino',
+  'Outro',
+];
+
+// Níveis de atividade física
+export const ACTIVITY_LEVELS = [
+  'Sedentário',
+  'Leve (1-2 dias/semana)',
+  'Moderado (3-4 dias/semana)',
+  'Intenso (5-6 dias/semana)',
+  'Atleta (7 dias/semana)',
+];
+
+// Etapas do onboarding
+export const ONBOARDING_STEPS = [
+  '👤 Identificação',
+  '🩺 Histórico Clínico',
+  '📊 Controle Glicêmico',
+  '🌙 Estilo de Vida',
+];
+
+// ============================================================
+// CARDÁPIO/MENU FORM — Formulário Pré-Cardápio (Form 3)
+// ============================================================
+
+// Objetivos de saúde para o programa
+export const OBJECTIVE_OPTIONS = [
+  { icon: '🎯', label: 'Perder peso' },
+  { icon: '💪', label: 'Ganhar massa' },
+  { icon: '⚖️', label: 'Manter peso' },
+  { icon: '🩺', label: 'Controlar diabetes' },
+];
+
+// Refeições do dia com horários padrão
+export const MEAL_TIMES = [
+  { icon: '☀️', label: 'Café da manhã', time: '08:00' },
+  { icon: '🥗', label: 'Lanche da manhã', time: '10:00' },
+  { icon: '🍽️', label: 'Almoço', time: '12:30' },
+  { icon: '🍌', label: 'Lanche da tarde', time: '15:00' },
+  { icon: '🍴', label: 'Jantar', time: '19:00' },
+  { icon: '🌙', label: 'Ceia (opcional)', time: '21:00' },
+];
+
+// Alimentos proibidos (lista vermelha)
+export const RED_LIST = [
+  'Refrigerante normal',
+  'Açúcar refinado',
+  'Alimentos fritos',
+  'Chocolates e doces',
+  'Massas brancas',
+  'Pão branco',
+  'Biscoitos doces',
+  'Sucos industrializados',
+  'Cerveja',
+  'Bebidas açucaradas',
+  'Alimentos processados',
+  'Fast food',
+  'Sorvete industrializado',
+  'Leite condensado',
+  'Miel concentrado',
+];
+
+// ============================================================
+// DASHBOARD NAVIGATION
+// ============================================================
+export const NAV_ITEMS = [
+  { id: 'home', label: 'Início', icon: 'home' },
+  { id: 'perfil', label: 'Meu Perfil', icon: 'user' },
+  { id: 'receitas', label: 'Receitas', icon: 'book-open' },
+  { id: 'avaliador', label: 'Avaliador', icon: 'utensils' },
+  { id: 'exames', label: 'Exames', icon: 'bar-chart-2' },
+  { id: 'ranking', label: 'Ranking', icon: 'trophy' },
+  { id: 'chat', label: 'Chat', icon: 'message-circle' },
 ];

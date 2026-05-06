@@ -3,7 +3,7 @@ import { DOM, State } from '../utils/helpers.js';
 import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
-import { NAV_ITEMS } from '../config/constants.js';
+import { NAV_ITEMS, SCREENS } from '../config/constants.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
 import { createHeaderBar, createBreadcrumb, createStatusBadge } from './shared.js';
@@ -131,7 +131,7 @@ export class DashboardScreen extends BaseScreen {
     formsBtn.style.justifyContent = 'center';
     formsBtn.style.transition = 'all 0.3s';
     formsBtn.textContent = '📋';
-    formsBtn.addEventListener('click', () => this.app.navigate('forms'));
+    formsBtn.addEventListener('click', () => this.params.onNavigate(SCREENS.FORMS));
     formsBtn.addEventListener('mouseover', () => {
       formsBtn.style.background = 'rgba(240, 5, 154, 0.2)';
       formsBtn.style.transform = 'scale(1.05)';
