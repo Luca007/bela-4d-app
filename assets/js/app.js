@@ -189,4 +189,74 @@ class App {
     authService.onAuthStateChanged(async (user) => {
       if (user) {
         console.log('[App] Usuário logado:', user.uid);
-        S
+        Session.set('userId', user.uid);
+        const profile = await firestoreService.getUserProfile(user.uid);
+        State.set('userProfile', profile);
+        this._watchPendingActions(user.uid);
+        await this.routeByStatus(user.uid);
+      } else {
+        console.log('[App] Usuário desconectado');
+        Session.clear();
+        State.clear();
+        this.navigate(SCREENS.LOGIN);
+      }
+    });
+  }
+
+  /** Escuta pendingActions para notificações em tempo real */
+  _watchPendingActions(uid) {
+    const unsubscribe = firestoreService.onPendingActionsChange?.(uid, async (actions) => {
+      if (actions && actions.length > 0) {
+        const latestAction = actions[0];
+        console.log('[App] Nova ação pendente:', latestAction.type);
+        // Aqui você pode disparar notificações ou redirecionar o usuário
+        // this.showNotification(latestAction);
+      }
+    });
+    if (unsubscribe) this.dataUnsubscribers.push(unsubscribe);
+  }
+
+  _showFatalError(message) {
+    const container = DOM.byId('app');
+    if (container) {
+      container.innerHTML = `
+        <div style="padding: 40px; text-align: center; color: #dc2626;">
+          <h1>❌ Erro Crítico</h1>
+          <p>${message}</p>
+          <p style="font-size: 12px; margin-top: 20px; color: #666;">
+            Por favor, recarregue a página ou contate o suporte.
+          </p>
+        </div>
+      `;
+    }
+  }
+
+  destroy() {
+    this.dataUnsubscribers.forEach(unsub => unsub?.());
+    this.dataUnsubscribers = [];
+  }
+}
+
+// ────────────────────────────────────────────────
+// Bootstrap
+// ────────────────────────────────────────────────
+
+window.app = null;
+
+window.initApp = async () => {
+  window.app = new App();
+  const ready = await window.app.initialize();
+  if (ready) {
+    window.app.start();
+    console.log('[App] ✅ Inicialização completa');
+  } else {
+    console.error('[App] ❌ Inicialização falhou');
+  }
+};
+
+// Auto-init se DOM estiver pronto
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', window.initApp);
+} else {
+  window.initApp();
+}

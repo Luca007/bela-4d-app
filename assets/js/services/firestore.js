@@ -368,4 +368,12 @@ export class FirestoreService {
       );
       const snap = await getDocs(q);
       return snap.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
+    } catch (error) {
+      console.error('[FirestoreService] getChatHistory error:', error);
+      return [];
     }
+  }
+}
+
+// Export singleton instance
+export const firestoreService = new FirestoreService();
