@@ -143,7 +143,26 @@ export class AwaitingScreen extends BaseScreen {
         ],
         cta: this.examRequest ? {
           label: '📥 Baixar meu pedido de exames',
-          action: () => window.open(this.examRequest.fileUrl, '_blank'),
+          action: async () => {
+            try {
+              const { n8nService } = await import('../services/n8n.js');
+              const uid = (await import('../services/auth.js')).authService.getCurrentUser()?.uid;
+              if (!uid) return window.open(this.examRequest.fileUrl || '#', '_blank');
+              const loader = document.createElement('div'); loader.textContent = 'Preparando pedido...'; loader.style.cssText = 'position:fixed;right:20px;top:20px;padding:8px 12px;background:#111;color:#fff;border-radius:8px;z-index:99999;'; document.body.appendChild(loader);
+              const res = await n8nService.downloadExamPdf(uid, this.examRequest.id);
+              loader.remove();
+              const fileUrl = res?.fileUrl || this.examRequest.fileUrl;
+              if (fileUrl) {
+                const a = document.createElement('a'); a.href = fileUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.download = '';
+                document.body.appendChild(a); a.click(); a.remove();
+              } else {
+                window.open(this.examRequest.fileUrl || '#', '_blank');
+              }
+            } catch (e) {
+              console.error('download exam failed', e);
+              window.open(this.examRequest.fileUrl || '#', '_blank');
+            }
+          }
         } : null,
         secondaryCta: {
           label: '📎 Já fiz os exames — enviar resultado',

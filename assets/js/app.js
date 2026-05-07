@@ -28,7 +28,7 @@ import { ExamUploadScreen } from './screens/exam-upload.js';
 import { HealthFormScreen } from './screens/health-form.js';
 import { OnboardingScreen } from './screens/onboarding.js';
 import { CardapioScreen }   from './screens/cardapio.js';
-import { DashboardScreen }  from './screens/dashboard.js';
+import { DashboardScreen }  from './screens/dashboard-v2.js';
 import { ChatScreen }       from './screens/chat.js';
 import { RecipesScreen }    from './screens/recipes.js';
 import { FoodSearchScreen } from './screens/food-search.js';
@@ -161,8 +161,15 @@ class App {
 
   async initialize() {
     try {
+      const debugLoginOnly = new URLSearchParams(window.location.search).has('loginOnly');
+
       const firebaseReady = await initializeFirebase();
       if (!firebaseReady) { this._showFatalError('Erro ao conectar com o servidor'); return false; }
+
+      if (debugLoginOnly) {
+        this.isInitialized = true;
+        return true;
+      }
 
       await firestoreService.initialize();
       const authReady = await authService.initialize();
@@ -177,23 +184,93 @@ class App {
     }
   }
 
-  start() {
-    authService.onAuthStateChanged(async (user) => {
-      if (user) {
-        console.log('[App] Usuário logado:', user.uid);
-        Session.set('userId', user.uid);
-        const profile = await firestoreService.getUserProfile(user.uid);
-        State.set('userProfile', profile);
-        this._watchPendingActions(user.uid);
-        this._watchNotifications(user.uid);
-        await this.routeByStatus(user.uid);
-      } else {
-        console.log('[App] Usuário desconectado');
-        Session.clear();
-        State.clear();
-        this.navigate(SCREENS.LOGIN);
+  isLoginOnlyMode() {
+    return new URLSearchParams(window.location.search).has('loginOnly');
+  }
+
+  ensureSessionStateShims() {
+    const attachObjectShim = (targetName, fallbackValue) => {
+      if (typeof window[targetName] !== 'object' || window[targetName] === null) {
+        console.debug(`[App] Creating global shim for ${targetName}.`);
+        window[targetName] = fallbackValue;
       }
+    };
+
+    const attachMethod = (objectName, methodName, implementation) => {
+      if (typeof window[objectName][methodName] !== 'function') {
+        window[objectName][methodName] = implementation;
+      }
+    };
+
+    try {
+      attachObjectShim('Session', { data: {} });
+      attachMethod('Session', 'set', (key, value) => {
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+        window.Session[key] = value;
+      });
+      attachMethod('Session', 'get', (key) => {
+        try {
+          const stored = localStorage.getItem(key);
+          return stored ? JSON.parse(stored) : window.Session[key];
+        } catch {
+          return window.Session[key];
+        }
+      });
+      attachMethod('Session', 'clear', () => {
+        try { localStorage.clear(); } catch {}
+        this.resetPlainObject(window.Session, ['set', 'get', 'clear']);
+      });
+
+      attachObjectShim('State', { data: {}, listeners: [] });
+      attachMethod('State', 'set', (key, value) => {
+        window.State.data[key] = value;
+        window.State.notify?.();
+      });
+      attachMethod('State', 'get', (key) => window.State.data[key]);
+      attachMethod('State', 'clear', () => {
+        window.State.data = {};
+        window.State.notify?.();
+      });
+    } catch (error) {
+      console.error('[App] Error ensuring Session/State shims:', error);
+    }
+  }
+
+  resetPlainObject(objectValue, protectedKeys = []) {
+    Object.keys(objectValue).forEach((key) => {
+      if (!protectedKeys.includes(key)) delete objectValue[key];
     });
+  }
+
+  async handleAuthStateChange(user) {
+    if (user) {
+      console.log('[App] Usuário logado:', user.uid);
+      try { Session.set('userId', user.uid); } catch (error) { console.warn('[App] Session.set failed', error); }
+      const profile = await firestoreService.getUserProfile(user.uid);
+      try { State.set('userProfile', profile); } catch (error) { console.warn('[App] State.set failed', error); }
+      this._watchPendingActions(user.uid);
+      this._watchNotifications(user.uid);
+      await this.routeByStatus(user.uid);
+      return;
+    }
+
+    console.log('[App] Usuário desconectado');
+    console.log('[App][DEBUG] Session snapshot before clear:', Session);
+    console.log('[App][DEBUG] State snapshot before clear:', State);
+    try { Session.clear(); } catch (error) { console.warn('[App] Session.clear failed', error); }
+    try { State.clear(); } catch (error) { console.warn('[App] State.clear failed', error); }
+    this.navigate(SCREENS.LOGIN);
+  }
+
+  start() {
+    if (this.isLoginOnlyMode()) {
+      console.log('[App] loginOnly debug mode active');
+      this.navigate(SCREENS.LOGIN);
+      return;
+    }
+
+    this.ensureSessionStateShims();
+    authService.onAuthStateChanged((user) => this.handleAuthStateChange(user));
   }
 
   /** Escuta pendingActions para notificações em tempo real */
@@ -238,6 +315,17 @@ class App {
   destroy() {
     this.dataUnsubscribers.forEach(unsub => unsub?.());
     this.dataUnsubscribers = [];
+  }
+
+  async debugSignOut() {
+    try {
+      await authService.logout();
+      console.log('[App] debugSignOut completed');
+      return true;
+    } catch (error) {
+      console.error('[App] debugSignOut failed:', error);
+      return false;
+    }
   }
 }
 

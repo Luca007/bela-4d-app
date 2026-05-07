@@ -120,6 +120,21 @@ class N8nService {
     }
   }
 
+  /**
+   * Request n8n to ensure the exam PDF is available and return a downloadable URL.
+   * This delegates to a Firebase Function which triggers the n8n workflow that
+   * downloads/stores the PDF from Google Drive and returns a signed URL.
+   */
+  async downloadExamPdf(uid, examRequestId) {
+    try {
+      const result = await this._call('downloadExamPdf', { uid, examRequestId });
+      return result.data; // { fileUrl }
+    } catch (e) {
+      console.error('[N8N] downloadExamPdf:', e);
+      throw e;
+    }
+  }
+
   // ──────────────────────────────────────────────────────────
   // AGENTE DE RECEITAS (Chat IA — função principal do app)
   // Workflow n8n: "4D - AI Recipe Agent"
@@ -165,6 +180,19 @@ class N8nService {
       return result.data; // Recipe object
     } catch (e) {
       console.error('[N8N] generateRecipe:', e);
+      throw e;
+    }
+  }
+
+  async deleteRecipe(uid, recipeId) {
+    try {
+      const result = await this._call('deleteRecipe', {
+        uid,
+        recipeId,
+      });
+      return result.data;
+    } catch (e) {
+      console.error('[N8N] deleteRecipe:', e);
       throw e;
     }
   }

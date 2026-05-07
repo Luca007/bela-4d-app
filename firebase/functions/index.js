@@ -299,6 +299,50 @@ exports.generateRecipe = onCall({ region: REGION }, async (request) => {
 });
 
 // ─────────────────────────────────────────────
+// 5. REMOVER RECEITA
+// ─────────────────────────────────────────────
+exports.deleteRecipe = onCall({ region: REGION }, async (request) => {
+  requireAuth(request.auth);
+  const uid = request.auth.uid;
+  const { recipeId } = request.data;
+
+  if (!recipeId) throw new HttpsError('invalid-argument', 'recipeId é obrigatório');
+
+  const recipeRef = db.doc(`users/${uid}/recipes/${recipeId}`);
+  const recipeDoc = await recipeRef.get();
+
+  if (!recipeDoc.exists) {
+    throw new HttpsError('not-found', 'Receita não encontrada');
+  }
+
+  const recipeData = recipeDoc.data() || {};
+
+  try {
+    await callN8n('4d-delete-recipe', {
+      uid,
+      recipeId,
+      recipe: {
+        id: recipeId,
+        name: recipeData.nm || recipeData.name || '',
+        source: recipeData.source || 'manual',
+      },
+    });
+
+    await recipeRef.delete();
+
+    await db.doc(`users/${uid}`).set({
+      totalRecipes: FieldValue.increment(-1),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    return { success: true, recipeId };
+  } catch (error) {
+    console.error('[Functions] deleteRecipe error:', error.message);
+    throw new HttpsError('internal', 'Erro ao remover receita');
+  }
+});
+
+// ─────────────────────────────────────────────
 // 6. AVALIADOR DE ALIMENTOS
 // ─────────────────────────────────────────────
 exports.evaluateFood = onCall({ region: REGION }, async (request) => {

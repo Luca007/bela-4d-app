@@ -127,6 +127,13 @@ const payload = buildChatPayload(uid, message, sessionId, context);
 
 ## 🎯 Próximos Passos (Fase 2)
 
+### Estado Atual da Integração Firebase
+- [x] Perfil, refeições, dicas e feed social passam a salvar no Firestore pelo dashboard
+- [x] Conta de teste recebeu dados de chat, notificações, pedidos, exames e formulários
+- [ ] Realtime dedicado para feed social global ainda pode ser extraído do perfil para uma coleção própria
+- [ ] Indicadores de loading ainda podem ser expandidos para todas as ações assíncronas da UI
+- [ ] Revisar o seed em ambiente Firebase real com credenciais de admin antes de considerar fechado
+
 ### Task 2.1: UI do Chat com IA guardiã
 - [ ] Criar `assets/js/screens/chat.js`
 - [ ] Message bubbles (user/assistant)

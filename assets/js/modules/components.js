@@ -204,18 +204,36 @@ export const UIComponents = {
   },
 
   // Loading spinner
-  spinner() {
+  spinner({ size = 18, color = null, thickness = 2.5 } = {}) {
     const spinner = DOM.create('div', 'spinner');
+    const borderColor = color ? `${color}33` : 'rgba(255,255,255,0.3)';
+    const topColor = color || '#fff';
     DOM.setStyle(spinner, {
-      width: '18px',
-      height: '18px',
-      border: '2.5px solid rgba(255,255,255,0.3)',
-      borderTopColor: '#fff',
+      width: size + 'px',
+      height: size + 'px',
+      border: `${thickness}px solid ${borderColor}`,
+      borderTopColor: topColor,
       borderRadius: '50%',
-      animation: 'spin 0.7s linear infinite',
+      animation: 'spin 0.8s linear infinite',
       display: 'inline-block',
     });
     return spinner;
+  },
+
+  // Full-screen loading overlay
+  loaderOverlay({ message = '', color = null } = {}) {
+    const overlay = DOM.create('div', 'loader-overlay');
+    DOM.setStyle(overlay, {
+      position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)',
+    });
+    const box = DOM.create('div', 'loader-box');
+    DOM.setStyle(box, { padding: '18px 22px', borderRadius: '12px', background: 'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02))', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: '0 8px 40px rgba(0,0,0,0.6)' });
+    box.appendChild(this.spinner({ size: 36, color }));
+    if (message) {
+      const txt = DOM.create('div'); txt.textContent = message; DOM.setStyle(txt, { color: 'white', fontWeight: 700 }); box.appendChild(txt);
+    }
+    overlay.appendChild(box);
+    return overlay;
   },
 
   // Tab component

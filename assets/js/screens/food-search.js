@@ -353,15 +353,15 @@ class FoodSearchScreen {
     const historyDiv = document.getElementById('food-search-history');
     if (this.evaluationHistory.length > 0) {
       const historyList = document.getElementById('food-history-list');
-      historyList.innerHTML = this.evaluationHistory.slice(0, 10).map((eval, idx) => {
-        const score = eval.evaluation.evaluation.score;
+      historyList.innerHTML = this.evaluationHistory.slice(0, 10).map((entry, idx) => {
+        const score = entry.evaluation?.evaluation?.score || 0;
         const icon = score <= 3 ? '🔴' : (score <= 6 ? '🟡' : '🟢');
         return `
           <div class="history-item" data-index="${idx}">
             <div class="history-item-icon">${icon}</div>
             <div class="history-item-info">
-              <h4>${eval.foodName}</h4>
-              <p>${eval.evaluation.evaluation.verdict}</p>
+              <h4>${entry.foodName}</h4>
+              <p>${entry.evaluation?.evaluation?.verdict || ''}</p>
             </div>
             <button class="history-item-action">→</button>
           </div>
