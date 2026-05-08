@@ -12,7 +12,7 @@
  * Região: southamerica-east1 (São Paulo)
  */
 
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
@@ -47,6 +47,28 @@ async function callN8n(endpoint, payload) {
   return response.data;
 }
 
+async function callN8nWithRetry(endpoint, payload, maxRetries = 3) {
+  let lastError = null;
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    try {
+      return await callN8n(endpoint, payload);
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxRetries - 1) break;
+      const delayMs = Math.pow(2, attempt) * 1000;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
+function verifyWebhookSecret(req) {
+  const received = req.get('x-webhook-secret') || req.get('X-Webhook-Secret');
+  if (!received || received !== N8N_WEBHOOK_SECRET) {
+    throw new HttpsError('permission-denied', 'Webhook secret inválido');
+  }
+}
+
 // ─────────────────────────────────────────────
 // 1. PROCESSAR TRANSCRIÇÃO DO GOOGLE MEET
 // ─────────────────────────────────────────────
@@ -73,7 +95,7 @@ exports.processOnboardingTranscript = onCall({ region: REGION }, async (request)
   };
 
   try {
-    const result = await callN8n('4d-process-transcript', payload);
+    const result = await callN8nWithRetry('4d-process-transcript', payload);
 
     // n8n retorna: { hasBloodTest: bool, extractedHealthData: {...}, status: string }
     const { hasBloodTest, extractedHealthData, suggestedStatus } = result;
@@ -167,7 +189,7 @@ exports.generateExamRequest = onCall({ region: REGION }, async (request) => {
   };
 
   try {
-    const result = await callN8n('4d-generate-exam-request', payload);
+    const result = await callN8nWithRetry('4d-generate-exam-request', payload);
     // result: { driveFileUrl: string, fileName: string }
 
     // Salva referência no Firestore
@@ -223,7 +245,7 @@ exports.agentChatMessage = onCall({ region: REGION }, async (request) => {
   };
 
   try {
-    const result = await callN8n('4d-agent-chat', payload);
+    const result = await callN8nWithRetry('4d-agent-chat', payload);
     // result: { reply: string, type: 'text'|'recipe', recipe?: Object, xpAwarded?: number }
 
     // Salva a resposta no Firestore
@@ -280,7 +302,7 @@ exports.generateRecipe = onCall({ region: REGION }, async (request) => {
   };
 
   try {
-    const result = await callN8n('4d-generate-recipe', payload);
+    const result = await callN8nWithRetry('4d-generate-recipe', payload);
 
     const recipeRef = await db.collection(`users/${uid}/recipes`).add({
       ...result.recipe,
@@ -318,7 +340,7 @@ exports.deleteRecipe = onCall({ region: REGION }, async (request) => {
   const recipeData = recipeDoc.data() || {};
 
   try {
-    await callN8n('4d-delete-recipe', {
+    await callN8nWithRetry('4d-delete-recipe', {
       uid,
       recipeId,
       recipe: {
@@ -365,11 +387,131 @@ exports.evaluateFood = onCall({ region: REGION }, async (request) => {
   };
 
   try {
-    const result = await callN8n('4d-evaluate-food', payload);
+    const result = await callN8nWithRetry('4d-evaluate-food', payload);
     return { success: true, evaluation: result.evaluation };
   } catch (error) {
     console.error('[Functions] evaluateFood error:', error.message);
     throw new HttpsError('internal', 'Erro ao avaliar alimento');
+  }
+});
+
+// ─────────────────────────────────────────────
+// 7. CALLBACKS HTTP (n8n -> Firebase)
+// ─────────────────────────────────────────────
+exports.onTranscriptCallback = onRequest({ region: REGION }, async (req, res) => {
+  try {
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'method-not-allowed' });
+      return;
+    }
+    verifyWebhookSecret(req);
+
+    const {
+      uid,
+      hasBloodTest = false,
+      extractedHealthData = {},
+      suggestedStatus,
+      meetingId,
+      transcriptUrl,
+    } = req.body || {};
+
+    if (!uid) {
+      res.status(400).json({ success: false, error: 'uid-obrigatorio' });
+      return;
+    }
+
+    const newStatus = suggestedStatus || (hasBloodTest ? 'pending_blood_test' : 'exam_request_sent');
+
+    await db.doc(`users/${uid}/onboardingInterview/data`).set({
+      extractedHealthData,
+      hasBloodTest,
+      processedAt: FieldValue.serverTimestamp(),
+      source: 'n8n_callback',
+    }, { merge: true });
+
+    if (meetingId) {
+      await db.doc(`users/${uid}/meetings/${meetingId}`).set({
+        transcriptUrl: transcriptUrl || null,
+        analyzedAt: FieldValue.serverTimestamp(),
+        hasBloodTest,
+        extractedData: extractedHealthData,
+        status: 'processed',
+      }, { merge: true });
+    }
+
+    await db.doc(`users/${uid}`).set({
+      status: newStatus,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    await db.collection(`users/${uid}/pendingActions`).add({
+      type: 'meeting_analyzed',
+      seen: false,
+      message: 'Reunião analisada! Seus dados foram pré-preenchidos.',
+      payload: { hasBloodTest, nextStatus: newStatus },
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    res.status(200).json({ success: true, status: newStatus });
+  } catch (error) {
+    console.error('[Functions] onTranscriptCallback error:', error.message || error);
+    if (error instanceof HttpsError) {
+      res.status(403).json({ success: false, error: error.message });
+      return;
+    }
+    res.status(500).json({ success: false, error: 'internal-error' });
+  }
+});
+
+exports.onBloodTestCallback = onRequest({ region: REGION }, async (req, res) => {
+  try {
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'method-not-allowed' });
+      return;
+    }
+    verifyWebhookSecret(req);
+
+    const {
+      uid,
+      bloodTestId,
+      extractedData = {},
+      processingStatus = 'done',
+      summary = null,
+    } = req.body || {};
+
+    if (!uid || !bloodTestId) {
+      res.status(400).json({ success: false, error: 'uid-e-bloodTestId-obrigatorios' });
+      return;
+    }
+
+    await db.doc(`users/${uid}/bloodTests/${bloodTestId}`).set({
+      extractedData,
+      status: processingStatus,
+      summary,
+      processedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    await db.doc(`users/${uid}`).set({
+      status: 'filling_health_form',
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    await db.collection(`users/${uid}/pendingActions`).add({
+      type: 'blood_test_processed',
+      seen: false,
+      message: 'Exame processado! Você já pode revisar e confirmar seus dados.',
+      payload: { bloodTestId },
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('[Functions] onBloodTestCallback error:', error.message || error);
+    if (error instanceof HttpsError) {
+      res.status(403).json({ success: false, error: error.message });
+      return;
+    }
+    res.status(500).json({ success: false, error: 'internal-error' });
   }
 });
 

@@ -278,7 +278,7 @@ export const RED_LIST = [
   'Fast food',
   'Sorvete industrializado',
   'Leite condensado',
-  'Miel concentrado',
+  'Mel concentrado',
 ];
 
 // ============================================================

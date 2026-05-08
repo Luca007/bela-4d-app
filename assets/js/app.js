@@ -20,6 +20,7 @@ import { SCREENS, USER_STATUS } from './config/constants.js';
 import { initializeFirebase } from './config/firebase.js';
 import { authService } from './services/auth.js';
 import { firestoreService } from './services/firestore.js';
+import { notificationService } from './modules/notifications.js';
 
 // Telas
 import { LoginScreen }      from './screens/login.js';
@@ -248,6 +249,7 @@ class App {
       try { Session.set('userId', user.uid); } catch (error) { console.warn('[App] Session.set failed', error); }
       const profile = await firestoreService.getUserProfile(user.uid);
       try { State.set('userProfile', profile); } catch (error) { console.warn('[App] State.set failed', error); }
+      await firestoreService.awardDailyLoginXp(user.uid);
       this._watchPendingActions(user.uid);
       this._watchNotifications(user.uid);
       await this.routeByStatus(user.uid);
@@ -276,11 +278,29 @@ class App {
   /** Escuta pendingActions para notificações em tempo real */
   _watchPendingActions(uid) {
     const unsubscribe = firestoreService.onPendingActionsChange?.(uid, async (actions) => {
-      if (actions && actions.length > 0) {
-        const latestAction = actions[0];
-        console.log('[App] Nova ação pendente:', latestAction.type);
-        // Aqui você pode disparar notificações ou redirecionar o usuário
-        // this.showNotification(latestAction);
+      if (!actions?.length) return;
+
+      for (const action of actions) {
+        if (action.seen) continue;
+        switch (action.type) {
+          case 'blood_test_processed':
+            notificationService.toast('Exame processado! Preencha o formulário de saúde.', { type: 'success' });
+            await this.routeByStatus(uid);
+            break;
+          case 'meeting_analyzed':
+            notificationService.toast('Reunião analisada! Seus dados foram pré-preenchidos.', { type: 'success' });
+            break;
+          case 'recipe_ready':
+            notificationService.toast('Nova receita disponível no chat!', { type: 'status' });
+            break;
+          default:
+            notificationService.toast(action.message || 'Você tem uma nova atualização do programa.', { type: 'status' });
+            break;
+        }
+
+        if (action.id) {
+          await firestoreService.markActionSeen(uid, action.id);
+        }
       }
     });
     if (unsubscribe) this.dataUnsubscribers.push(unsubscribe);

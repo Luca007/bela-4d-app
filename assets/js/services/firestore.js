@@ -14,7 +14,7 @@
  *   users/{uid}/examTracking/{id}  → exames de acompanhamento (HbA1c, glicemia etc.)
  */
 
-import { getFirestore } from '../config/firebase.js';
+import { getFirestore, firebaseConfig } from '../config/firebase.js';
 import {
   addDoc,
   collection,
@@ -621,8 +621,9 @@ export class FirestoreService {
   }
 
   _getFunctionsUrl() {
-    // Substitua com sua URL real do Firebase
-    return 'https://southamerica-east1-YOUR-PROJECT.cloudfunctions.net';
+    const projectId = firebaseConfig?.projectId || 'bela-4d-app';
+    const region = 'southamerica-east1';
+    return `https://${region}-${projectId}.cloudfunctions.net`;
   }
 
   async _getIdToken() {
@@ -687,6 +688,160 @@ export class FirestoreService {
       });
     } catch (e) {
       console.error('[Firestore] logXPEvent:', e);
+    }
+  }
+
+  async awardDailyLoginXp(uid) {
+    try {
+      const profile = await this.getUserProfile(uid);
+      if (!profile) return false;
+
+      const toDate = value => {
+        if (!value) return null;
+        if (typeof value?.toDate === 'function') return value.toDate();
+        if (value instanceof Date) return value;
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      };
+
+      const today = new Date();
+      const todayKey = today.toDateString();
+      const lastLoginDate = toDate(profile.lastLoginAt);
+
+      if (lastLoginDate && lastLoginDate.toDateString() === todayKey) {
+        return false;
+      }
+
+      await this.awardXp(uid, XP_EVENTS.DAILY_LOGIN, 'daily_login');
+      await this._updateStreak(uid, profile);
+      await updateDoc(this.userRef(uid), {
+        lastLoginAt: serverTimestamp(),
+      });
+
+      return true;
+    } catch (e) {
+      console.error('[Firestore] awardDailyLoginXp:', e);
+      return false;
+    }
+  }
+
+  async _updateStreak(uid, profile = null) {
+    try {
+      const sourceProfile = profile || await this.getUserProfile(uid) || {};
+      const toDate = value => {
+        if (!value) return null;
+        if (typeof value?.toDate === 'function') return value.toDate();
+        if (value instanceof Date) return value;
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      };
+
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+
+      const lastActivityDate = toDate(sourceProfile.lastActivityDate);
+      let newStreak = 1;
+
+      if (lastActivityDate && lastActivityDate.toDateString() === yesterday.toDateString()) {
+        newStreak = Number(sourceProfile.streak || 0) + 1;
+      } else if (lastActivityDate && lastActivityDate.toDateString() === today.toDateString()) {
+        newStreak = Number(sourceProfile.streak || 0);
+      }
+
+      await updateDoc(this.userRef(uid), {
+        streak: newStreak,
+        lastActivityDate: serverTimestamp(),
+      });
+
+      if (newStreak === 7) await this.unlockAchievement(uid, 'consistent');
+      if (newStreak === 30) await this.unlockAchievement(uid, 'iron_fire');
+
+      return newStreak;
+    } catch (e) {
+      console.error('[Firestore] _updateStreak:', e);
+      return null;
+    }
+  }
+
+  async unlockAchievement(uid, achievementId) {
+    try {
+      const achievement = ACHIEVEMENTS_CATALOG.find(item => item.id === achievementId);
+      if (!achievement) return false;
+
+      const ref = this.subDoc(uid, 'achievements', achievementId);
+      const existing = await getDoc(ref);
+      if (existing.exists()) return false;
+
+      await setDoc(ref, {
+        ...achievement,
+        unlocked: true,
+        seen: false,
+        unlockedAt: serverTimestamp(),
+      }, { merge: true });
+
+      const xp = Number(achievement.xp || 0);
+      if (xp > 0) {
+        await this.awardXp(uid, xp, `achievement_${achievementId}`);
+      }
+
+      return true;
+    } catch (e) {
+      console.error('[Firestore] unlockAchievement:', e);
+      return false;
+    }
+  }
+
+  async getTopRanking(limitCount = 10) {
+    try {
+      const q = query(collection(this.getDb(), 'users'), orderBy('xp', 'desc'), limit(limitCount));
+      const snap = await getDocs(q);
+      return snap.docs.map((docSnap, index) => {
+        const data = docSnap.data() || {};
+        return {
+          position: index + 1,
+          uid: docSnap.id,
+          name: data.name || 'Usuário',
+          xp: Number(data.xp || 0),
+          level: Number(data.level || 1),
+          streak: Number(data.streak || 0),
+          avatar: data.avatar || '🌸',
+          avatarColor: data.avatarColor || '#f0059a',
+        };
+      });
+    } catch (e) {
+      console.error('[Firestore] getTopRanking:', e);
+      return [];
+    }
+  }
+
+  async markActionSeen(uid, actionId) {
+    try {
+      await updateDoc(this.subDoc(uid, 'pendingActions', actionId), {
+        seen: true,
+        seenAt: serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      console.error('[Firestore] markActionSeen:', e);
+      return false;
+    }
+  }
+
+  onXpLogChange(uid, callback) {
+    try {
+      const q = query(this.subCol(uid, 'xpLog'), orderBy('timestamp', 'desc'), limit(1));
+      return onSnapshot(q, (snap) => {
+        if (snap.empty) {
+          callback(null);
+          return;
+        }
+        const entry = snap.docs[0];
+        callback({ id: entry.id, ...entry.data() });
+      });
+    } catch (e) {
+      console.error('[Firestore] onXpLogChange:', e);
+      return () => {};
     }
   }
 }

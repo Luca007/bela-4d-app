@@ -424,9 +424,10 @@ export class ChatScreen extends BaseScreen {
   }
 
   goToRecipe(recipeId) {
-    // Navegar para tela de receita ou abrir modal
-    console.log('Going to recipe:', recipeId);
-    // TODO: Implementar navegação
+    this.params.onNavigate?.(SCREENS.DASHBOARD, {
+      initialNav: 'receitas',
+      recipeId,
+    });
   }
 
   showError(message) {

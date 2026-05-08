@@ -15,7 +15,7 @@
  * Campos pré-preenchidos são destacados com badge "IA" e podem ser editados.
  */
 
-import { DOM, State } from '../utils/helpers.js';
+import { DOM, State, Session } from '../utils/helpers.js';
 import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
@@ -25,7 +25,7 @@ import { HEALTH_FORM_SECTIONS, DIAGNOSTIC_OPTIONS } from '../config/constants.js
 export class HealthFormScreen extends BaseScreen {
   constructor(params) {
     super(params);
-    this.uid = State.get('currentUser')?.uid;
+    this.uid = State.get('currentUser')?.uid || Session.get('userId');
     this.currentSection = 0;
     this.totalSections = HEALTH_FORM_SECTIONS.length;
     this.aiPrefillData = params.aiPrefillData || null; // dados pré-preenchidos pela IA
@@ -637,11 +637,6 @@ export class HealthFormScreen extends BaseScreen {
   }
 
   _yesNoField(key, label) {
-    return this._radioGroup(key, label, [true, false], false, (opt) => opt === true ? 'Sim' : 'Não',
-      (checked, opt) => this.formData[key] === opt);
-  }
-
-  _yesNoField(key, label) {
     const wrap = DOM.create('div');
     wrap.style.marginBottom = '20px';
     wrap.appendChild(this._fieldLabel(label));
@@ -778,7 +773,32 @@ export class HealthFormScreen extends BaseScreen {
     this.container.appendChild(this.render());
   }
 
+  _validateRequiredFields() {
+    const requiredMap = [
+      { key: 'fullName', label: 'Nome completo' },
+      { key: 'birthDate', label: 'Data de nascimento' },
+      { key: 'weight', label: 'Peso' },
+      { key: 'height', label: 'Altura' },
+    ];
+
+    for (const field of requiredMap) {
+      const value = String(this.formData[field.key] || '').trim();
+      if (!value) {
+        this._showErrorToast(`Por favor, preencha: ${field.label}`);
+        return false;
+      }
+    }
+
+    if (!Array.isArray(this.formData.diagnostics) || this.formData.diagnostics.length === 0) {
+      this._showErrorToast('Selecione ao menos 1 diagnóstico.');
+      return false;
+    }
+
+    return true;
+  }
+
   async _submitForm() {
+    if (!this._validateRequiredFields()) return;
     if (this.isSaving) return;
     this.isSaving = true;
 

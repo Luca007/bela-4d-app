@@ -1,9 +1,11 @@
 // Cardápio/Menu Configuration Screen
-import { DOM } from '../utils/helpers.js';
+import { DOM, Session } from '../utils/helpers.js';
 import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
-import { OBJECTIVE_OPTIONS, MEAL_TIMES, RED_LIST } from '../config/constants.js';
+import { OBJECTIVE_OPTIONS, MEAL_TIMES, RED_LIST, SCREENS } from '../config/constants.js';
+import { firestoreService } from '../services/firestore.js';
+import { notificationService } from '../modules/notifications.js';
 
 const ALLOWED_FOODS = [
   "Filé de frango", "Salmão", "Ovos", "Brócolis", "Abobrinha", "Espinafre",
@@ -24,6 +26,46 @@ export class CardapioScreen extends BaseScreen {
     this.selectedAllowed = ['Filé de frango', 'Salmão', 'Ovos', 'Brócolis'];
     this.selectedModerate = ['Arroz', 'Batata doce'];
     this.selectedForbidden = ['Açúcar branco', 'Refrigerante', 'Pão branco / francês'];
+    this.mealTimes = MEAL_TIMES.map(meal => ({ ...meal, enabled: true }));
+    this.isSubmitting = false;
+    this.hasLoadedSavedData = false;
+  }
+
+  mount() {
+    super.mount();
+    if (!this.hasLoadedSavedData) {
+      this.loadSavedData();
+    }
+  }
+
+  async loadSavedData() {
+    const uid = Session.get('userId');
+    this.hasLoadedSavedData = true;
+    if (!uid) return;
+
+    try {
+      const saved = await firestoreService.getMenuForm(uid);
+      if (!saved) return;
+
+      this.selectedObjective = saved.objective || this.selectedObjective;
+      this.selectedAllowed = Array.isArray(saved.greenList) ? saved.greenList : this.selectedAllowed;
+      this.selectedModerate = Array.isArray(saved.yellowList) ? saved.yellowList : this.selectedModerate;
+      this.selectedForbidden = Array.isArray(saved.redList) ? saved.redList : this.selectedForbidden;
+
+      if (Array.isArray(saved.mealTimes) && saved.mealTimes.length) {
+        this.mealTimes = saved.mealTimes.map((meal, index) => ({
+          icon: meal.icon || MEAL_TIMES[index]?.icon || '🍽️',
+          label: meal.label || MEAL_TIMES[index]?.label || `Refeição ${index + 1}`,
+          time: meal.time || MEAL_TIMES[index]?.time || '08:00',
+          enabled: meal.enabled !== false,
+        }));
+      }
+
+      this.element.innerHTML = '';
+      this.mount();
+    } catch (error) {
+      console.error('[Cardapio] loadSavedData error:', error);
+    }
   }
 
   render() {
@@ -71,9 +113,8 @@ export class CardapioScreen extends BaseScreen {
     // Complete Button
     const completeBtn = UIComponents.primaryButton('🌟 Gerar meu cardápio personalizado');
     completeBtn.style.fontSize = '17px';
-    completeBtn.addEventListener('click', () => {
-      this.params.onNavigate('dashboard');
-    });
+    completeBtn.addEventListener('click', () => this._handleSubmit());
+    this.submitBtn = completeBtn;
     card.appendChild(completeBtn);
     
     content.appendChild(card);
@@ -164,7 +205,7 @@ export class CardapioScreen extends BaseScreen {
     mealsContainer.style.flexDirection = 'column';
     mealsContainer.style.gap = '10px';
     
-    MEAL_TIMES.forEach(meal => {
+    this.mealTimes.forEach((meal, index) => {
       const mealEl = DOM.create('div');
       mealEl.style.background = Colors.glass;
       mealEl.style.border = `1px solid ${Colors.border}`;
@@ -196,6 +237,10 @@ export class CardapioScreen extends BaseScreen {
       time.style.color = Colors.pink;
       time.style.fontWeight = '700';
       time.style.width = 'auto';
+      time.disabled = !meal.enabled;
+      time.addEventListener('input', (event) => {
+        this.mealTimes[index].time = event.target.value;
+      });
       
       const toggle = DOM.create('div');
       toggle.style.width = '44px';
@@ -203,7 +248,9 @@ export class CardapioScreen extends BaseScreen {
       toggle.style.borderRadius = '12px';
       toggle.style.cursor = 'pointer';
       toggle.style.position = 'relative';
-      toggle.style.background = `linear-gradient(135deg, ${Colors.pink}, #c0027c)`;
+      toggle.style.background = meal.enabled
+        ? `linear-gradient(135deg, ${Colors.pink}, #c0027c)`
+        : 'rgba(255,255,255,0.12)';
       toggle.style.flexShrink = '0';
       toggle.style.transition = 'background 0.3s';
       
@@ -214,8 +261,14 @@ export class CardapioScreen extends BaseScreen {
       toggleDot.style.borderRadius = '50%';
       toggleDot.style.background = '#fff';
       toggleDot.style.top = '3px';
-      toggleDot.style.left = '23px';
+      toggleDot.style.left = meal.enabled ? '23px' : '3px';
       toggleDot.style.transition = 'left 0.3s';
+
+      toggle.addEventListener('click', () => {
+        this.mealTimes[index].enabled = !this.mealTimes[index].enabled;
+        this.element.innerHTML = '';
+        this.mount();
+      });
       
       toggle.appendChild(toggleDot);
       
@@ -409,6 +462,55 @@ export class CardapioScreen extends BaseScreen {
     container.appendChild(circle);
     
     return container;
+  }
+
+  _collectFormData() {
+    return {
+      objective: this.selectedObjective,
+      mealTimes: this.mealTimes.map(meal => ({
+        icon: meal.icon,
+        label: meal.label,
+        time: meal.time,
+        enabled: meal.enabled !== false,
+      })),
+      greenList: [...this.selectedAllowed],
+      yellowList: [...this.selectedModerate],
+      redList: [...this.selectedForbidden],
+      submittedAt: new Date().toISOString(),
+    };
+  }
+
+  _setSubmitting(isSubmitting) {
+    this.isSubmitting = isSubmitting;
+    if (!this.submitBtn) return;
+    this.submitBtn.disabled = isSubmitting;
+    this.submitBtn.textContent = isSubmitting
+      ? 'Salvando cardápio...'
+      : '🌟 Gerar meu cardápio personalizado';
+  }
+
+  async _handleSubmit() {
+    if (this.isSubmitting) return;
+    const uid = Session.get('userId');
+    if (!uid) {
+      notificationService.toast('Faça login novamente para salvar seu cardápio.', { type: 'warning' });
+      return;
+    }
+
+    this._setSubmitting(true);
+    try {
+      const formData = this._collectFormData();
+      const saved = await firestoreService.saveMenuForm(uid, formData, true);
+      if (!saved) throw new Error('saveMenuForm failed');
+
+      notificationService.toast('Cardápio salvo com sucesso!', { type: 'success' });
+      this.params.onNavigate?.(SCREENS.DASHBOARD);
+    } catch (error) {
+      console.error('[Cardapio] submit error:', error);
+      notificationService.toast('Erro ao salvar. Tente novamente.', { type: 'error' });
+    } finally {
+      this._setSubmitting(false);
+    }
   }
 }
 

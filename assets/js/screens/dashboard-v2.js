@@ -190,7 +190,7 @@ function renderSparkline(points, color, height = 110, labelColor = 'var(--dash-m
 export class DashboardScreen extends BaseScreen {
   constructor(params) {
     super(params);
-    this.currentNav = 'inicio';
+    this.currentNav = params.initialNav || 'inicio';
     this.currentUser = authService.getCurrentUser();
     this.userProfile = State.get('userProfile') || {};
     this.recipes = State.get('recipes') || RECIPES;
@@ -221,7 +221,8 @@ export class DashboardScreen extends BaseScreen {
     this.notifications = State.get('notifications') || [];
     this.notificationPanelOpen = false;
     this.recipeFilter = 'Todas';
-    this.selectedRecipe = null;
+    const initialRecipeId = params.recipeId || null;
+    this.selectedRecipe = initialRecipeId ? RECIPES.find(recipe => recipe.id === initialRecipeId) || null : null;
     this.themeToggleLocked = false;
     this.examOrders = Array.isArray(this.userProfile?.examOrders) && this.userProfile.examOrders.length ? this.userProfile.examOrders : EXAM_ORDERS;
     this.dicas = State.get('belaTips') || this.userProfile.belaTips || DICAS.map((dica, index) => ({ ...dica, id: `dica-${index + 1}`, likes: 0, dislikes: 0, myVote: null }));
