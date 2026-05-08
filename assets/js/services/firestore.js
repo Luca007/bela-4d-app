@@ -208,6 +208,39 @@ export class FirestoreService {
     }
   }
 
+  async saveOnboardingData(uid, data) {
+    if (!uid) return false;
+    try {
+      const userRef = doc(this.db, 'users', uid);
+      await setDoc(userRef, {
+        onboardingData: {
+          name: data.name || null,
+          birthDate: data.birthDate || null,
+          gender: data.gender || null,
+          weight: data.weight ? Number(data.weight) : null,
+          height: data.height ? Number(data.height) : null,
+          diagnostics: data.diagnostics || [],
+          completedAt: data.completedAt ? data.completedAt.toISOString?.() ?? data.completedAt : null,
+        },
+        profile: {
+          name: data.name || null,
+          birthDate: data.birthDate || null,
+          gender: data.gender || null,
+          weight: data.weight ? Number(data.weight) : null,
+          height: data.height ? Number(data.height) : null,
+        },
+        diagnostics: data.diagnostics || [],
+        onboardingCompletedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      this._cacheDelete(`profile_${uid}`);
+      return true;
+    } catch (e) {
+      console.error('[Firestore] saveOnboardingData:', e);
+      return false;
+    }
+  }
+
   async saveOnboardingInterview(uid, data) {
     try {
       const ref = this.subDoc(uid, 'onboardingInterview', 'data');

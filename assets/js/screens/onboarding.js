@@ -6,12 +6,13 @@ import { BaseScreen } from '../modules/navigator.js';
 import { State, Session } from '../utils/helpers.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
-import { 
-  ONBOARDING_STEPS, 
-  DIAGNOSTIC_OPTIONS, 
-  GENDER_OPTIONS, 
-  ACTIVITY_LEVELS 
+import {
+  ONBOARDING_STEPS,
+  DIAGNOSTIC_OPTIONS,
+  GENDER_OPTIONS,
+  ACTIVITY_LEVELS
 } from '../config/constants.js';
+import { notificationService } from '../modules/notifications.js';
 
 export class OnboardingScreen extends BaseScreen {
   constructor(params) {
@@ -575,11 +576,7 @@ export class OnboardingScreen extends BaseScreen {
   }
 
   async nextStep() {
-    // Validate current step
-    if (!this.validateStep()) {
-      this.showError('Por favor, preencha todos os campos obrigatórios');
-      return;
-    }
+    if (!this._validateCurrentStep()) return;
 
     if (this.currentStep < ONBOARDING_STEPS.length - 1) {
       // Move to next step
@@ -592,21 +589,69 @@ export class OnboardingScreen extends BaseScreen {
     }
   }
 
-  validateStep() {
-    // Basic validation - can be expanded per step
-    switch (this.currentStep) {
-      case 0:
-        return this.formData.name && this.formData.birthDate && this.formData.gender 
-          && this.formData.weight && this.formData.height;
-      case 1:
-        return this.formData.diagnostics && this.formData.diagnostics.length > 0;
-      case 2:
-        return true; // Optional step
-      case 3:
-        return true; // Optional step
-      default:
-        return true;
+  _validateCurrentStep() {
+    // Clear previous field-error states
+    if (this.element) {
+      this.element.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+      this.element.querySelectorAll('.field-error-message').forEach(el => el.remove());
     }
+
+    // Required fields per step index, matching actual step structure:
+    //   step 0 (createStep1): Identificação — name, birthDate, gender, weight, height
+    //   step 1 (createStep2): Histórico Clínico — diagnostics (array >= 1)
+    //   step 2 (createStep3): Controle Glicêmico — optional
+    //   step 3 (createStep4): Estilo de Vida — optional
+    const fieldLabels = {
+      name: 'Nome completo',
+      birthDate: 'Data de nascimento',
+      gender: 'Sexo',
+      weight: 'Peso',
+      height: 'Altura',
+      diagnostics: 'Diagnóstico',
+    };
+
+    const requiredByStep = [
+      ['name', 'birthDate', 'gender', 'weight', 'height'], // step 0
+      ['diagnostics'],                                       // step 1
+      [],                                                    // step 2 — optional
+      [],                                                    // step 3 — optional
+    ];
+
+    const required = requiredByStep[this.currentStep] || [];
+    const errors = [];
+
+    for (const fieldKey of required) {
+      const value = this.formData?.[fieldKey];
+      const isEmpty =
+        value === undefined ||
+        value === null ||
+        (typeof value === 'string' && !value.trim()) ||
+        (Array.isArray(value) && value.length === 0) ||
+        value === '';
+
+      if (isEmpty) {
+        errors.push(fieldKey);
+        // Attempt to highlight the field element if it carries a matching selector
+        const input = this.element?.querySelector(
+          `[data-field="${fieldKey}"], [name="${fieldKey}"], #${fieldKey}`
+        );
+        if (input) {
+          input.classList.add('field-error');
+          const msg = document.createElement('span');
+          msg.className = 'field-error-message';
+          msg.textContent = 'Campo obrigatório';
+          input.parentNode?.appendChild(msg);
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      const labels = errors.map(f => fieldLabels[f] || f).join(', ');
+      notificationService.toast(`Preencha: ${labels}`, { type: 'warning' });
+      return false;
+    }
+
+    return true;
   }
 
   async completeOnboarding() {

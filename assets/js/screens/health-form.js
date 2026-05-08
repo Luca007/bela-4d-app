@@ -177,22 +177,24 @@ export class HealthFormScreen extends BaseScreen {
     left.appendChild(titleWrap);
     row.appendChild(left);
 
-    // Progresso geral
-    const pct = Math.round(((this.currentSection) / this.totalSections) * 100);
-    const pctLabel = DOM.create('span');
-    pctLabel.style.cssText = 'font-size: 12px; color: var(--color-muted); font-weight: 600;';
-    pctLabel.textContent = `${pct}%`;
-    row.appendChild(pctLabel);
+    inner.appendChild(row);
 
-    // Barra de progresso
-    const barWrap = DOM.create('div');
-    barWrap.style.cssText = 'height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px;';
-    const fill = DOM.create('div');
-    fill.style.cssText = `height: 100%; width: ${pct}%; background: var(--gradient-primary); border-radius: 2px; transition: width 0.4s ease;`;
+    // Progresso geral — canonical CSS class progress bar
+    const pct = Math.round(((this.currentSection) / this.totalSections) * 100);
+
+    const progressWrapper = DOM.create('div', 'form-progress-wrapper');
+
+    const progressLabel = DOM.create('div', 'form-progress-label');
+    progressLabel.innerHTML = `<span>Seção ${this.currentSection + 1} de ${this.totalSections}</span><span>${pct}%</span>`;
+
+    const barWrap = DOM.create('div', 'form-progress-bar');
+    const fill = DOM.create('div', 'form-progress-bar-fill');
+    fill.style.width = `${pct}%`;
     barWrap.appendChild(fill);
 
-    inner.appendChild(row);
-    inner.appendChild(barWrap);
+    progressWrapper.appendChild(progressLabel);
+    progressWrapper.appendChild(barWrap);
+    inner.appendChild(progressWrapper);
     bar.appendChild(inner);
     return bar;
   }

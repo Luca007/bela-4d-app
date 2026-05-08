@@ -5,6 +5,7 @@ import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
+import { ACHIEVEMENTS_CATALOG } from '../config/constants.js';
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Início', icon: '🏠', sub: 'Chat · Receita · Cardápio' },
@@ -184,6 +185,14 @@ function renderSparkline(points, color, height = 110, labelColor = 'var(--dash-m
   `;
 }
 
+function _achCategory(id) {
+  const journey = ['first_step', 'organized', 'scientist', 'forms_finished', 'veteran', 'iron_will', 'gmp_master', 'gmp_legend'];
+  const engagement = ['conversationalist', 'chat_marathoner', 'explorer', 'food_explorer_pro', 'chef_formation', 'chef_confirmed', 'recipe_curator', 'consistent', 'iron_fire', 'streak_breaker', 'night_owl', 'early_bird', 'polymath'];
+  if (journey.includes(id)) return 'jornada';
+  if (engagement.includes(id)) return 'engajamento';
+  return 'social';
+}
+
 export class DashboardScreen extends BaseScreen {
   constructor(params) {
     super(params);
@@ -263,7 +272,26 @@ export class DashboardScreen extends BaseScreen {
           const prevLevel = this.getLevel(prevXp);
           const newLevel = this.getLevel(this.xp);
           if (newLevel.level > prevLevel.level) {
-            import('../modules/notifications.js').then(mod => mod.notificationService.showAchievement({ icon: '⭐', title: `Subiu para nível ${newLevel.level}`, subtitle: newLevel.title, xp: 0 }));
+            import('../modules/notifications.js').then(mod => {
+              mod.notificationService.showAchievement({
+                icon: '⭐',
+                title: `Nível ${newLevel.level} desbloqueado!`,
+                subtitle: newLevel.title,
+                xp: 0,
+              });
+              // Persist to bell dropdown
+              const uid = this.currentUser?.uid || authService?.currentUser?.uid;
+              if (uid) {
+                mod.notificationService.notify({
+                  uid,
+                  title: `⭐ Nível ${newLevel.level} alcançado!`,
+                  message: `Parabéns! Você chegou ao nível ${newLevel.level}: ${newLevel.title}`,
+                  type: 'achievement',
+                  priority: 'high',
+                  payload: { level: newLevel.level, title: newLevel.title },
+                });
+              }
+            });
           }
         } catch (e) { /* ignore */ }
       }
@@ -702,7 +730,6 @@ export class DashboardScreen extends BaseScreen {
           <div class="top">Guia Metabólico</div>
           <div class="bottom">Personalizado</div>
         </div>
-        <div class="dash-streak"><span>🔥</span><span>${this.streak}</span></div>
         <button class="dash-bell-btn" data-toggle-notifications aria-label="Notificações" style="position:relative;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,255,255,0.07);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;flex-shrink:0;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:rgba(255,255,255,0.85)">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -710,6 +737,7 @@ export class DashboardScreen extends BaseScreen {
           </svg>
           ${unreadCount > 0 ? `<span style="position:absolute;top:6px;right:6px;width:9px;height:9px;background:#f0059a;border-radius:50%;border:2px solid var(--dash-bg,#0f0f1a);box-shadow:0 0 6px rgba(240,5,154,0.8);"></span>` : ''}
         </button>
+        <div class="dash-streak"><span>🔥</span><span>${this.streak}</span></div>
       </div>
     `;
   }
@@ -1227,10 +1255,24 @@ export class DashboardScreen extends BaseScreen {
     const rankList = Array.isArray(this.ranking) && this.ranking.length ? this.ranking : RANKING;
     const me = { ...(rankList.find(user => user.me) || rankList[Math.min(7, rankList.length - 1)] || {}), xp: this.xp, st: this.streak };
     const topThree = rankList.length >= 3 ? [rankList[1], rankList[0], rankList[2]] : rankList.slice(0, 3);
-    const achievementCards = (Array.isArray(this.achievements) && this.achievements.length ? this.achievements : BADGES)
-      .map(normalizeAchievement)
-      .filter(Boolean);
-    const unlockedCount = achievementCards.filter(badge => badge.ok).length;
+    // Build merged list: catalog is source of truth, user's unlocked data provides status
+    const unlockedMap = new Map((this.achievements || []).map(a => [a.id || a.achievementId, a]));
+
+    const allAchievements = ACHIEVEMENTS_CATALOG.map(catalog => ({
+      id: catalog.id,
+      e: catalog.icon,
+      t: catalog.title,
+      d: catalog.description,
+      ct: _achCategory(catalog.id),
+      xp: catalog.xp,
+      ok: unlockedMap.has(catalog.id),
+      hidden: !!catalog.hidden && !unlockedMap.has(catalog.id),
+    }));
+
+    // Visible = non-hidden (hidden ones only show when unlocked, at which point hidden=false)
+    const visibleAchievements = allAchievements.filter(a => !a.hidden);
+    const lockedHiddenCount = allAchievements.filter(a => a.hidden).length;
+    const unlockedCount = allAchievements.filter(a => a.ok).length;
 
     return `
       <section>
@@ -1257,23 +1299,31 @@ export class DashboardScreen extends BaseScreen {
         </div>
         ${this.communityTab === 'badges' ? `
           <div>
-            ${['Sistema', 'Alimentação', 'Saúde', 'Social', 'Ranking'].map(category => `
+            ${['jornada', 'engajamento', 'social'].map(category => {
+              const categoryItems = visibleAchievements.filter(a => a.ct === category);
+              if (!categoryItems.length) return '';
+              return `
               <div style="margin-bottom:18px;">
                 <div style="color:var(--dash-muted);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">${category}</div>
                 <div class="dash-grid-2">
-                  ${achievementCards.filter(badge => badge.ct === category).map(badge => `
-                    <div class="dash-card pad" style="display:flex;gap:10px;opacity:${badge.ok ? 1 : 0.5};">
-                      <span style="font-size:26px;filter:${badge.ok ? 'none' : 'grayscale(1)'};">${badge.e}</span>
+                  ${categoryItems.map(a => `
+                    <div class="dash-card pad" style="display:flex;gap:10px;opacity:${a.ok ? 1 : 0.5};">
+                      <span style="font-size:26px;filter:${a.ok ? 'none' : 'grayscale(1)'};">${a.e}</span>
                       <div>
-                        <div style="color:${badge.ok ? 'var(--dash-text)' : 'var(--dash-muted)'};font-weight:700;font-size:14px;">${badge.nm}</div>
-                        <div style="color:var(--dash-muted);font-size:12px;margin-top:2px;line-height:1.4;">${badge.ds}</div>
-                        <div style="margin-top:6px;">${badge.ok ? `<span style="background:rgba(31,204,116,0.15);border:1px solid rgba(31,204,116,0.3);border-radius:6px;padding:2px 8px;color:#1fcc74;font-size:11px;font-weight:700;">✓ +${badge.xp} XP</span>` : `<span style="color:var(--dash-muted);font-size:12px;">🔒 +${badge.xp} XP</span>`}</div>
+                        <div style="color:${a.ok ? 'var(--dash-text)' : 'var(--dash-muted)'};font-weight:700;font-size:14px;">${a.t}</div>
+                        <div style="color:var(--dash-muted);font-size:12px;margin-top:2px;line-height:1.4;">${a.d}</div>
+                        <div style="margin-top:6px;">${a.ok ? `<span style="background:rgba(31,204,116,0.15);border:1px solid rgba(31,204,116,0.3);border-radius:6px;padding:2px 8px;color:#1fcc74;font-size:11px;font-weight:700;">✓ +${a.xp} XP</span>` : `<span style="color:var(--dash-muted);font-size:12px;">🔒 +${a.xp} XP</span>`}</div>
                       </div>
                     </div>
                   `).join('')}
                 </div>
               </div>
-            `).join('')}
+            `}).join('')}
+            ${lockedHiddenCount > 0 ? `
+              <div style="grid-column:1/-1;text-align:center;padding:16px;color:rgba(255,255,255,0.35);font-size:13px;font-weight:600;">
+                🔒 ${lockedHiddenCount} conquista${lockedHiddenCount > 1 ? 's' : ''} secreta${lockedHiddenCount > 1 ? 's' : ''} aguarda${lockedHiddenCount === 1 ? '' : 'm'} ser descoberta${lockedHiddenCount > 1 ? 's' : ''}...
+              </div>
+            ` : ''}
           </div>
         ` : this.communityTab === 'ranking' ? `
           <div>
@@ -1604,16 +1654,38 @@ export class DashboardScreen extends BaseScreen {
       });
     });
 
-    this.element.querySelector('[data-recipe-of-hour]')?.addEventListener('click', () => {
-      const recipeId = this.element.querySelector('[data-recipe-of-hour]').getAttribute('data-recipe-of-hour');
-      const recipeCatalog = Array.isArray(this.recipes) && this.recipes.length ? this.recipes : RECIPES;
-      const recipe = recipeCatalog.find(item => item.id === recipeId);
-      if (recipe) {
+    const recipeOfHourEl = this.element.querySelector('[data-recipe-of-hour]');
+    if (recipeOfHourEl) {
+      recipeOfHourEl.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const recipeId = recipeOfHourEl.getAttribute('data-recipe-of-hour');
+        if (!recipeId) return;
+        // Search in user recipes first, then fall back to static RECIPES catalog
+        const pool = [
+          ...(Array.isArray(this.recipes) ? this.recipes : []),
+          ...RECIPES,
+        ];
+        const recipe = pool.find(item => item.id === recipeId);
+        if (!recipe) {
+          // Try to find by partial match
+          const anyRecipe = pool[0];
+          if (anyRecipe) {
+            this.selectedRecipe = anyRecipe;
+            this.currentNav = 'receitas';
+            await this.mount();
+            return;
+          }
+          return;
+        }
         this.selectedRecipe = recipe;
         this.currentNav = 'receitas';
-        this.mount();
-      }
-    });
+        await this.mount();
+        setTimeout(() => {
+          const detail = this.element?.querySelector('[class*="recipe-detail"], [class*="receita-detail"]');
+          detail?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      });
+    }
 
     this.element.querySelectorAll('[data-recipe-open]').forEach(card => {
       card.addEventListener('click', () => {
