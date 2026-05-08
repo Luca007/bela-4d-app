@@ -680,3 +680,97 @@ input[type='range']::-moz-range-thumb {
 .icon-xl {
   font-size: 48px;
 }
+
+/* ============================================================
+   Connection banner (online/offline indicator)
+   ============================================================ */
+.connection-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  z-index: 99999;
+  animation: bannerSlideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.connection-banner.online {
+  background: linear-gradient(180deg, #1fcc74, #15a85e);
+  color: #fff;
+}
+.connection-banner.offline {
+  background: linear-gradient(180deg, #f59e0b, #d97706);
+  color: #1a1500;
+}
+@keyframes bannerSlideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes bannerSlideUp {
+  to { transform: translateY(-100%); opacity: 0; }
+}
+.connection-banner.fade-out {
+  animation: bannerSlideUp 0.3s ease forwards;
+}
+
+/* ============================================================
+   Achievement unlock + claim animations
+   ============================================================ */
+@keyframes achUnlockPop {
+  0% { transform: scale(0.7); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes achGlowPulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(240, 5, 154, 0.4); }
+  50% { box-shadow: 0 0 22px rgba(240, 5, 154, 0.95); }
+}
+@keyframes achPlatinumShine {
+  0%, 100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.5); }
+  50% { box-shadow: 0 0 40px rgba(245, 158, 11, 0.95), 0 0 60px rgba(245, 158, 11, 0.4); }
+}
+@keyframes navDotPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 6px rgba(240, 5, 154, 0.7); }
+  50% { transform: scale(1.18); box-shadow: 0 0 14px rgba(240, 5, 154, 1); }
+}
+@keyframes confettiFly {
+  0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+  100% { transform: translate(var(--dx, 0), var(--dy, -120px)) rotate(540deg); opacity: 0; }
+}
+
+/* ============================================================
+   Notification swipe animations
+   ============================================================ */
+@keyframes notifSwipeOut {
+  to { transform: translateX(-110%); opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin: 0; }
+}
+@keyframes notifFlash {
+  0%, 100% { background: transparent; }
+  50% { background: rgba(240, 5, 154, 0.18); }
+}
+.notification-swipe-wrapper {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.notification-swipe-wrapper .dash-notification-item {
+  transition: transform 0.18s ease, background-color 0.18s ease;
+  will-change: transform;
+}
+.notification-swipe-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 18px;
+  pointer-events: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+.swipe-action-left { color: #ef4444; opacity: 0; transition: opacity 0.15s; }
+.swipe-action-right { color: #f0059a; opacity: 0; transition: opacity 0.15s; }
+.notification-swipe-wrapper.swiping-left .swipe-action-left { opacity: 1; }
+.notification-swipe-wrapper.swiping-right .swipe-action-right { opacity: 1; }

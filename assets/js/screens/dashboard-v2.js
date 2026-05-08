@@ -6,6 +6,7 @@ import { BaseScreen } from '../modules/navigator.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
 import { ACHIEVEMENTS_CATALOG } from '../config/constants.js';
+import { offlineQueue } from '../modules/offline-queue.js';
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Início', icon: '🏠', sub: 'Chat · Receita · Cardápio' },
@@ -134,6 +135,15 @@ function normalizeAchievement(item) {
   };
 }
 
+function escapeHTML(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function parseRecipeEditMarker(content = '') {
   const text = String(content || '');
   const match = text.match(/^\[\[RECIPE_EDIT:([^\]]+)\]\]\s*/);
@@ -229,6 +239,7 @@ export class DashboardScreen extends BaseScreen {
     this.recipeFilter = 'Todas';
     const initialRecipeId = params.recipeId || null;
     this.selectedRecipe = initialRecipeId ? RECIPES.find(recipe => recipe.id === initialRecipeId) || null : null;
+    this.recipeOriginNav = null;
     this.themeToggleLocked = false;
     this.examOrders = Array.isArray(this.userProfile?.examOrders) && this.userProfile.examOrders.length ? this.userProfile.examOrders : EXAM_ORDERS;
     this.dicas = State.get('belaTips') || this.userProfile.belaTips || DICAS.map((dica, index) => ({ ...dica, id: `dica-${index + 1}`, likes: 0, dislikes: 0, myVote: null }));
@@ -497,6 +508,118 @@ export class DashboardScreen extends BaseScreen {
     return (this.notifications || []).filter(notification => !notification.read).length;
   }
 
+  _handleNotificationClick(id, wrapper, item) {
+    const notification = (this.notifications || []).find(n => n.id === id);
+    if (!notification || notification.read) return;
+    // Optimistic UI
+    notification.read = true;
+    item.classList.remove('unread');
+    item.style.paddingLeft = '14px';
+    const dot = item.querySelector('.dash-notification-dot');
+    if (dot) dot.textContent = '✓';
+    this._refreshBellBadge();
+    // Network update / queue
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      firestoreService.markNotificationRead(this.currentUser.uid, id).catch((err) => {
+        console.warn('[Dashboard] markRead network error:', err);
+        offlineQueue.enqueue('mark_notification_read', { uid: this.currentUser.uid, notificationId: id });
+      });
+    } else {
+      offlineQueue.enqueue('mark_notification_read', { uid: this.currentUser.uid, notificationId: id });
+    }
+  }
+
+  _handleNotificationUnread(id, wrapper, item) {
+    const notification = (this.notifications || []).find(n => n.id === id);
+    if (!notification) return;
+    notification.read = false;
+    item.classList.add('unread');
+    item.style.paddingLeft = '20px';
+    const dot = item.querySelector('.dash-notification-dot');
+    if (dot) dot.textContent = '🔔';
+    this._refreshBellBadge();
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      firestoreService.markNotificationUnread?.(this.currentUser.uid, id).catch(() => {
+        offlineQueue.enqueue('mark_notification_unread', { uid: this.currentUser.uid, notificationId: id });
+      });
+    } else {
+      offlineQueue.enqueue('mark_notification_unread', { uid: this.currentUser.uid, notificationId: id });
+    }
+  }
+
+  _handleNotificationDelete(id, wrapper, item) {
+    // Animate out and remove from DOM
+    item.style.transition = 'transform 0.25s ease, opacity 0.25s ease';
+    item.style.transform = 'translateX(-110%)';
+    item.style.opacity = '0';
+    setTimeout(() => {
+      wrapper.style.transition = 'max-height 0.2s ease, padding 0.2s ease, opacity 0.2s ease';
+      wrapper.style.maxHeight = '0';
+      wrapper.style.padding = '0';
+      wrapper.style.opacity = '0';
+      setTimeout(() => wrapper.remove(), 220);
+    }, 200);
+    // Update local state
+    this.notifications = (this.notifications || []).filter(n => n.id !== id);
+    this._refreshBellBadge();
+    // Network update / queue
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      firestoreService.deleteNotification?.(this.currentUser.uid, id).catch(() => {
+        offlineQueue.enqueue('delete_notification', { uid: this.currentUser.uid, notificationId: id });
+      });
+    } else {
+      offlineQueue.enqueue('delete_notification', { uid: this.currentUser.uid, notificationId: id });
+    }
+  }
+
+  _refreshBellBadge() {
+    const remaining = this.getUnreadNotificationCount();
+    const bellBtn = this.element?.querySelector('[data-toggle-notifications]');
+    if (!bellBtn) return;
+    let badge = bellBtn.querySelector('span');
+    if (remaining === 0) {
+      badge?.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.style.cssText = 'position:absolute;top:4px;right:4px;min-width:16px;height:16px;padding:0 4px;background:linear-gradient(135deg,#f0059a,#c0027c);border-radius:8px;border:2px solid var(--dash-bg,#0f0f1a);box-shadow:0 0 6px rgba(240,5,154,0.7);color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1;';
+      bellBtn.appendChild(badge);
+    }
+    badge.textContent = remaining > 9 ? '9+' : String(remaining);
+  }
+
+  _showAchievementConfetti(anchorEl) {
+    if (!anchorEl) return;
+    const colors = ['#f0059a', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#fff'];
+    const rect = anchorEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    for (let i = 0; i < 24; i++) {
+      const conf = document.createElement('span');
+      const angle = (Math.PI * 2 * i) / 24 + (Math.random() - 0.5) * 0.4;
+      const distance = 80 + Math.random() * 80;
+      const dx = Math.cos(angle) * distance;
+      const dy = Math.sin(angle) * distance - 40;
+      conf.style.cssText = `
+        position: fixed;
+        left: ${cx}px;
+        top: ${cy}px;
+        width: 8px; height: 8px;
+        background: ${colors[i % colors.length]};
+        border-radius: ${i % 2 === 0 ? '50%' : '2px'};
+        pointer-events: none;
+        z-index: 99999;
+        --dx: ${dx}px;
+        --dy: ${dy}px;
+        animation: confettiFly 1s ease-out forwards;
+        animation-delay: ${i * 0.015}s;
+      `;
+      document.body.appendChild(conf);
+      setTimeout(() => conf.remove(), 1100 + i * 15);
+    }
+  }
+
   async markAllNotificationsRead() {
     if (!this.currentUser?.uid) return;
     const unread = (this.notifications || []).filter(notification => !notification.read && notification.id);
@@ -645,6 +768,7 @@ export class DashboardScreen extends BaseScreen {
         .dash-drawer-item .label { color: var(--dash-text); font-weight: 700; font-size: 17px; line-height: 1.2; }
         .dash-drawer-item.active .label { color: #f0059a; }
         .dash-drawer-item .sub { color: var(--dash-muted); font-size: 13px; margin-top: 2px; }
+        .dash-nav-dot { position: absolute; top: 8px; right: 12px; min-width: 18px; height: 18px; padding: 0 5px; background: linear-gradient(135deg, #f0059a, #c0027c); color: #fff; font-size: 10px; font-weight: 800; border-radius: 9px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 6px rgba(240,5,154,0.7); animation: navDotPulse 1.4s infinite; }
         .dash-drawer-foot { padding: 10px 10px 18px; border-top: 1px solid var(--dash-border); }
         .dash-toggle { width: 100%; padding: 13px 16px; border-radius: 14px; border: 1px solid var(--dash-border); background: ${this.isDark ? 'var(--dash-surface)' : 'rgba(0,0,0,0.06)'}; display: flex; align-items: center; gap: 12px; cursor: pointer; }
         .dash-toggle .bubble { width: 42px; height: 24px; border-radius: 12px; position: relative; flex: 0 0 auto; background: linear-gradient(135deg, #f0059a, #c0027c); }
@@ -680,7 +804,7 @@ export class DashboardScreen extends BaseScreen {
         .dash-recipe-card:hover { transform: translateY(-2px); border-color: #f0059a; }
         .dash-lock-panel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,0.02); }
         .dash-lock-card { max-width: 340px; width: 100%; text-align: center; padding: 32px 28px; background: rgba(10,10,15,0.88); border: 1px solid rgba(240,5,154,0.2); border-radius: 24px; box-shadow: 0 8px 60px rgba(0,0,0,0.7); }
-        .dash-notification-panel { position: absolute; top: 58px; right: 14px; width: min(380px, calc(100vw - 28px)); z-index: 30; opacity: 0; transform: translateY(-8px) scale(0.97); pointer-events: none; transition: opacity 180ms ease, transform 180ms ease; }
+        .dash-notification-panel { position: absolute; top: 48px; right: 8px; width: min(380px, calc(100vw - 28px)); z-index: 30; opacity: 0; transform: translateY(-8px) scale(0.97); pointer-events: none; transition: opacity 180ms ease, transform 180ms ease; }
         .dash-notification-panel.is-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
         .dash-notification-card { background: ${this.isDark ? 'rgba(15,15,20,0.98)' : 'rgba(255,255,255,0.97)'}; border: 1px solid var(--dash-border); border-radius: 18px; box-shadow: 0 18px 40px rgba(0,0,0,0.28); overflow: hidden; backdrop-filter: blur(18px); }
         .dash-notification-item { display:flex; gap:10px; padding:14px 16px; border-bottom:1px solid var(--dash-border); position: relative; cursor: pointer; transition: background 0.15s; }
@@ -770,6 +894,7 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderDrawer() {
+    const pendingClaims = (this.achievements || []).filter(a => (a.unlocked === true || a.unlockedAt) && !a.claimed).length;
     return `
       <div class="dash-drawer">
         <div class="dash-drawer-head">
@@ -784,7 +909,7 @@ export class DashboardScreen extends BaseScreen {
         </div>
         <div class="dash-drawer-nav">
           ${NAV_ITEMS.map(item => `
-            <button class="dash-drawer-item ${this.currentNav === item.id ? 'active' : ''}" data-nav-item="${item.id}">
+            <button class="dash-drawer-item ${this.currentNav === item.id ? 'active' : ''}" data-nav-item="${item.id}" style="position:relative;">
               <div class="row">
                 <span class="icon">${item.icon}</span>
                 <div>
@@ -792,6 +917,7 @@ export class DashboardScreen extends BaseScreen {
                   <div class="sub">${item.sub}</div>
                 </div>
               </div>
+              ${item.id === 'conquistas' && pendingClaims > 0 ? `<span class="dash-nav-dot">${pendingClaims}</span>` : ''}
             </button>
           `).join('')}
         </div>
@@ -825,12 +951,18 @@ export class DashboardScreen extends BaseScreen {
           </div>
           <div style="max-height:360px;overflow:auto;">
             ${notifications.length ? notifications.map(notification => `
-              <div class="dash-notification-item ${notification.read ? '' : 'unread'}" data-notification-id="${notification.id || ''}" style="padding-left:${notification.read ? '14px' : '20px'};">
-                <div class="dash-notification-dot">${notification.read ? '✓' : '🔔'}</div>
-                <div style="min-width:0;flex:1;">
-                  <div class="dash-notification-title">${this.getNotificationTitle(notification)}</div>
-                  <div class="dash-notification-body">${this.getNotificationBody(notification)}</div>
-                  <div class="dash-notification-meta">${this.getNotificationTime(notification)}</div>
+              <div class="notification-swipe-wrapper" data-notification-id="${notification.id || ''}">
+                <div class="notification-swipe-bg">
+                  <span class="swipe-action-right">↩ Não-lida</span>
+                  <span class="swipe-action-left">🗑 Deletar</span>
+                </div>
+                <div class="dash-notification-item ${notification.read ? '' : 'unread'}" style="padding-left:${notification.read ? '14px' : '20px'};background:var(--dash-bg, #0f0f1a);">
+                  <div class="dash-notification-dot">${notification.read ? '✓' : '🔔'}</div>
+                  <div style="min-width:0;flex:1;">
+                    <div class="dash-notification-title">${this.getNotificationTitle(notification)}</div>
+                    <div class="dash-notification-body">${this.getNotificationBody(notification)}</div>
+                    <div class="dash-notification-meta">${this.getNotificationTime(notification)}</div>
+                  </div>
                 </div>
               </div>
             `).join('') : `<div style="padding:18px 16px;color:var(--dash-muted);font-size:13px;">Nenhuma notificação recente.</div>`}
@@ -1271,25 +1403,50 @@ export class DashboardScreen extends BaseScreen {
     // Build merged list: catalog is source of truth, user's unlocked data provides status
     const unlockedMap = new Map((this.achievements || []).map(a => [a.id || a.achievementId, a]));
 
-    const allAchievements = ACHIEVEMENTS_CATALOG.map(catalog => ({
-      id: catalog.id,
-      e: catalog.icon,
-      t: catalog.title,
-      d: catalog.description,
-      ct: _achCategory(catalog.id),
-      xp: catalog.xp,
-      ok: unlockedMap.has(catalog.id),
-      hidden: !!catalog.hidden && !unlockedMap.has(catalog.id),
-    }));
+    const allAchievements = ACHIEVEMENTS_CATALOG.map(catalog => {
+      const userData = unlockedMap.get(catalog.id);
+      const isUnlocked = !!userData;
+      const isClaimed = !!(userData?.claimed);
+      const isHidden = !!catalog.hidden && !isUnlocked;
+      return {
+        id: catalog.id,
+        e: isHidden ? '❓' : catalog.icon,
+        t: isHidden ? 'Conquista oculta' : catalog.title,
+        d: isHidden ? 'Continue jogando para descobrir...' : catalog.description,
+        ct: _achCategory(catalog.id),
+        xp: catalog.xp,
+        ok: isUnlocked,
+        claimed: isClaimed,
+        hidden: isHidden,
+      };
+    });
 
-    // Visible = non-hidden (hidden ones only show when unlocked, at which point hidden=false)
-    const visibleAchievements = allAchievements.filter(a => !a.hidden);
-    const lockedHiddenCount = allAchievements.filter(a => a.hidden).length;
+    // Mostrar TODAS — ocultas viram placeholder com ❓.
+    const visibleAchievements = allAchievements;
+    const totalCount = ACHIEVEMENTS_CATALOG.length;
+    const claimedCount = allAchievements.filter(a => a.claimed).length;
+    const pendingClaims = allAchievements.filter(a => a.ok && !a.claimed).length;
     const unlockedCount = allAchievements.filter(a => a.ok).length;
 
     return `
       <section>
         <div class="dash-section-title">🏆 Conquistas & Ranking</div>
+        <div class="dash-ach-counter" style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(240,5,154,0.08),rgba(155,2,200,0.08));border:1px solid rgba(240,5,154,0.2);border-radius:14px;padding:14px 18px;margin-bottom:18px;">
+          <div style="font-size:32px;font-weight:900;color:#f0059a;">${claimedCount}<span style="font-size:18px;color:var(--dash-muted);font-weight:700;">/${totalCount}</span></div>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:700;color:var(--dash-text);margin-bottom:6px;">Conquistas reivindicadas</div>
+            <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+              <div style="height:100%;width:${totalCount > 0 ? (claimedCount/totalCount)*100 : 0}%;background:linear-gradient(90deg,#f0059a,#9b02c8);border-radius:3px;transition:width 0.4s ease;box-shadow:0 0 8px rgba(240,5,154,0.5);"></div>
+            </div>
+          </div>
+        </div>
+        ${claimedCount === totalCount && totalCount > 0 ? `
+          <div class="dash-platinum-badge" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);border-radius:18px;padding:24px;margin-bottom:20px;text-align:center;animation:achPlatinumShine 3s infinite;color:#1a1500;">
+            <div style="font-size:48px;margin-bottom:6px;">💎</div>
+            <div style="font-size:20px;font-weight:900;letter-spacing:2px;margin-bottom:4px;">PLATINA DESBLOQUEADA</div>
+            <div style="font-size:13px;font-weight:700;opacity:0.85;">Você reivindicou todas as ${totalCount} conquistas, incluindo as ocultas!</div>
+          </div>
+        ` : ''}
         <div class="dash-card pad" style="margin-bottom:20px;border-color: rgba(240,5,154,0.15); background: rgba(240,5,154,0.06); display:flex;align-items:center;gap:14px;">
           <div class="dash-avatar" style="width:48px;height:48px;background:${me.col}22;border:2px solid ${me.col}55;">${me.e}</div>
           <div style="flex:1;">
@@ -1320,23 +1477,26 @@ export class DashboardScreen extends BaseScreen {
                 <div style="color:var(--dash-muted);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">${category}</div>
                 <div class="dash-grid-2">
                   ${categoryItems.map(a => `
-                    <div class="dash-card pad" style="display:flex;gap:10px;opacity:${a.ok ? 1 : 0.5};">
-                      <span style="font-size:26px;filter:${a.ok ? 'none' : 'grayscale(1)'};">${a.e}</span>
-                      <div>
-                        <div style="color:${a.ok ? 'var(--dash-text)' : 'var(--dash-muted)'};font-weight:700;font-size:14px;">${a.t}</div>
-                        <div style="color:var(--dash-muted);font-size:12px;margin-top:2px;line-height:1.4;">${a.d}</div>
-                        <div style="margin-top:6px;">${a.ok ? `<span style="background:rgba(31,204,116,0.15);border:1px solid rgba(31,204,116,0.3);border-radius:6px;padding:2px 8px;color:#1fcc74;font-size:11px;font-weight:700;">✓ +${a.xp} XP</span>` : `<span style="color:var(--dash-muted);font-size:12px;">🔒 +${a.xp} XP</span>`}</div>
-                      </div>
+                    <div class="dash-achievement-card ${a.ok ? 'unlocked' : ''} ${a.hidden ? 'hidden-locked' : ''} ${a.ok && !a.claimed ? 'pending-claim' : ''}" data-achievement-id="${a.id}" style="position:relative;background:${a.ok ? (a.claimed ? 'linear-gradient(180deg,rgba(240,5,154,0.08),rgba(240,5,154,0.02))' : 'linear-gradient(180deg,rgba(240,5,154,0.18),rgba(240,5,154,0.06))') : 'rgba(255,255,255,0.03)'};border:1px solid ${a.ok && !a.claimed ? 'rgba(240,5,154,0.6)' : (a.ok ? 'rgba(240,5,154,0.2)' : 'rgba(255,255,255,0.07)')};border-radius:16px;padding:16px 14px;text-align:center;transition:all 0.2s;${a.ok && !a.claimed ? 'animation:achGlowPulse 2s infinite;' : ''}">
+                      <div style="font-size:34px;margin-bottom:8px;filter:${a.ok ? 'none' : 'grayscale(0.7)'};opacity:${a.ok ? 1 : 0.6};">${a.e}</div>
+                      <div style="font-size:13px;font-weight:800;color:${a.ok ? 'var(--dash-text)' : 'rgba(255,255,255,0.6)'};margin-bottom:4px;line-height:1.2;">${a.t}</div>
+                      <div style="font-size:11px;color:var(--dash-muted);line-height:1.35;margin-bottom:${a.ok ? '10px' : '6px'};">${a.d}</div>
+                      ${a.ok && !a.claimed ? `
+                        <button class="ach-claim-btn" data-claim-achievement="${a.id}" style="width:100%;margin-top:6px;padding:8px 10px;background:linear-gradient(135deg,#f0059a,#c0027c);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:0 2px 10px rgba(240,5,154,0.4);transition:transform 0.15s;">
+                          🎁 Reivindicar +${a.xp} XP
+                        </button>
+                      ` : a.ok && a.claimed ? `
+                        <div style="font-size:11px;color:#34d399;font-weight:700;margin-top:4px;">✓ Reivindicado +${a.xp} XP</div>
+                      ` : a.hidden ? `
+                        <div style="font-size:10px;color:var(--dash-muted);font-weight:600;margin-top:4px;">🔒 Oculta</div>
+                      ` : `
+                        <div style="font-size:10px;color:var(--dash-muted);font-weight:600;margin-top:4px;">+${a.xp} XP</div>
+                      `}
                     </div>
                   `).join('')}
                 </div>
               </div>
             `}).join('')}
-            ${lockedHiddenCount > 0 ? `
-              <div style="grid-column:1/-1;text-align:center;padding:16px;color:rgba(255,255,255,0.35);font-size:13px;font-weight:600;">
-                🔒 ${lockedHiddenCount} conquista${lockedHiddenCount > 1 ? 's' : ''} secreta${lockedHiddenCount > 1 ? 's' : ''} aguarda${lockedHiddenCount === 1 ? '' : 'm'} ser descoberta${lockedHiddenCount > 1 ? 's' : ''}...
-              </div>
-            ` : ''}
           </div>
         ` : this.communityTab === 'ranking' ? `
           <div>
@@ -1399,42 +1559,61 @@ export class DashboardScreen extends BaseScreen {
   renderChat() {
     const suggestions = ['O que posso comer agora?', 'Como está minha glicemia?', 'Sugestão para o jantar', 'Tenho fome fora do horário', 'Me ensine uma receita fácil'];
     const markerCard = this.chatRecipeContext ? `
-      <div class="dash-card pad" style="margin-bottom:14px;background:rgba(240,5,154,0.08);border-color:rgba(240,5,154,0.18);display:flex;gap:12px;align-items:center;">
+      <div class="dash-card pad" style="margin:10px 14px 0;background:rgba(240,5,154,0.08);border-color:rgba(240,5,154,0.18);display:flex;gap:12px;align-items:center;">
         <div style="width:42px;height:42px;border-radius:14px;background:rgba(240,5,154,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${this.chatRecipeContext.emoji}</div>
         <div style="flex:1;min-width:0;">
           <div style="color:#f0059a;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;">Editando receita</div>
-          <div style="color:var(--dash-text);font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${this.chatRecipeContext.name}</div>
-          <div style="color:var(--dash-muted);font-size:12px;margin-top:2px;">Marcador: [[RECIPE_EDIT:${this.chatRecipeContext.id}]]</div>
+          <div style="color:var(--dash-text);font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(this.chatRecipeContext.name)}</div>
+          <div style="color:var(--dash-muted);font-size:12px;margin-top:2px;">Marcador: [[RECIPE_EDIT:${escapeHTML(this.chatRecipeContext.id)}]]</div>
         </div>
         <button class="dash-ghost-btn" data-clear-chat-context style="min-height:36px;padding:8px 10px;border-radius:10px;font-size:12px;">Limpar</button>
       </div>
     ` : '';
+
+    const messagesHTML = this.chatHistory.length > 0
+      ? this.chatHistory.map(msg => {
+          const parsed = msg.role === 'user'
+            ? parseRecipeEditMarker(msg.content)
+            : { text: msg.content || msg.t || msg.text || msg.message || '', recipeId: null };
+          const isUser = msg.role === 'user';
+          const text = isUser && parsed.recipeId ? parsed.text : (msg.content || msg.t || msg.text || msg.message || '');
+          return `
+            <div class="message ${isUser ? 'user-message' : 'ai-message'} is-first">
+              <div class="message-avatar">${isUser ? '' : '👩‍⚕️'}</div>
+              <div class="message-bubble">${parsed.recipeId ? `<div style="background:rgba(240,5,154,0.12);border:1px solid rgba(240,5,154,0.24);color:#f0059a;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;display:inline-block;margin-bottom:6px;">Editando receita #${escapeHTML(parsed.recipeId)}</div><br/>` : ''}${escapeHTML(text)}</div>
+            </div>
+          `;
+        }).join('')
+      : this.homeChatMessages.map(msg => {
+          const isUser = msg.r === 'user';
+          return `
+            <div class="message ${isUser ? 'user-message' : 'ai-message'} is-first">
+              <div class="message-avatar">${isUser ? '' : '👩‍⚕️'}</div>
+              <div class="message-bubble">${escapeHTML(msg.t)}</div>
+            </div>
+          `;
+        }).join('');
+
+    const placeholder = this.chatRecipeContext
+      ? `Explique o que quer editar na receita #${this.chatRecipeContext.id}...`
+      : 'Escreva sua dúvida à IA da Mentoria 4D...';
+
     return `
-      <section style="display:flex;flex-direction:column;height:100%;">
-        <div class="dash-chip-row" style="margin-bottom:4px;">
-          ${suggestions.map(suggestion => `<button class="dash-chip" data-chat-suggestion="${suggestion.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}">${suggestion}</button>`).join('')}
+      <div class="chat-screen-embedded">
+        <div class="chat-suggestions">
+          ${suggestions.map(suggestion => `<button class="suggestion-chip" data-chat-suggestion="${escapeHTML(suggestion)}">${escapeHTML(suggestion)}</button>`).join('')}
         </div>
-        <div class="dash-card" style="flex:1;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;">
-          ${markerCard}
-          <div style="max-height:calc(100vh - 290px);overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px;" data-chat-list>
-            ${this.chatHistory.length > 0 ? this.chatHistory.map(msg => {
-              const parsed = msg.role === 'user' ? parseRecipeEditMarker(msg.content) : { text: msg.content || msg.t || msg.text || msg.message || '', recipeId: null };
-              return `
-              <div style="display:flex;justify-content:${msg.role === 'user' ? 'flex-end' : 'flex-start'};">
-                ${msg.role === 'ai' ? '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#f0059a,#c0027c);display:flex;align-items:center;justify-content:center;margin-right:10px;flex-shrink:0;margin-top:4px;">✨</div>' : ''}
-                <div style="max-width:75%;display:flex;flex-direction:column;align-items:${msg.role === 'user' ? 'flex-end' : 'flex-start'};gap:6px;">
-                  ${parsed.recipeId ? `<div style="background:rgba(240,5,154,0.12);border:1px solid rgba(240,5,154,0.24);color:#f0059a;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;">Editando receita #${parsed.recipeId}</div>` : ''}
-                  <div style="max-width:100%;padding:13px 17px;border-radius:${msg.role === 'user' ? '20px 20px 4px 20px' : '20px 20px 20px 4px'};background:${msg.role === 'user' ? 'linear-gradient(135deg,#f0059a,#c0027c)' : 'rgba(255,255,255,0.05)'};border:${msg.role === 'ai' ? '1px solid var(--dash-border)' : 'none'};color:var(--dash-text);font-size:15px;line-height:1.6;'>${msg.role === 'user' && parsed.recipeId ? parsed.text : (msg.content || msg.t || msg.text || msg.message || '')}</div>
-                </div>
-              </div>
-            `; }).join('') : this.homeChatMessages.map(msg => `<div style="display:flex;justify-content:${msg.r === 'user' ? 'flex-end' : 'flex-start'};"><div style="max-width:75%;padding:13px 17px;border-radius:${msg.r === 'user' ? '20px 20px 4px 20px' : '20px 20px 20px 4px'};background:${msg.r === 'user' ? 'linear-gradient(135deg,#f0059a,#c0027c)' : 'rgba(255,255,255,0.05)'};border:${msg.r === 'ai' ? '1px solid var(--dash-border)' : 'none'};color:var(--dash-text);font-size:15px;line-height:1.6;'>${msg.t}</div></div>`).join('')}
-          </div>
-          <div style="padding:14px 18px;border-top:1px solid var(--dash-border);display:flex;gap:10px;">
-            <input class="dash-input" data-chat-input value="${this.homeChatInput.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}" placeholder="${this.chatRecipeContext ? `Explique o que quer editar na receita #${this.chatRecipeContext.id}...` : 'Escreva sua dúvida à IA da Mentoria 4D...'}" style="flex:1;" />
-            <button class="dash-primary-btn" data-chat-send style="border-radius:13px;padding:14px 18px;min-height:50px;box-shadow:none;">➤</button>
-          </div>
+        ${markerCard}
+        <div class="chat-messages" data-chat-list>
+          ${messagesHTML}
         </div>
-      </section>
+        <div class="chat-input-area">
+          <textarea class="chat-textarea" data-chat-input rows="1" placeholder="${escapeHTML(placeholder)}">${escapeHTML(this.homeChatInput)}</textarea>
+          <button class="chat-send-btn" data-chat-send aria-label="Enviar mensagem">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          </button>
+        </div>
+      </div>
     `;
   }
 
@@ -1560,6 +1739,36 @@ export class DashboardScreen extends BaseScreen {
       });
     });
 
+    // Reivindicar conquista — dispara claim + animação de confete.
+    this.element.querySelectorAll('[data-claim-achievement]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-claim-achievement');
+        if (!id) return;
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Reivindicando...';
+
+        try {
+          const ok = await firestoreService.claimAchievement(this.currentUser.uid, id);
+          if (ok) {
+            this._showAchievementConfetti(btn);
+            // Re-render after a short delay so user sees confetti
+            setTimeout(() => {
+              if (typeof this.mountPreservingScroll === 'function') this.mountPreservingScroll();
+              else this.mount();
+            }, 1100);
+          } else {
+            btn.disabled = false;
+            btn.innerHTML = '🎁 Tentar novamente';
+          }
+        } catch (err) {
+          console.error('[Dashboard] claim error:', err);
+          btn.disabled = false;
+          btn.innerHTML = '🎁 Tentar novamente';
+        }
+      });
+    });
+
     this.element.querySelector('[data-open-drawer]')?.addEventListener('click', () => {
       this.sideOpen = !this.sideOpen;
       this.mount();
@@ -1612,28 +1821,71 @@ export class DashboardScreen extends BaseScreen {
       this.mountPreservingScroll();
     });
 
-    // Mark individual notification as read on click
-    this.element.querySelectorAll('.dash-notification-item[data-notification-id]').forEach(item => {
-      item.addEventListener('click', async () => {
-        const id = item.getAttribute('data-notification-id');
-        if (!id || !item.classList.contains('unread')) return;
-        const notification = (this.notifications || []).find(n => n.id === id);
-        if (!notification) return;
-        try {
-          await firestoreService.markNotificationRead(this.currentUser.uid, id);
-          notification.read = true;
-          item.classList.remove('unread');
-          item.style.paddingLeft = '14px';
-          item.querySelector('.dash-notification-dot').textContent = '✓';
-          // Update bell badge in real-time
-          const bellBadge = this.element.querySelector('[data-toggle-notifications] span');
-          const remaining = this.getUnreadNotificationCount();
-          if (remaining === 0 && bellBadge) bellBadge.remove();
-          else if (bellBadge) bellBadge.textContent = remaining > 9 ? '9+' : String(remaining);
-        } catch (error) {
-          console.error('[DashboardV2] Mark single notification read failed:', error);
+    // Notification swipe + click handlers
+    this.element.querySelectorAll('.notification-swipe-wrapper[data-notification-id]').forEach(wrapper => {
+      const item = wrapper.querySelector('.dash-notification-item');
+      const id = wrapper.getAttribute('data-notification-id');
+      if (!item || !id) return;
+
+      let startX = 0;
+      let currentX = 0;
+      let dragging = false;
+      let pointerDownTime = 0;
+      const SWIPE_THRESHOLD = 90;
+
+      const onPointerDown = (e) => {
+        startX = e.clientX;
+        currentX = 0;
+        dragging = true;
+        pointerDownTime = Date.now();
+        item.style.transition = 'none';
+        try { wrapper.setPointerCapture(e.pointerId); } catch {}
+      };
+
+      const onPointerMove = (e) => {
+        if (!dragging) return;
+        currentX = e.clientX - startX;
+        if (Math.abs(currentX) > 4) {
+          item.style.transform = `translateX(${currentX}px)`;
+          wrapper.classList.toggle('swiping-left', currentX < -10);
+          wrapper.classList.toggle('swiping-right', currentX > 10);
         }
-      });
+      };
+
+      const onPointerUp = (e) => {
+        if (!dragging) return;
+        dragging = false;
+        item.style.transition = 'transform 0.2s ease';
+        const dragDuration = Date.now() - pointerDownTime;
+        const totalDrag = Math.abs(currentX);
+
+        // Treat as click if drag is small and quick
+        if (totalDrag < 8 && dragDuration < 300) {
+          item.style.transform = '';
+          wrapper.classList.remove('swiping-left', 'swiping-right');
+          this._handleNotificationClick(id, wrapper, item);
+          return;
+        }
+
+        if (currentX < -SWIPE_THRESHOLD) {
+          // Swipe left = delete
+          this._handleNotificationDelete(id, wrapper, item);
+        } else if (currentX > SWIPE_THRESHOLD) {
+          // Swipe right = mark unread
+          this._handleNotificationUnread(id, wrapper, item);
+          item.style.transform = '';
+          wrapper.classList.remove('swiping-left', 'swiping-right');
+        } else {
+          // Snap back
+          item.style.transform = '';
+          wrapper.classList.remove('swiping-left', 'swiping-right');
+        }
+      };
+
+      wrapper.addEventListener('pointerdown', onPointerDown);
+      wrapper.addEventListener('pointermove', onPointerMove);
+      wrapper.addEventListener('pointerup', onPointerUp);
+      wrapper.addEventListener('pointercancel', onPointerUp);
     });
 
     // attach close listeners to all matching elements (backdrop + close button)
@@ -1707,6 +1959,7 @@ export class DashboardScreen extends BaseScreen {
           // Try to find by partial match
           const anyRecipe = pool[0];
           if (anyRecipe) {
+            this.recipeOriginNav = this.currentNav; // captura origem (provavelmente 'inicio')
             this.selectedRecipe = anyRecipe;
             this.currentNav = 'receitas';
             await this.mount();
@@ -1714,6 +1967,7 @@ export class DashboardScreen extends BaseScreen {
           }
           return;
         }
+        this.recipeOriginNav = this.currentNav; // captura origem (provavelmente 'inicio')
         this.selectedRecipe = recipe;
         this.currentNav = 'receitas';
         await this.mount();
@@ -1725,10 +1979,14 @@ export class DashboardScreen extends BaseScreen {
     }
 
     this.element.querySelectorAll('[data-recipe-open]').forEach(card => {
-      card.addEventListener('click', () => {
-        const recipeCatalog = Array.isArray(this.recipes) && this.recipes.length ? this.recipes : RECIPES;
-        const recipe = recipeCatalog.find(item => item.id === card.getAttribute('data-recipe-open'));
-        this.selectedRecipe = recipe || null;
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = card.getAttribute('data-recipe-open');
+        const pool = (Array.isArray(this.recipes) ? this.recipes : []).concat(RECIPES);
+        const recipe = pool.find(r => r.id === id);
+        if (!recipe) return;
+        this.recipeOriginNav = 'receitas';
+        this.selectedRecipe = recipe;
         this.mount();
       });
     });
@@ -1739,7 +1997,10 @@ export class DashboardScreen extends BaseScreen {
     });
 
     this.element.querySelector('[data-recipe-back]')?.addEventListener('click', () => {
+      const target = this.recipeOriginNav || 'receitas';
       this.selectedRecipe = null;
+      this.recipeOriginNav = null;
+      this.currentNav = target;
       this.mount();
     });
 

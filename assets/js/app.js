@@ -21,6 +21,7 @@ import { initializeFirebase } from './config/firebase.js';
 import { authService } from './services/auth.js';
 import { firestoreService } from './services/firestore.js';
 import { notificationService } from './modules/notifications.js';
+import { offlineQueue } from './modules/offline-queue.js';
 
 // Telas críticas (carregadas imediatamente)
 import { LoginScreen }    from './screens/login.js';
@@ -253,8 +254,11 @@ class App {
     if (user) {
       console.log('[App] Usuário logado:', user.uid);
       try { Session.set('userId', user.uid); } catch (error) { console.warn('[App] Session.set failed', error); }
-      const profile = await firestoreService.getUserProfile(user.uid);
+      // Garante que o documento do usuário existe ANTES de qualquer operação
+      const profile = await firestoreService.ensureUserDocument(user.uid, user.email);
       try { State.set('userProfile', profile); } catch (error) { console.warn('[App] State.set failed', error); }
+      this._registerOfflineHandlers(user.uid);
+      this._setupConnectionListeners();
       await firestoreService.awardDailyLoginXp(user.uid);
       this._watchPendingActions(user.uid);
       this._watchNotifications(user.uid);
@@ -366,6 +370,68 @@ class App {
     } catch (error) {
       console.error('[App] debugSignOut failed:', error);
       return false;
+    }
+  }
+
+  /**
+   * Registra handlers da fila offline para ações comuns.
+   * Chamado uma vez por sessão de usuário autenticado.
+   */
+  _registerOfflineHandlers(uid) {
+    if (this._offlineHandlersRegistered) return;
+    this._offlineHandlersRegistered = true;
+
+    offlineQueue.registerHandler('mark_notification_read', async ({ uid: u, notificationId }) => {
+      await firestoreService.markNotificationRead(u || uid, notificationId);
+    });
+    offlineQueue.registerHandler('mark_notification_unread', async ({ uid: u, notificationId }) => {
+      await firestoreService.markNotificationUnread?.(u || uid, notificationId);
+    });
+    offlineQueue.registerHandler('delete_notification', async ({ uid: u, notificationId }) => {
+      await firestoreService.deleteNotification?.(u || uid, notificationId);
+    });
+    offlineQueue.registerHandler('chat_send', async ({ uid: u, message, sessionId }) => {
+      await firestoreService.saveChatMessage(u || uid, { role: 'user', content: message, type: 'text', conversationId: sessionId });
+    });
+    offlineQueue.registerHandler('community_like', async ({ uid: u, postId, liked }) => {
+      await firestoreService.toggleCommunityLike?.(u || uid, postId, liked);
+    });
+  }
+
+  /**
+   * Configura listeners de online/offline e exibe banners discretos.
+   */
+  _setupConnectionListeners() {
+    if (this._connectionListenersSetup) return;
+    this._connectionListenersSetup = true;
+
+    window.addEventListener('online', () => {
+      this._showConnectionBanner('online', '✓ Você está online novamente');
+      offlineQueue.flush().catch(() => {});
+    });
+    window.addEventListener('offline', () => {
+      this._showConnectionBanner('offline', '⚠ Você está offline — suas ações serão sincronizadas quando reconectar', { sticky: true });
+    });
+
+    // Estado inicial: se já estiver offline ao carregar, mostra
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this._showConnectionBanner('offline', '⚠ Você está offline — suas ações serão sincronizadas quando reconectar', { sticky: true });
+    }
+  }
+
+  _showConnectionBanner(kind, text, { sticky = false } = {}) {
+    // Remove banner existente
+    document.querySelectorAll('.connection-banner').forEach(b => b.remove());
+
+    const banner = DOM.create('div', `connection-banner ${kind}`);
+    banner.textContent = text;
+    document.body.appendChild(banner);
+
+    if (!sticky) {
+      setTimeout(() => {
+        banner.classList.add('fade-out');
+        setTimeout(() => banner.remove(), 320);
+      }, 2400);
     }
   }
 }

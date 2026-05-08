@@ -130,6 +130,77 @@ export class FirestoreService {
     }
   }
 
+  /**
+   * Garante que o documento do usuário existe com todos os campos mínimos.
+   * Idempotente: chamado em todo login. Se o doc não existe, cria com defaults
+   * e dispara notificação de boas-vindas. Se existe, complementa campos faltantes.
+   * @returns {Promise<Object|null>} perfil completo após garantia.
+   */
+  async ensureUserDocument(uid, email = null) {
+    if (!uid) return null;
+    try {
+      const ref = this.userRef(uid);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const data = snap.data();
+        const patch = {};
+        if (data.xp === undefined) patch.xp = 0;
+        if (data.level === undefined) patch.level = 1;
+        if (data.streak === undefined) patch.streak = 0;
+        if (data.totalLogins === undefined) patch.totalLogins = 1;
+        if (data.totalRecipes === undefined) patch.totalRecipes = 0;
+        if (data.totalChatMessages === undefined) patch.totalChatMessages = 0;
+        if (data.status === undefined) patch.status = 'awaiting_onboarding';
+        if (data.onboardingCompleted === undefined) patch.onboardingCompleted = false;
+        if (Object.keys(patch).length > 0) {
+          patch.updatedAt = serverTimestamp();
+          await updateDoc(ref, patch);
+          this._cacheDelete(`profile_${uid}`);
+        }
+        return { ...data, ...patch };
+      }
+
+      // Doc não existe — criar com defaults completos
+      const initialData = {
+        email: email || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        xp: 0,
+        level: 1,
+        streak: 0,
+        totalLogins: 1,
+        totalRecipes: 0,
+        totalChatMessages: 0,
+        onboardingCompleted: false,
+        healthFormCompleted: false,
+        menuFormCompleted: false,
+        status: 'awaiting_onboarding',
+        lastActivityDate: null,
+        profile: {},
+        diagnostics: [],
+      };
+      await setDoc(ref, initialData);
+      this._cacheDelete(`profile_${uid}`);
+
+      // Notificação de boas-vindas
+      try {
+        await this.createNotification(uid, {
+          title: '🌸 Bem-vinda ao Programa 4D!',
+          message: 'Sua jornada de saúde começa agora. Explore o app e fale com sua Guardiã.',
+          type: 'welcome',
+          priority: 'high',
+        });
+      } catch (e) {
+        console.warn('[Firestore] welcome notification failed:', e);
+      }
+
+      return initialData;
+    } catch (e) {
+      console.error('[Firestore] ensureUserDocument:', e);
+      return null;
+    }
+  }
+
   /** Atualiza só o status do usuário */
   async updateUserStatus(uid, status) {
     this._cacheDelete(`profile_${uid}`);
@@ -571,6 +642,31 @@ export class FirestoreService {
     }
   }
 
+  async markNotificationUnread(uid, notificationId) {
+    if (!uid || !notificationId) return false;
+    try {
+      await updateDoc(this.subDoc(uid, 'notifications', notificationId), {
+        read: false,
+        readAt: null,
+      });
+      return true;
+    } catch (e) {
+      console.error('[Firestore] markNotificationUnread:', e);
+      return false;
+    }
+  }
+
+  async deleteNotification(uid, notificationId) {
+    if (!uid || !notificationId) return false;
+    try {
+      await deleteDoc(this.subDoc(uid, 'notifications', notificationId));
+      return true;
+    } catch (e) {
+      console.error('[Firestore] deleteNotification:', e);
+      return false;
+    }
+  }
+
   /**
    * Real-time listener para ações pendentes geradas pela equipe/IA.
    */
@@ -878,29 +974,79 @@ export class FirestoreService {
   }
 
   async unlockAchievement(uid, achievementId) {
+    if (!uid || !achievementId) return false;
     try {
-      const achievement = ACHIEVEMENTS_CATALOG.find(item => item.id === achievementId);
-      if (!achievement) return false;
-
       const ref = this.subDoc(uid, 'achievements', achievementId);
       const existing = await getDoc(ref);
-      if (existing.exists()) return false;
+      if (existing.exists()) return false; // idempotente
+
+      const achievement = ACHIEVEMENTS_CATALOG.find(item => item.id === achievementId);
+      if (!achievement) {
+        console.warn('[Firestore] unlockAchievement: id not found in catalog', achievementId);
+        return false;
+      }
 
       await setDoc(ref, {
-        ...achievement,
+        achievementId,
+        title: achievement.title,
+        description: achievement.description,
+        icon: achievement.icon,
+        xp: achievement.xp,
         unlocked: true,
+        claimed: false,
         seen: false,
         unlockedAt: serverTimestamp(),
       }, { merge: true });
 
-      const xp = Number(achievement.xp || 0);
-      if (xp > 0) {
-        await this.awardXp(uid, xp, `achievement_${achievementId}`);
+      // Notificação persistente — XP é entregue apenas no claim.
+      try {
+        await this.createNotification(uid, {
+          title: `🏆 ${achievement.title}`,
+          message: `${achievement.description} — Reivindique sua recompensa!`,
+          type: 'achievement',
+          priority: achievement.xp >= 500 ? 'high' : 'normal',
+          payload: { achievementId, xp: achievement.xp },
+        });
+      } catch (e) {
+        console.warn('[Firestore] notification on unlock failed:', e);
       }
 
       return true;
     } catch (e) {
       console.error('[Firestore] unlockAchievement:', e);
+      return false;
+    }
+  }
+
+  async claimAchievement(uid, achievementId) {
+    if (!uid || !achievementId) return false;
+    try {
+      const ref = this.subDoc(uid, 'achievements', achievementId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        console.warn('[Firestore] claimAchievement: not unlocked yet', achievementId);
+        return false;
+      }
+      const data = snap.data();
+      if (data.claimed) return false;
+
+      const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === achievementId);
+      if (!achievement) return false;
+
+      await updateDoc(ref, {
+        claimed: true,
+        claimedAt: serverTimestamp(),
+        xpAwarded: achievement.xp,
+      });
+
+      // Award XP only on claim
+      if (achievement.xp > 0) {
+        await this.awardXp(uid, achievement.xp, `claim_${achievementId}`);
+      }
+
+      return true;
+    } catch (e) {
+      console.error('[Firestore] claimAchievement:', e);
       return false;
     }
   }

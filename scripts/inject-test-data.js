@@ -226,16 +226,28 @@ async function inject(idToken, uid) {
 
   // 5. Achievements
   console.log('[Seed] 5/10 Conquistas...');
+  // Mix de conquistas: algumas já reivindicadas (claimed=true), outras pendentes (claimed=false)
   const achievements = [
-    { id: 'first_step', xpAwarded: 100, unlockedAt: new Date(Date.now() - 30 * 86400000).toISOString() },
-    { id: 'scientist', xpAwarded: 50, unlockedAt: new Date(Date.now() - 20 * 86400000).toISOString() },
-    { id: 'consistent', xpAwarded: 100, unlockedAt: new Date(Date.now() - 3 * 86400000).toISOString() },
-    { id: 'night_owl', xpAwarded: 75, unlockedAt: new Date(Date.now() - 5 * 86400000).toISOString() },
-    { id: 'recipe_curator', xpAwarded: 100, unlockedAt: new Date(Date.now() - 2 * 86400000).toISOString() },
-    { id: 'polymath', xpAwarded: 80, unlockedAt: new Date().toISOString() },
+    { id: 'first_step',     title: 'Primeiro Passo',  xp: 100, claimed: true,  daysAgo: 30 },
+    { id: 'scientist',      title: 'Cientista',       xp: 50,  claimed: true,  daysAgo: 20 },
+    { id: 'consistent',     title: 'Consistente',     xp: 100, claimed: true,  daysAgo: 3 },
+    // Pendentes de claim — vão aparecer com o botão "Reivindicar"
+    { id: 'night_owl',      title: 'Coruja Noturna',  xp: 75,  claimed: false, daysAgo: 5 },
+    { id: 'recipe_curator', title: 'Curadora',        xp: 100, claimed: false, daysAgo: 2 },
+    { id: 'polymath',       title: 'Polivalente',     xp: 80,  claimed: false, daysAgo: 0 },
   ];
   for (const ach of achievements) {
-    await setDoc(idToken, `users/${uid}/achievements/${ach.id}`, { xpAwarded: ach.xpAwarded, unlockedAt: ach.unlockedAt });
+    await setDoc(idToken, `users/${uid}/achievements/${ach.id}`, {
+      achievementId: ach.id,
+      title: ach.title,
+      xp: ach.xp,
+      unlocked: true,
+      claimed: ach.claimed,
+      xpAwarded: ach.claimed ? ach.xp : 0,
+      seen: ach.claimed,
+      unlockedAt: new Date(Date.now() - ach.daysAgo * 86400000).toISOString(),
+      claimedAt: ach.claimed ? new Date(Date.now() - ach.daysAgo * 86400000 + 60000).toISOString() : null,
+    });
   }
   console.log('[Seed] ✓ Conquistas salvas');
 

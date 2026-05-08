@@ -83,32 +83,43 @@ function log(severity, message, data = {}) {
 
 // Helper: desbloqueia conquista (idempotente)
 async function unlockAchievement(uid, achievementId) {
+  if (!uid || !achievementId) return false;
   const achRef = db.collection('users').doc(uid).collection('achievements').doc(achievementId);
   const snap = await achRef.get();
-  if (snap.exists) return; // idempotente
+  if (snap.exists) return false; // idempotente
 
   const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === achievementId);
-  if (!achievement) { log('warn', `Achievement not found: ${achievementId}`); return; }
+  if (!achievement) {
+    log('warn', `Achievement not found: ${achievementId}`);
+    return false;
+  }
 
   const batch = db.batch();
+  batch.set(achRef, {
+    achievementId,
+    title: achievement.title,
+    description: achievement.description,
+    icon: achievement.icon,
+    xp: achievement.xp,
+    unlocked: true,
+    claimed: false,
+    xpAwarded: 0,
+    seen: false,
+    unlockedAt: FieldValue.serverTimestamp(),
+  });
 
-  // Write achievement
-  batch.set(achRef, { unlockedAt: FieldValue.serverTimestamp(), xpAwarded: achievement.xp });
-
-  // Persistent notification in bell dropdown
   const notifRef = db.collection('users').doc(uid).collection('notifications').doc();
   batch.set(notifRef, {
     title: `🏆 ${achievement.title}`,
-    message: `${achievement.description}${achievement.xp ? ` (+${achievement.xp} XP)` : ''}`,
+    message: `${achievement.description} — Reivindique sua recompensa!`,
     type: 'achievement',
     priority: achievement.xp >= 500 ? 'high' : 'normal',
     channel: 'app',
-    payload: { achievementId },
+    payload: { achievementId, xp: achievement.xp },
     read: false,
     createdAt: FieldValue.serverTimestamp(),
   });
 
-  // pendingAction for visual popup in the app
   const paRef = db.collection('users').doc(uid).collection('pendingActions').doc();
   batch.set(paRef, {
     type: 'achievement_unlocked',
@@ -119,13 +130,7 @@ async function unlockAchievement(uid, achievementId) {
 
   await batch.commit();
   log('info', `Achievement unlocked: ${achievementId} for user ${uid}`);
-
-  // Award XP (after batch to avoid Firestore contention)
-  try {
-    await awardXp(uid, achievement.xp, `achievement_${achievementId}`);
-  } catch (e) {
-    log('error', 'awardXp after achievement failed', { error: e.message });
-  }
+  return true;
 }
 
 // Helper: concede XP ao usuário (backend)
@@ -496,6 +501,43 @@ exports.deleteRecipe = onCall({ region: REGION, secrets: SECRETS }, async (reque
     console.error('[Functions] deleteRecipe error:', error.message);
     throw new HttpsError('internal', 'Erro ao remover receita');
   }
+});
+
+// ─────────────────────────────────────────────
+// 5b. CLAIM ACHIEVEMENT (award XP only when user claims)
+// ─────────────────────────────────────────────
+exports.claimAchievement = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Login required');
+
+  const { achievementId } = request.data || {};
+  if (!achievementId) throw new HttpsError('invalid-argument', 'achievementId required');
+
+  const achRef = db.collection('users').doc(uid).collection('achievements').doc(achievementId);
+  const snap = await achRef.get();
+  if (!snap.exists) throw new HttpsError('failed-precondition', 'Achievement not unlocked yet');
+
+  const data = snap.data();
+  if (data.claimed) return { success: false, reason: 'already_claimed' };
+
+  const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === achievementId);
+  if (!achievement) throw new HttpsError('not-found', 'Achievement not in catalog');
+
+  await achRef.update({
+    claimed: true,
+    claimedAt: FieldValue.serverTimestamp(),
+    xpAwarded: achievement.xp,
+  });
+
+  if (achievement.xp > 0) {
+    try {
+      await awardXp(uid, achievement.xp, `claim_${achievementId}`);
+    } catch (e) {
+      log('error', 'awardXp on claim failed', { error: e.message });
+    }
+  }
+
+  return { success: true, xpAwarded: achievement.xp };
 });
 
 // ─────────────────────────────────────────────
