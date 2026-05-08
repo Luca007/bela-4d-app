@@ -261,9 +261,33 @@ async function inject(idToken, uid) {
   // 6. Recipes
   console.log('[Seed] 6/10 Receitas...');
   const recipes = [
-    { id: 'recipe-test-1', nm: 'Frango Grelhado com Salada', e: '🍗', desc: 'Receita leve e nutritiva para diabéticos', macros: { calories: 320, protein: 38, carbs: 12, fat: 14 }, favorited: true, createdAt: new Date().toISOString() },
-    { id: 'recipe-test-2', nm: 'Omelete de Legumes', e: '🥚', desc: 'Café da manhã proteico e de baixo índice glicêmico', macros: { calories: 280, protein: 22, carbs: 8, fat: 18 }, favorited: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
-    { id: 'recipe-test-3', nm: 'Salada de Quinoa', e: '🥗', desc: 'Rica em fibras e proteínas vegetais', macros: { calories: 240, protein: 12, carbs: 38, fat: 6 }, favorited: false, createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+    {
+      id: 'recipe-test-1', nm: 'Frango Grelhado com Salada', e: '🍗',
+      tm: '25 min', kc: 320, ct: 'Almoço', df: 'Fácil',
+      desc: 'Receita leve e nutritiva para diabéticos',
+      ig: ['200g de peito de frango', 'Mix de folhas verdes', 'Tomate-cereja', 'Pepino', 'Azeite extra virgem', 'Limão', 'Sal e pimenta'],
+      st: ['Tempere o frango com sal, pimenta e suco de limão.', 'Aqueça uma frigideira e grelhe 5-6 min de cada lado.', 'Monte a salada com folhas, tomate e pepino.', 'Fatie o frango e sirva sobre a salada com fio de azeite.'],
+      macros: { calories: 320, protein: 38, carbs: 12, fat: 14 },
+      favorited: true, createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'recipe-test-2', nm: 'Omelete de Legumes', e: '🥚',
+      tm: '15 min', kc: 280, ct: 'Café da manhã', df: 'Fácil',
+      desc: 'Café da manhã proteico e de baixo índice glicêmico',
+      ig: ['3 ovos', '1 abobrinha pequena', '1 tomate', 'Cebolinha', 'Azeite', 'Sal e ervas'],
+      st: ['Bata os ovos com sal e ervas.', 'Refogue a abobrinha e o tomate no azeite.', 'Despeje os ovos batidos sobre os legumes.', 'Cozinhe em fogo baixo até firmar e sirva.'],
+      macros: { calories: 280, protein: 22, carbs: 8, fat: 18 },
+      favorited: true, createdAt: new Date(Date.now() - 86400000).toISOString(),
+    },
+    {
+      id: 'recipe-test-3', nm: 'Salada de Quinoa', e: '🥗',
+      tm: '30 min', kc: 240, ct: 'Almoço', df: 'Médio',
+      desc: 'Rica em fibras e proteínas vegetais',
+      ig: ['1 xícara de quinoa', '2 xícaras de água', 'Pepino picado', 'Tomate-cereja', 'Salsinha', 'Azeite', 'Limão', 'Sal'],
+      st: ['Cozinhe a quinoa em água por 15 min.', 'Deixe esfriar.', 'Misture com os legumes picados.', 'Tempere com azeite, limão, sal e salsinha.'],
+      macros: { calories: 240, protein: 12, carbs: 38, fat: 6 },
+      favorited: false, createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+    },
   ];
   for (const r of recipes) {
     await setDoc(idToken, `users/${uid}/recipes/${r.id}`, r);

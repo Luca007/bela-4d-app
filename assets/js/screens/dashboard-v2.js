@@ -680,10 +680,13 @@ export class DashboardScreen extends BaseScreen {
         .dash-recipe-card:hover { transform: translateY(-2px); border-color: #f0059a; }
         .dash-lock-panel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,0.02); }
         .dash-lock-card { max-width: 340px; width: 100%; text-align: center; padding: 32px 28px; background: rgba(10,10,15,0.88); border: 1px solid rgba(240,5,154,0.2); border-radius: 24px; box-shadow: 0 8px 60px rgba(0,0,0,0.7); }
-        .dash-notification-panel { position: absolute; top: 74px; right: 18px; width: min(360px, calc(100vw - 32px)); z-index: 30; opacity: 0; transform: translateY(-8px) scale(0.97); pointer-events: none; transition: opacity 180ms ease, transform 180ms ease; }
+        .dash-notification-panel { position: absolute; top: 58px; right: 14px; width: min(380px, calc(100vw - 28px)); z-index: 30; opacity: 0; transform: translateY(-8px) scale(0.97); pointer-events: none; transition: opacity 180ms ease, transform 180ms ease; }
         .dash-notification-panel.is-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
         .dash-notification-card { background: ${this.isDark ? 'rgba(15,15,20,0.98)' : 'rgba(255,255,255,0.97)'}; border: 1px solid var(--dash-border); border-radius: 18px; box-shadow: 0 18px 40px rgba(0,0,0,0.28); overflow: hidden; backdrop-filter: blur(18px); }
-        .dash-notification-item { display:flex; gap:10px; padding:14px 16px; border-bottom:1px solid var(--dash-border); }
+        .dash-notification-item { display:flex; gap:10px; padding:14px 16px; border-bottom:1px solid var(--dash-border); position: relative; cursor: pointer; transition: background 0.15s; }
+        .dash-notification-item:hover { background: rgba(240,5,154,0.06); }
+        .dash-notification-item.unread::before { content: ''; position: absolute; left: 6px; top: 50%; transform: translateY(-50%); width: 6px; height: 6px; border-radius: 50%; background: #f0059a; box-shadow: 0 0 6px rgba(240,5,154,0.7); }
+        .dash-notification-item.unread { background: rgba(240,5,154,0.04); }
         .dash-notification-item:last-child { border-bottom:none; }
         .dash-notification-dot { width:34px; height:34px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background: rgba(240,5,154,0.12); border: 1px solid rgba(240,5,154,0.22); }
         .dash-notification-title { color: var(--dash-text); font-size: 14px; font-weight: 800; line-height: 1.2; }
@@ -735,7 +738,7 @@ export class DashboardScreen extends BaseScreen {
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
           </svg>
-          ${unreadCount > 0 ? `<span style="position:absolute;top:6px;right:6px;width:9px;height:9px;background:#f0059a;border-radius:50%;border:2px solid var(--dash-bg,#0f0f1a);box-shadow:0 0 6px rgba(240,5,154,0.8);"></span>` : ''}
+          ${unreadCount > 0 ? `<span style="position:absolute;top:4px;right:4px;min-width:16px;height:16px;padding:0 4px;background:linear-gradient(135deg,#f0059a,#c0027c);border-radius:8px;border:2px solid var(--dash-bg,#0f0f1a);box-shadow:0 0 6px rgba(240,5,154,0.7);color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1;">${unreadCount > 9 ? '9+' : unreadCount}</span>` : ''}
         </button>
         <div class="dash-streak"><span>🔥</span><span>${this.streak}</span></div>
       </div>
@@ -822,7 +825,7 @@ export class DashboardScreen extends BaseScreen {
           </div>
           <div style="max-height:360px;overflow:auto;">
             ${notifications.length ? notifications.map(notification => `
-              <div class="dash-notification-item" style="opacity:${notification.read ? 0.7 : 1};">
+              <div class="dash-notification-item ${notification.read ? '' : 'unread'}" data-notification-id="${notification.id || ''}" style="padding-left:${notification.read ? '14px' : '20px'};">
                 <div class="dash-notification-dot">${notification.read ? '✓' : '🔔'}</div>
                 <div style="min-width:0;flex:1;">
                   <div class="dash-notification-title">${this.getNotificationTitle(notification)}</div>
@@ -1108,33 +1111,43 @@ export class DashboardScreen extends BaseScreen {
 
     if (this.selectedRecipe) {
       const recipe = this.selectedRecipe;
+      const ingredients = Array.isArray(recipe.ig) ? recipe.ig
+        : Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+      const steps = Array.isArray(recipe.st) ? recipe.st
+        : Array.isArray(recipe.steps) ? recipe.steps : [];
+      const time = recipe.tm || recipe.prepTime || '—';
+      const kcal = recipe.kc ?? recipe.macros?.calories ?? recipe.calories ?? '—';
+      const category = recipe.ct || recipe.category || 'Receita';
+      const difficulty = recipe.df || recipe.difficulty || 'Fácil';
+      const emoji = recipe.e || recipe.emoji || '🍽️';
+      const name = recipe.nm || recipe.name || 'Receita';
       return `
         <section>
           <button class="dash-ghost-btn" data-recipe-back style="margin-bottom:20px;padding:10px 18px;min-height:44px;border-radius:12px;">← Voltar às receitas</button>
           <div class="dash-card pad">
-            <div style="font-size:52px;margin-bottom:12px;">${recipe.e}</div>
-            <div class="dash-section-title" style="font-size:23px;">${recipe.nm}</div>
+            <div style="font-size:52px;margin-bottom:12px;">${emoji}</div>
+            <div class="dash-section-title" style="font-size:23px;">${name}</div>
             <div class="dash-chip-row" style="margin: 0 0 22px;">
-              <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${recipe.tm}</span>
-              <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${recipe.kc} kcal</span>
-              <span class="dash-chip">${recipe.ct}</span>
-              <span class="dash-chip">${recipe.df}</span>
+              <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${time}</span>
+              <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${kcal} kcal</span>
+              <span class="dash-chip">${category}</span>
+              <span class="dash-chip">${difficulty}</span>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
               <button class="dash-primary-btn" data-recipe-edit="${recipe.id}" style="min-height:44px;padding:10px 14px;border-radius:10px;">✏️ Editar receita</button>
               <button class="dash-ghost-btn" data-recipe-remove="${recipe.id}" style="min-height:44px;padding:10px 14px;border-radius:10px;border-color:rgba(244,63,94,0.25);color:#f43f5e;">🗑 Remover receita</button>
             </div>
             <div style="background:rgba(240,5,154,0.06);border:1px solid rgba(240,5,154,0.16);border-radius:14px;padding:12px 14px;margin-bottom:18px;">
-              <div style="color:#f0059a;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;">Receita #{recipe.id}</div>
+              <div style="color:#f0059a;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;">Receita #${recipe.id}</div>
               <div style="color:var(--dash-muted);font-size:13px;margin-top:4px;">Esse marcador único vai junto quando você mandar a receita para edição no chat.</div>
             </div>
             <div style="margin-bottom:22px;">
               <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:12px;">🥘 Ingredientes</div>
-              ${recipe.ig.map(item => `<div style="display:flex;gap:10px;margin-bottom:9px;"><div style="width:7px;height:7px;border-radius:50%;background:#f0059a;flex-shrink:0;margin-top:8px;"></div><span style="color:var(--dash-muted);font-size:16px;">${item}</span></div>`).join('')}
+              ${ingredients.length ? ingredients.map(item => `<div style="display:flex;gap:10px;margin-bottom:9px;"><div style="width:7px;height:7px;border-radius:50%;background:#f0059a;flex-shrink:0;margin-top:8px;"></div><span style="color:var(--dash-muted);font-size:16px;">${item}</span></div>`).join('') : `<div style="color:var(--dash-muted);font-size:14px;font-style:italic;">Ingredientes ainda não disponíveis para esta receita.</div>`}
             </div>
             <div>
               <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:12px;">👩‍🍳 Modo de preparo</div>
-              ${recipe.st.map((step, index) => `<div style="display:flex;gap:14px;margin-bottom:16px;"><div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f0059a,#c0027c);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:13px;font-weight:800;">${index + 1}</div><span style="color:var(--dash-muted);font-size:15px;line-height:1.7;padding-top:4px;">${step}</span></div>`).join('')}
+              ${steps.length ? steps.map((step, index) => `<div style="display:flex;gap:14px;margin-bottom:16px;"><div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f0059a,#c0027c);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:13px;font-weight:800;">${index + 1}</div><span style="color:var(--dash-muted);font-size:15px;line-height:1.7;padding-top:4px;">${step}</span></div>`).join('') : `<div style="color:var(--dash-muted);font-size:14px;font-style:italic;">Modo de preparo ainda não disponível para esta receita.</div>`}
             </div>
           </div>
         </section>
@@ -1597,6 +1610,30 @@ export class DashboardScreen extends BaseScreen {
     this.element.querySelector('[data-mark-notifications-read]')?.addEventListener('click', async () => {
       await this.markAllNotificationsRead();
       this.mountPreservingScroll();
+    });
+
+    // Mark individual notification as read on click
+    this.element.querySelectorAll('.dash-notification-item[data-notification-id]').forEach(item => {
+      item.addEventListener('click', async () => {
+        const id = item.getAttribute('data-notification-id');
+        if (!id || !item.classList.contains('unread')) return;
+        const notification = (this.notifications || []).find(n => n.id === id);
+        if (!notification) return;
+        try {
+          await firestoreService.markNotificationRead(this.currentUser.uid, id);
+          notification.read = true;
+          item.classList.remove('unread');
+          item.style.paddingLeft = '14px';
+          item.querySelector('.dash-notification-dot').textContent = '✓';
+          // Update bell badge in real-time
+          const bellBadge = this.element.querySelector('[data-toggle-notifications] span');
+          const remaining = this.getUnreadNotificationCount();
+          if (remaining === 0 && bellBadge) bellBadge.remove();
+          else if (bellBadge) bellBadge.textContent = remaining > 9 ? '9+' : String(remaining);
+        } catch (error) {
+          console.error('[DashboardV2] Mark single notification read failed:', error);
+        }
+      });
     });
 
     // attach close listeners to all matching elements (backdrop + close button)

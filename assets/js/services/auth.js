@@ -4,6 +4,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
+  sendPasswordResetEmail,
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 
 export class AuthService {
@@ -72,6 +73,30 @@ export class AuthService {
         success: false,
         error: this.getErrorMessage(error)
       };
+    }
+  }
+
+  /**
+   * Send password reset email via Firebase Auth.
+   * @param {string} email
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async sendPasswordReset(email) {
+    if (!email || !email.trim()) {
+      return { success: false, error: 'Email não informado' };
+    }
+    try {
+      const auth = getAuth();
+      await sendPasswordResetEmail(auth, email.trim());
+      return { success: true };
+    } catch (error) {
+      console.error('Password reset error:', error);
+      const code = error?.code || error?.message || '';
+      let friendly = 'Não foi possível enviar o email de recuperação.';
+      if (code.includes('user-not-found')) friendly = 'Email não cadastrado no sistema.';
+      else if (code.includes('invalid-email')) friendly = 'Email inválido.';
+      else if (code.includes('too-many-requests')) friendly = 'Muitas tentativas. Aguarde alguns minutos.';
+      return { success: false, error: friendly };
     }
   }
 

@@ -88,13 +88,55 @@ export class LoginScreen extends BaseScreen {
     emailGroup.appendChild(emailInput);
     formGroup.appendChild(emailGroup);
 
-    // Password
+    // Password with eye toggle
     const passLabel = UIComponents.label('Senha');
     const passInput = UIComponents.passwordInput('••••••••');
     passInput.addEventListener('input', (e) => this.password = e.target.value);
+
+    // Wrap input + toggle button in a relative container
+    const passWrap = DOM.create('div');
+    DOM.setStyle(passWrap, { position: 'relative', width: '100%' });
+    DOM.setStyle(passInput, { paddingRight: '48px', width: '100%', boxSizing: 'border-box' });
+
+    const toggleBtn = DOM.create('button');
+    toggleBtn.type = 'button';
+    toggleBtn.setAttribute('aria-label', 'Mostrar/ocultar senha');
+    DOM.setStyle(toggleBtn, {
+      position: 'absolute',
+      right: '12px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      width: '32px',
+      height: '32px',
+      border: 'none',
+      borderRadius: '8px',
+      background: 'transparent',
+      color: 'rgba(255,255,255,0.55)',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '0',
+      transition: 'color 0.18s, background 0.18s',
+    });
+    const eyeOpen = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    const eyeClosed = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+    toggleBtn.innerHTML = eyeClosed;
+    toggleBtn.addEventListener('click', () => {
+      const showing = passInput.type === 'text';
+      passInput.type = showing ? 'password' : 'text';
+      toggleBtn.innerHTML = showing ? eyeClosed : eyeOpen;
+      toggleBtn.style.color = showing ? 'rgba(255,255,255,0.55)' : Colors.pink;
+    });
+    toggleBtn.addEventListener('mouseenter', () => { toggleBtn.style.background = 'rgba(255,255,255,0.06)'; });
+    toggleBtn.addEventListener('mouseleave', () => { toggleBtn.style.background = 'transparent'; });
+
+    passWrap.appendChild(passInput);
+    passWrap.appendChild(toggleBtn);
+
     const passGroup = DOM.create('div');
     passGroup.appendChild(passLabel);
-    passGroup.appendChild(passInput);
+    passGroup.appendChild(passWrap);
     formGroup.appendChild(passGroup);
 
     return formGroup;
@@ -126,9 +168,90 @@ export class LoginScreen extends BaseScreen {
       fontWeight: '600',
     });
     forgotBtn.textContent = 'Esqueci minha senha';
-    
+    forgotBtn.addEventListener('click', () => this.openForgotPasswordModal());
+
     forgotLink.appendChild(forgotBtn);
     return forgotLink;
+  }
+
+  openForgotPasswordModal() {
+    const overlay = DOM.create('div');
+    DOM.setStyle(overlay, {
+      position: 'fixed', inset: 0, zIndex: 9999, display: 'flex',
+      alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)',
+      animation: 'fadeIn 200ms ease',
+    });
+
+    const modal = DOM.create('div');
+    DOM.setStyle(modal, {
+      background: 'linear-gradient(180deg, #1a1a22, #15151c)',
+      border: `1px solid ${Colors.border}`, borderRadius: '20px',
+      padding: '28px', width: 'calc(100vw - 40px)', maxWidth: '400px',
+      boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    });
+
+    const title = DOM.create('h3');
+    title.textContent = 'Recuperar senha';
+    DOM.setStyle(title, { color: '#fff', fontSize: '20px', fontWeight: '800', margin: '0 0 8px' });
+
+    const subtitle = DOM.create('p');
+    subtitle.textContent = 'Digite seu email cadastrado. Enviaremos um link para você redefinir sua senha.';
+    DOM.setStyle(subtitle, { color: 'rgba(255,255,255,0.6)', fontSize: '14px', margin: '0 0 20px', lineHeight: '1.5' });
+
+    const emailInput = UIComponents.emailInput('seu@email.com', this.email || '');
+    DOM.setStyle(emailInput, { width: '100%', boxSizing: 'border-box', marginBottom: '8px' });
+
+    const errorMsg = DOM.create('div');
+    DOM.setStyle(errorMsg, { color: '#f87171', fontSize: '13px', minHeight: '18px', marginBottom: '12px', fontWeight: '600' });
+
+    const successMsg = DOM.create('div');
+    DOM.setStyle(successMsg, { color: '#34d399', fontSize: '13px', minHeight: '18px', marginBottom: '12px', fontWeight: '600' });
+
+    const actions = DOM.create('div');
+    DOM.setStyle(actions, { display: 'flex', gap: '10px' });
+
+    const cancelBtn = UIComponents.ghostButton('Cancelar');
+    DOM.setStyle(cancelBtn, { flex: '1' });
+    cancelBtn.addEventListener('click', () => overlay.remove());
+
+    const sendBtn = UIComponents.primaryButton('Enviar link');
+    DOM.setStyle(sendBtn, { flex: '1' });
+    sendBtn.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      errorMsg.textContent = '';
+      successMsg.textContent = '';
+      if (!email) { errorMsg.textContent = 'Digite seu email.'; return; }
+      const restore = UIComponents.setButtonLoading(sendBtn, 'Enviando...');
+      const result = await authService.sendPasswordReset(email);
+      restore();
+      if (result.success) {
+        successMsg.textContent = '✓ Email enviado! Verifique sua caixa de entrada.';
+        sendBtn.disabled = true;
+        setTimeout(() => overlay.remove(), 2500);
+      } else {
+        errorMsg.textContent = result.error || 'Erro ao enviar email.';
+      }
+    });
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(sendBtn);
+
+    modal.appendChild(title);
+    modal.appendChild(subtitle);
+    modal.appendChild(emailInput);
+    modal.appendChild(errorMsg);
+    modal.appendChild(successMsg);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.addEventListener('keydown', function escClose(e) {
+      if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', escClose); }
+    });
+
+    document.body.appendChild(overlay);
+    setTimeout(() => emailInput.focus(), 100);
   }
 
   renderFooter() {
