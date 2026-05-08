@@ -202,7 +202,7 @@ export class DashboardScreen extends BaseScreen {
     this.profileAvatar = {
       emoji: normalizeAvatarEmoji(this.userProfile.avatar),
       color: this.userProfile.avatarColor || '#f0059a',
-      nick: this.userProfile.name ? `@${this.userProfile.name.split(' ')[0].toLowerCase()}` : '@voce',
+      nick: this.userProfile.name ? `@${this.userProfile.name.trim().toLowerCase()}` : '@voce',
     };
     this.xp = Number(this.userProfile?.xp ?? 0);
     this.streak = Number(this.userProfile?.streak ?? 0);
@@ -238,7 +238,7 @@ export class DashboardScreen extends BaseScreen {
         this.profileAvatar = {
           emoji: normalizeAvatarEmoji(data.userProfile.avatar, this.profileAvatar.emoji),
           color: data.userProfile.avatarColor || this.profileAvatar.color,
-          nick: data.userProfile.name ? `@${data.userProfile.name.split(' ')[0].toLowerCase()}` : this.profileAvatar.nick,
+          nick: data.userProfile.name ? `@${data.userProfile.name.trim().toLowerCase()}` : this.profileAvatar.nick,
         };
         this.xp = Number(data.userProfile.xp ?? this.xp);
         this.streak = Number(data.userProfile.streak ?? this.streak);
@@ -439,6 +439,8 @@ export class DashboardScreen extends BaseScreen {
     this.recipeUnsubscribe?.();
     this.achievementsUnsubscribe?.();
     this.chatUnsubscribe?.();
+    if (this._outsideClickHandler) { document.removeEventListener('mousedown', this._outsideClickHandler); this._outsideClickHandler = null; }
+    if (this._escHandler) { document.removeEventListener('keydown', this._escHandler); this._escHandler = null; }
     super.destroy();
   }
 
@@ -483,15 +485,11 @@ export class DashboardScreen extends BaseScreen {
   }
 
   openRecipeEditChat(recipe) {
-    this.chatRecipeContext = {
-      id: recipe.id,
-      name: recipe.nm,
-      emoji: recipe.e,
-    };
-    this.chatSessionId = `${this.currentUser?.uid || 'anon'}_${recipe.id}_${Date.now()}`;
-    this.homeChatInput = `Quero editar a receita ${recipe.nm}. `;
-    this.currentNav = 'chat';
-    this.mountPreservingScroll();
+    this.params?.onNavigate?.('chat', {
+      recipeId: recipe.id,
+      recipeName: recipe.nm || recipe.name,
+      recipeEmoji: recipe.e || recipe.emoji || '🍽️',
+    });
   }
 
   async removeRecipe(recipe) {
@@ -654,7 +652,8 @@ export class DashboardScreen extends BaseScreen {
         .dash-recipe-card:hover { transform: translateY(-2px); border-color: #f0059a; }
         .dash-lock-panel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,0.02); }
         .dash-lock-card { max-width: 340px; width: 100%; text-align: center; padding: 32px 28px; background: rgba(10,10,15,0.88); border: 1px solid rgba(240,5,154,0.2); border-radius: 24px; box-shadow: 0 8px 60px rgba(0,0,0,0.7); }
-        .dash-notification-panel { position: absolute; top: 74px; right: 18px; width: min(360px, calc(100vw - 32px)); z-index: 30; }
+        .dash-notification-panel { position: absolute; top: 74px; right: 18px; width: min(360px, calc(100vw - 32px)); z-index: 30; opacity: 0; transform: translateY(-8px) scale(0.97); pointer-events: none; transition: opacity 180ms ease, transform 180ms ease; }
+        .dash-notification-panel.is-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
         .dash-notification-card { background: ${this.isDark ? 'rgba(15,15,20,0.98)' : 'rgba(255,255,255,0.97)'}; border: 1px solid var(--dash-border); border-radius: 18px; box-shadow: 0 18px 40px rgba(0,0,0,0.28); overflow: hidden; backdrop-filter: blur(18px); }
         .dash-notification-item { display:flex; gap:10px; padding:14px 16px; border-bottom:1px solid var(--dash-border); }
         .dash-notification-item:last-child { border-bottom:none; }
@@ -704,9 +703,12 @@ export class DashboardScreen extends BaseScreen {
           <div class="bottom">Personalizado</div>
         </div>
         <div class="dash-streak"><span>🔥</span><span>${this.streak}</span></div>
-        <button class="dash-btn-icon" data-toggle-notifications title="Ver notificações" style="position:relative;">
-          🔔
-          ${unreadCount > 0 ? `<span style="position:absolute;top:6px;right:6px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#f0059a;color:#fff;font-size:10px;line-height:18px;font-weight:800;box-shadow:0 0 0 2px ${this.isDark ? '#0b0b0d' : '#fff'};">${unreadCount}</span>` : ''}
+        <button class="dash-bell-btn" data-toggle-notifications aria-label="Notificações" style="position:relative;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,255,255,0.07);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;flex-shrink:0;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:rgba(255,255,255,0.85)">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          ${unreadCount > 0 ? `<span style="position:absolute;top:6px;right:6px;width:9px;height:9px;background:#f0059a;border-radius:50%;border:2px solid var(--dash-bg,#0f0f1a);box-shadow:0 0 6px rgba(240,5,154,0.8);"></span>` : ''}
         </button>
       </div>
     `;
@@ -776,7 +778,6 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderNotificationPanel() {
-    if (!this.notificationPanelOpen) return '';
     const notifications = Array.isArray(this.notifications) ? this.notifications.slice(0, 8) : [];
     return `
       <div class="dash-notification-panel">
@@ -786,7 +787,10 @@ export class DashboardScreen extends BaseScreen {
               <div style="color:var(--dash-text);font-weight:800;font-size:16px;">Notificações</div>
               <div style="color:var(--dash-muted);font-size:12px;">Histórico recente da sua conta</div>
             </div>
-            <button class="dash-ghost-btn" data-mark-notifications-read style="min-height:34px;padding:8px 10px;border-radius:10px;font-size:12px;">Marcar lidas</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="dash-ghost-btn" data-mark-notifications-read style="min-height:34px;padding:8px 10px;border-radius:10px;font-size:12px;">Marcar lidas</button>
+              <button data-close-notification-panel aria-label="Fechar notificações" style="width:32px;height:32px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--dash-muted);font-size:16px;line-height:1;">✕</button>
+            </div>
           </div>
           <div style="max-height:360px;overflow:auto;">
             ${notifications.length ? notifications.map(notification => `
@@ -1398,13 +1402,13 @@ export class DashboardScreen extends BaseScreen {
           <div style="color:var(--dash-text);font-weight:600;font-size:14px;margin-bottom:10px;">Cor do avatar</div>
           <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:center;">
             ${PROFILE_COLORS.map(color => `<button class="dash-chip" data-avatar-color="${color}" style="width:40px;height:40px;padding:0;border-radius:50%;background:${color}33;border:3px solid ${this.profileAvatar.color === color ? color : 'transparent'};display:flex;align-items:center;justify-content:center;">${this.profileAvatar.color === color ? '✓' : ''}</button>`).join('')}
-            <button class="dash-chip" data-avatar-color-picker style="width:40px;height:40px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid ${!PROFILE_COLORS.includes(this.profileAvatar.color) ? this.profileAvatar.color : 'transparent'};background:conic-gradient(from 0deg, #ff0033, #ff8800, #ffee00, #26ff00, #00ffe1, #0066ff, #9900ff, #ff0077, #ff0033);">
-              <span style="width:24px;height:24px;border-radius:50%;background:${this.profileAvatar.color};border:2px solid rgba(255,255,255,0.35);"></span>
-            </button>
-            <input type="color" aria-label="Escolher cor do avatar" data-avatar-color-input value="${this.profileAvatar.color}" style="position:absolute;left:-9999px;opacity:0;" />
+            <label class="dash-chip dash-chip-chroma" style="position:relative;width:40px;height:40px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;border:3px solid ${!PROFILE_COLORS.includes(this.profileAvatar.color) ? this.profileAvatar.color : 'transparent'};background:conic-gradient(from 0deg,#ff0033,#ff8800,#ffee00,#26ff00,#00ffe1,#0066ff,#9900ff,#ff0077,#ff0033);flex-shrink:0;">
+              <span style="width:24px;height:24px;border-radius:50%;background:${this.profileAvatar.color};border:2px solid rgba(255,255,255,0.35);display:block;"></span>
+              <input type="color" data-avatar-color-input value="${this.profileAvatar.color}" style="position:absolute;width:1px;height:1px;opacity:0;border:0;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;" />
+            </label>
           </div>
           <div style="color:var(--dash-text);font-weight:600;font-size:14px;margin-bottom:8px;">Apelido público</div>
-          <input class="dash-input" data-avatar-nick value="${this.profileAvatar.nick}" placeholder="@seunome" />
+          <input class="dash-input" data-avatar-nick value="${this.profileAvatar.nick}" placeholder="@seunome" maxlength="25" />
         </div>
         <button class="dash-primary-btn" data-profile-save style="width:100%;font-size:16px;margin:14px 0;">✓ Salvar meu perfil</button>
         <div style="color:var(--dash-text);font-weight:700;font-size:16px;margin:14px 0 10px;">🎛️ Tema</div>
@@ -1428,6 +1432,62 @@ export class DashboardScreen extends BaseScreen {
     `;
   }
 
+  _openEmojiPickerModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'emoji-picker-overlay';
+    overlay.innerHTML = `
+      <div class="emoji-picker-modal" role="dialog" aria-label="Escolher emoji do avatar">
+        <button class="emoji-picker-close" type="button" aria-label="Fechar">✕</button>
+        <h3 class="emoji-picker-title">Escolha seu emoji</h3>
+        <div class="emoji-picker-preview" style="background:${this.profileAvatar.color};">
+          <span id="emoji-preview-glyph">${this.profileAvatar.emoji || '?'}</span>
+        </div>
+        <input type="text" class="emoji-picker-input" id="emoji-picker-input" maxlength="8" autocomplete="off" autocapitalize="off" inputmode="text" placeholder="Digite ou cole 1 emoji" />
+        <p class="emoji-picker-hint">No celular, use o teclado de emoji. No PC: <strong>Win + .</strong> (Windows) ou <strong>Ctrl + Cmd + Espaço</strong> (Mac).</p>
+        <div class="emoji-picker-actions">
+          <button type="button" class="dash-ghost-btn" id="emoji-picker-cancel">Cancelar</button>
+          <button type="button" class="dash-primary-btn" id="emoji-picker-save" disabled>Salvar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('#emoji-picker-input');
+    const preview = overlay.querySelector('#emoji-preview-glyph');
+    const saveBtn = overlay.querySelector('#emoji-picker-save');
+
+    const isOneEmoji = (s) => {
+      const t = (s || '').trim();
+      if (!t) return false;
+      try {
+        const segs = [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(t)];
+        return segs.length === 1 && /\p{Extended_Pictographic}/u.test(segs[0].segment);
+      } catch {
+        return t.length <= 4 && t.trim().length > 0;
+      }
+    };
+
+    input.addEventListener('input', () => {
+      const v = input.value.trim();
+      const valid = isOneEmoji(v);
+      saveBtn.disabled = !valid;
+      if (valid) preview.textContent = v;
+    });
+
+    const close = () => overlay.remove();
+    overlay.querySelector('.emoji-picker-close').addEventListener('click', close);
+    overlay.querySelector('#emoji-picker-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector('#emoji-picker-save').addEventListener('click', () => {
+      const v = input.value.trim();
+      if (!isOneEmoji(v)) return;
+      this.profileAvatar = { ...this.profileAvatar, emoji: v };
+      this.mountPreservingScroll();
+      close();
+    });
+    setTimeout(() => input.focus(), 100);
+  }
+
   setupEventListeners() {
     this.element.querySelectorAll('[data-nav-item]').forEach(button => {
       button.addEventListener('click', () => {
@@ -1443,9 +1503,46 @@ export class DashboardScreen extends BaseScreen {
     });
 
     this.element.querySelector('[data-toggle-notifications]')?.addEventListener('click', () => {
-      this.notificationPanelOpen = !this.notificationPanelOpen;
-      this.mountPreservingScroll();
+      const panel = this.element.querySelector('.dash-notification-panel');
+      const bell = this.element.querySelector('[data-toggle-notifications]');
+      if (panel) {
+        const isOpen = panel.classList.toggle('is-open');
+        if (bell) bell.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      }
     });
+
+    this.element.querySelector('[data-close-notification-panel]')?.addEventListener('click', () => {
+      const panel = this.element.querySelector('.dash-notification-panel');
+      const bell = this.element.querySelector('[data-toggle-notifications]');
+      if (panel) {
+        panel.classList.remove('is-open');
+        if (bell) bell.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // click-outside handler for notification panel
+    if (!this._outsideClickHandler) {
+      this._outsideClickHandler = (e) => {
+        const panel = this.element.querySelector('.dash-notification-panel');
+        const bell = this.element.querySelector('[data-toggle-notifications]');
+        if (panel && panel.classList.contains('is-open') && !panel.contains(e.target) && bell && !bell.contains(e.target)) {
+          panel.classList.remove('is-open');
+          bell.setAttribute('aria-expanded', 'false');
+        }
+      };
+      document.addEventListener('mousedown', this._outsideClickHandler);
+    }
+    if (!this._escHandler) {
+      this._escHandler = (e) => {
+        if (e.key === 'Escape') {
+          const panel = this.element.querySelector('.dash-notification-panel');
+          if (panel && panel.classList.contains('is-open')) {
+            panel.classList.remove('is-open');
+          }
+        }
+      };
+      document.addEventListener('keydown', this._escHandler);
+    }
 
     this.element.querySelector('[data-mark-notifications-read]')?.addEventListener('click', async () => {
       await this.markAllNotificationsRead();
@@ -1514,7 +1611,7 @@ export class DashboardScreen extends BaseScreen {
       if (recipe) {
         this.selectedRecipe = recipe;
         this.currentNav = 'receitas';
-        this.mountPreservingScroll();
+        this.mount();
       }
     });
 
@@ -1640,32 +1737,14 @@ export class DashboardScreen extends BaseScreen {
       });
     });
 
-    this.element.querySelector('[data-avatar-custom]')?.addEventListener('click', async () => {
-      // open a small prompt/modal to accept emoji input (touch-friendly)
-      const { notificationService } = await import('../modules/notifications.js');
-      const emoji = prompt('Cole ou digite um emoji para usar como avatar (ex: 🐱, 🌸):', this.profileAvatar.emoji || '🌙');
-      if (emoji) {
-        this.profileAvatar = { ...this.profileAvatar, emoji: emoji.trim().slice(0,2) };
-        this.mountPreservingScroll();
-        notificationService.toast('Emoji atualizado', { });
-      }
+    this.element.querySelector('[data-avatar-custom]')?.addEventListener('click', () => {
+      this._openEmojiPickerModal();
     });
 
     this.element.querySelector('[data-avatar-color-input]')?.addEventListener('change', event => {
       const color = event.target.value;
       this.profileAvatar = { ...this.profileAvatar, color };
       this.mountPreservingScroll();
-    });
-
-    this.element.querySelector('[data-avatar-color-picker]')?.addEventListener('click', (event) => {
-      event.preventDefault();
-      const previousScroll = this.element.querySelector('.dash-content')?.scrollTop || 0;
-      const input = this.element.querySelector('[data-avatar-color-input]');
-      setTimeout(() => input?.click(), 0);
-      requestAnimationFrame(() => {
-        const nextHost = this.element.querySelector('.dash-content');
-        if (nextHost) nextHost.scrollTop = previousScroll;
-      });
     });
 
     this.element.querySelectorAll('[data-tip-vote]').forEach(button => {

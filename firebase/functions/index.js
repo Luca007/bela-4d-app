@@ -24,6 +24,34 @@ initializeApp();
 const db = getFirestore();
 
 // ─────────────────────────────────────────────
+// ACHIEVEMENTS CATALOG (mirror from constants.js)
+// ─────────────────────────────────────────────
+const ACHIEVEMENTS_CATALOG = [
+  { id: 'first_step', title: 'Primeiro Passo', description: 'Completar onboarding', xp: 100, icon: '🎉' },
+  { id: 'organized', title: 'Organizado', description: 'Preencher todos os 5 formulários', xp: 200, icon: '📋' },
+  { id: 'scientist', title: 'Cientista', description: 'Upload do primeiro exame', xp: 50, icon: '🔬' },
+  { id: 'chef_formation', title: 'Chef em Formação', description: 'Gerar 3 receitas', xp: 75, icon: '👨‍🍳' },
+  { id: 'chef_confirmed', title: 'Chef Confirmado', description: 'Gerar 10 receitas', xp: 150, icon: '🍽️' },
+  { id: 'conversationalist', title: 'Conversador', description: 'Enviar 10 mensagens no chat', xp: 50, icon: '💬' },
+  { id: 'consistent', title: 'Consistente', description: 'Login por 7 dias seguidos', xp: 100, icon: '📅' },
+  { id: 'iron_fire', title: 'Ferro e Fogo', description: 'Login por 30 dias seguidos', xp: 500, icon: '🔥' },
+  { id: 'explorer', title: 'Explorador', description: 'Usar Avaliador Alimentar 5 vezes', xp: 75, icon: '🧭' },
+  { id: 'top_10', title: 'Comunidade Top 10', description: 'Entrar no top 10 do ranking', xp: 200, icon: '🏆' },
+  { id: 'veteran', title: 'Veterano', description: '90 dias de conta ativa', xp: 1000, icon: '🎖️' },
+  { id: 'gmp_master', title: 'Mestre GMP', description: 'Atingir nível 5', xp: 1000, icon: '👑' },
+  { id: 'night_owl', title: 'Coruja Noturna', description: 'Acessar entre 23h e 5h em 3 dias diferentes', xp: 75, icon: '🦉', hidden: true },
+  { id: 'early_bird', title: 'Madrugadora', description: 'Acessar entre 5h e 7h em 5 dias diferentes', xp: 75, icon: '🌅', hidden: true },
+  { id: 'recipe_curator', title: 'Curadora', description: 'Favoritar 5 receitas', xp: 100, icon: '❤️', hidden: true },
+  { id: 'food_explorer_pro', title: 'Exploradora Pro', description: 'Avaliar 25 alimentos diferentes', xp: 200, icon: '🔍', hidden: true },
+  { id: 'streak_breaker', title: 'Persistente', description: 'Retomar o app após perder um dia de streak', xp: 50, icon: '💪', hidden: true },
+  { id: 'polymath', title: 'Polivalente', description: 'Usar 5 abas diferentes do app em menos de 24 horas', xp: 80, icon: '🌐', hidden: true },
+  { id: 'chat_marathoner', title: 'Maratonista', description: 'Enviar 30 mensagens para a Guardiã em um único dia', xp: 150, icon: '🏃', hidden: true },
+  { id: 'forms_finished', title: 'Formulários em Dia', description: 'Completar o formulário de saúde e o cardápio', xp: 200, icon: '✅', hidden: true },
+  { id: 'iron_will', title: 'Vontade de Ferro', description: 'Fazer login 60 vezes no total', xp: 600, icon: '🛡️', hidden: true },
+  { id: 'gmp_legend', title: 'Lenda 4D', description: 'Acumular 5000 XP', xp: 1500, icon: '🌟', hidden: true },
+];
+
+// ─────────────────────────────────────────────
 // SECRETS — definir via: firebase functions:secrets:set N8N_BASE_URL
 // ─────────────────────────────────────────────
 const secretN8nBaseUrl = defineSecret('N8N_BASE_URL');
@@ -55,23 +83,72 @@ function log(severity, message, data = {}) {
 
 // Helper: desbloqueia conquista (idempotente)
 async function unlockAchievement(uid, achievementId) {
-  try {
-    const ref = db.doc(`users/${uid}/achievements/${achievementId}`);
-    const existing = await ref.get();
-    if (existing.exists) return false;
-    await ref.set({ id: achievementId, unlocked: true, seen: false, unlockedAt: FieldValue.serverTimestamp() }, { merge: true });
+  const achRef = db.collection('users').doc(uid).collection('achievements').doc(achievementId);
+  const snap = await achRef.get();
+  if (snap.exists) return; // idempotente
 
-    await db.collection(`users/${uid}/pendingActions`).add({
-      type: 'achievement_unlocked',
-      seen: false,
-      message: `Nova conquista desbloqueada!`,
-      payload: { achievementId },
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    return true;
+  const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === achievementId);
+  if (!achievement) { log('warn', `Achievement not found: ${achievementId}`); return; }
+
+  const batch = db.batch();
+
+  // Write achievement
+  batch.set(achRef, { unlockedAt: FieldValue.serverTimestamp(), xpAwarded: achievement.xp });
+
+  // Persistent notification in bell dropdown
+  const notifRef = db.collection('users').doc(uid).collection('notifications').doc();
+  batch.set(notifRef, {
+    title: `🏆 ${achievement.title}`,
+    message: `${achievement.description}${achievement.xp ? ` (+${achievement.xp} XP)` : ''}`,
+    type: 'achievement',
+    priority: achievement.xp >= 500 ? 'high' : 'normal',
+    channel: 'app',
+    payload: { achievementId },
+    read: false,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  // pendingAction for visual popup in the app
+  const paRef = db.collection('users').doc(uid).collection('pendingActions').doc();
+  batch.set(paRef, {
+    type: 'achievement_unlocked',
+    achievementId,
+    seen: false,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  await batch.commit();
+  log('info', `Achievement unlocked: ${achievementId} for user ${uid}`);
+
+  // Award XP (after batch to avoid Firestore contention)
+  try {
+    await awardXp(uid, achievement.xp, `achievement_${achievementId}`);
   } catch (e) {
-    console.error('[Functions] unlockAchievement error:', e.message);
-    return false;
+    log('error', 'awardXp after achievement failed', { error: e.message });
+  }
+}
+
+// Helper: concede XP ao usuário (backend)
+async function awardXp(uid, xpAmount, eventId = null) {
+  if (!xpAmount || xpAmount <= 0) return;
+  try {
+    const userRef = db.collection('users').doc(uid);
+    const userSnap = await userRef.get();
+    const data = userSnap.exists ? userSnap.data() : {};
+    const newXp = (data.xp || 0) + xpAmount;
+
+    await userRef.set({ xp: newXp, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+    if (eventId) {
+      await db.collection('users').doc(uid).collection('xpLog').add({
+        eventId,
+        xpAwarded: xpAmount,
+        totalXp: newXp,
+        timestamp: FieldValue.serverTimestamp(),
+      });
+    }
+  } catch (e) {
+    log('error', 'awardXp error', { error: e.message });
   }
 }
 
@@ -312,7 +389,16 @@ exports.agentChatMessage = onCall({ region: REGION, secrets: SECRETS }, async (r
       });
     }
 
-    await unlockAchievement(uid, 'chat_starter');
+    // Achievement checks for chat
+    const chatSnap = await db.collection('users').doc(uid).collection('chatHistory').get();
+    const chatCount = chatSnap.size;
+    if (chatCount >= 10) await unlockAchievement(uid, 'conversationalist');
+
+    // chat_marathoner: count messages in last 24h
+    const yesterday = new Date(Date.now() - 86400000);
+    const recentChats = await db.collection('users').doc(uid).collection('chatHistory')
+      .where('timestamp', '>=', yesterday).get();
+    if (recentChats.size >= 30) await unlockAchievement(uid, 'chat_marathoner');
 
     return { success: true, reply: result.reply, type: result.type, recipe: result.recipe };
   } catch (error) {
@@ -355,7 +441,11 @@ exports.generateRecipe = onCall({ region: REGION, secrets: SECRETS }, async (req
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    await unlockAchievement(uid, 'first_recipe');
+    // Achievement checks for recipes
+    const recipesSnap = await db.collection('users').doc(uid).collection('recipes').get();
+    const totalRecipes = recipesSnap.size;
+    if (totalRecipes >= 3) await unlockAchievement(uid, 'chef_formation');
+    if (totalRecipes >= 10) await unlockAchievement(uid, 'chef_confirmed');
 
     return { success: true, recipeId: recipeRef.id, recipe: result.recipe };
   } catch (error) {
@@ -433,9 +523,13 @@ exports.evaluateFood = onCall({ region: REGION, secrets: SECRETS }, async (reque
   try {
     const result = await callN8nWithRetry('4d-evaluate-food', payload);
 
-    // Conquista: 10 alimentos avaliados
-    const evalCount = (await db.collection(`users/${uid}/foodEvaluations`).count().get()).data().count;
-    if (evalCount >= 10) await unlockAchievement(uid, 'food_explorer');
+    // Achievement checks for food evaluations
+    const foodSnap = await db.collection('users').doc(uid).collection('foodEvaluations').get();
+    const totalEvals = foodSnap.size;
+    if (totalEvals >= 5) await unlockAchievement(uid, 'explorer');
+    // food_explorer_pro: count unique foods evaluated
+    const uniqueFoods = new Set(foodSnap.docs.map(d => d.data().foodName || d.data().name)).size;
+    if (uniqueFoods >= 25) await unlockAchievement(uid, 'food_explorer_pro');
 
     return { success: true, evaluation: result.evaluation };
   } catch (error) {
@@ -578,6 +672,10 @@ exports.onBloodTestCallback = onRequest({ region: REGION, secrets: SECRETS }, as
       payload: { bloodTestId },
       createdAt: FieldValue.serverTimestamp(),
     });
+
+    // scientist: first blood test uploaded/processed
+    const bloodSnap = await db.collection('users').doc(uid).collection('bloodTests').get();
+    if (bloodSnap.size <= 1) await unlockAchievement(uid, 'scientist');
 
     res.status(200).json({ success: true });
   } catch (error) {
@@ -739,6 +837,12 @@ exports.onUserStatusUpdated = onDocumentUpdated(
       statusTo: after.status,
       source: 'firestore_status_trigger',
     });
+
+    // Check level-based and XP-based achievements on any user doc update
+    const level = after.level || 1;
+    if (level >= 5) await unlockAchievement(uid, 'gmp_master');
+    const totalXp = after.xp || 0;
+    if (totalXp >= 5000) await unlockAchievement(uid, 'gmp_legend');
   }
 );
 
@@ -772,5 +876,72 @@ exports.updateGlobalRanking = onSchedule(
 
     await batch.commit();
     console.log(`[Ranking] Updated global ranking with ${snapshot.size} users`);
+  }
+);
+
+// ─────────────────────────────────────────────
+// recordSectionVisit — registra visita a uma aba do dashboard
+// ─────────────────────────────────────────────
+exports.recordSectionVisit = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+  const { uid, sectionId } = request.data;
+  if (!uid || !sectionId) throw new HttpsError('invalid-argument', 'uid and sectionId required');
+
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const ref = db.collection('users').doc(uid).collection('sectionVisits').doc(today);
+
+  await ref.set({
+    sections: FieldValue.arrayUnion(sectionId),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  // Check polymath: 5 unique sections in one day
+  const snap = await ref.get();
+  const sections = snap.data()?.sections || [];
+  const uniqueSections = new Set(sections).size;
+  if (uniqueSections >= 5) await unlockAchievement(uid, 'polymath');
+
+  return { recorded: true };
+});
+
+// ─────────────────────────────────────────────
+// evaluateTimeBasedAchievements — scheduled daily
+// ─────────────────────────────────────────────
+exports.evaluateTimeBasedAchievements = onSchedule(
+  { schedule: 'every 24 hours', timeZone: 'America/Sao_Paulo', region: REGION, secrets: SECRETS },
+  async () => {
+    log('info', 'Running evaluateTimeBasedAchievements');
+    const usersSnap = await db.collection('users').limit(500).get();
+
+    const tasks = usersSnap.docs.map(async (userDoc) => {
+      const uid = userDoc.id;
+      const data = userDoc.data();
+
+      try {
+        // veteran: 90 days of account
+        if (data.createdAt) {
+          const created = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+          const ageDays = (Date.now() - created.getTime()) / 86400000;
+          if (ageDays >= 90) await unlockAchievement(uid, 'veteran');
+        }
+
+        // iron_will: 60 total logins
+        const totalLogins = data.totalLogins || 0;
+        if (totalLogins >= 60) await unlockAchievement(uid, 'iron_will');
+
+        // gmp_legend: 5000+ XP
+        const totalXp = data.xp || 0;
+        if (totalXp >= 5000) await unlockAchievement(uid, 'gmp_legend');
+
+        // gmp_master: level 5+
+        const level = data.level || 1;
+        if (level >= 5) await unlockAchievement(uid, 'gmp_master');
+
+      } catch (e) {
+        log('error', `evaluateTimeBasedAchievements failed for ${uid}`, { error: e.message });
+      }
+    });
+
+    await Promise.allSettled(tasks);
+    log('info', `evaluateTimeBasedAchievements done for ${usersSnap.size} users`);
   }
 );

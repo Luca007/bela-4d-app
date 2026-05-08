@@ -17,6 +17,7 @@
 import { getFirestore, firebaseConfig } from '../config/firebase.js';
 import {
   addDoc,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -904,6 +905,26 @@ export class FirestoreService {
     } catch (e) {
       console.error('[Firestore] markActionSeen:', e);
       return false;
+    }
+  }
+
+  /**
+   * Registra visita a uma aba do dashboard.
+   * Escreve diretamente no Firestore (sem Cloud Function).
+   * @param {string} uid
+   * @param {string} sectionId — identificador da aba (e.g. 'chat', 'recipes', 'forms')
+   */
+  async recordSectionVisit(uid, sectionId) {
+    if (!uid || !sectionId) return;
+    try {
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const ref = doc(this.getDb(), 'users', uid, 'sectionVisits', today);
+      await setDoc(ref, {
+        sections: arrayUnion(sectionId),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      console.warn('[Firestore] recordSectionVisit error:', e);
     }
   }
 

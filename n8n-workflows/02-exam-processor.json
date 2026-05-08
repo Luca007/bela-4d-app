@@ -1,0 +1,172 @@
+{
+  "name": "4D Exam Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4d-process-blood-test",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-exam",
+      "name": "Webhook: Recebe Exame",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "4d-process-blood-test"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $request.headers['x-webhook-secret'] }}",
+              "value2": "={{ $env.WEBHOOK_SECRET }}",
+              "operation": "equals"
+            }
+          ]
+        }
+      },
+      "id": "validate-secret-2",
+      "name": "Valida Webhook Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "unauthorized-response-2",
+      "name": "Resposta: Não Autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 460]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "Você é um assistente especializado em análise de exames de sangue. Analise a imagem ou texto do exame de sangue e extraia os marcadores em formato JSON: {markers: [{name: 'string', value: 'string', unit: 'string', reference: 'string', status: 'normal'|'alto'|'baixo'}], summary: 'string', analyzed_date: 'ISO8601'}. Retorne APENAS JSON válido.",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.body.examContent }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "openai-extract-2",
+      "name": "OpenAI: Extrai Marcadores",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FIREBASE_FUNCTIONS_URL }}/onBloodTestCallback",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "uid",
+              "value": "={{ $json.body.uid }}"
+            },
+            {
+              "name": "bloodTestId",
+              "value": "={{ $json.body.bloodTestId }}"
+            },
+            {
+              "name": "extractedData",
+              "value": "={{ JSON.parse($json.choices?.[0]?.message?.content || '{}') }}"
+            },
+            {
+              "name": "processingStatus",
+              "value": "completed"
+            }
+          ]
+        }
+      },
+      "id": "http-firebase-2",
+      "name": "HTTP Request: Firebase Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, extractedData: JSON.parse($json.choices?.[0]?.message?.content || '{}'), processingStatus: 'completed', timestamp: $now.toISO() } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success-response-2",
+      "name": "Resposta: Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Recebe Exame": {
+      "main": [
+        [{ "node": "Valida Webhook Secret", "type": "main", "index": 0 }]
+      ]
+    },
+    "Valida Webhook Secret": {
+      "main": [
+        [{ "node": "OpenAI: Extrai Marcadores", "type": "main", "index": 0 }],
+        [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "OpenAI: Extrai Marcadores": {
+      "main": [
+        [{ "node": "HTTP Request: Firebase Callback", "type": "main", "index": 0 }]
+      ]
+    },
+    "HTTP Request: Firebase Callback": {
+      "main": [
+        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": ["programa-4d", "blood-test", "exames"],
+  "pinData": {},
+  "versionId": "b2c3d4e5-f6a7-b8c9-d0e1-f2a3b4c5d6e7",
+  "id": "exam-processor-002",
+  "_meta": {
+    "description": "Processa exames de sangue em formato de imagem ou texto. Extrai marcadores de sangue usando OpenAI Vision/Chat, envia dados para Firebase via callback e retorna resultado estruturado.",
+    "envVars": {
+      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions",
+      "FIREBASE_FUNCTIONS_URL": "URL base das Cloud Functions do Firebase"
+    },
+    "credentials": {
+      "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
+    },
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "name": "4D Chat Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4d-agent-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-chat",
+      "name": "Webhook: Recebe Mensagem",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "4d-agent-chat"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $request.headers['x-webhook-secret'] }}",
+              "value2": "={{ $env.WEBHOOK_SECRET }}",
+              "operation": "equals"
+            }
+          ]
+        }
+      },
+      "id": "validate-secret-3",
+      "name": "Valida Webhook Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "unauthorized-response-3",
+      "name": "Resposta: Não Autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 460]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "Você é a Guardiã 4D, assistente de saúde especializada em diabetes e nutrição. Responda em português, seja empática e use linguagem acessível. Se detectar intenção de criar receita, retorne JSON com type:'recipe' e a receita. Caso contrário, retorne type:'text' com sua resposta.",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.body.message }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "openai-chat-3",
+      "name": "OpenAI: Chat Guardiã 4D",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json.choices?.[0]?.message?.content || '{}';\nlet parsed;\ntry {\n  parsed = JSON.parse(response);\n} catch (e) {\n  parsed = { type: 'text', reply: response };\n}\n\nreturn [{ json: { success: true, reply: parsed.reply || response, type: parsed.type || 'text', recipe: parsed.recipe || null, xpAwarded: 5 } }];"
+      },
+      "id": "code-parse-3",
+      "name": "Code: Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: $json.success, reply: $json.reply, type: $json.type, recipe: $json.recipe, xpAwarded: $json.xpAwarded, timestamp: $now.toISO() } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success-response-3",
+      "name": "Resposta: Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Recebe Mensagem": {
+      "main": [
+        [{ "node": "Valida Webhook Secret", "type": "main", "index": 0 }]
+      ]
+    },
+    "Valida Webhook Secret": {
+      "main": [
+        [{ "node": "OpenAI: Chat Guardiã 4D", "type": "main", "index": 0 }],
+        [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "OpenAI: Chat Guardiã 4D": {
+      "main": [
+        [{ "node": "Code: Parse Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Code: Parse Response": {
+      "main": [
+        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": ["programa-4d", "chat", "guardião"],
+  "pinData": {},
+  "versionId": "c3d4e5f6-a7b8-c9d0-e1f2-a3b4c5d6e7f8",
+  "id": "chat-processor-003",
+  "_meta": {
+    "description": "Processador de chat com Guardiã 4D - assistente de saúde especializada em diabetes e nutrição. Detecta intenção de receita e retorna resposta estruturada com type (text/recipe), reply e XP awarded.",
+    "envVars": {
+      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions"
+    },
+    "credentials": {
+      "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
+    },
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+  }
+}

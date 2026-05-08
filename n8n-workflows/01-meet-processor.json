@@ -1,0 +1,172 @@
+{
+  "name": "4D Meet Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4d-process-transcript",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-transcript",
+      "name": "Webhook: Recebe Transcrição",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "4d-process-transcript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $request.headers['x-webhook-secret'] }}",
+              "value2": "={{ $env.WEBHOOK_SECRET }}",
+              "operation": "equals"
+            }
+          ]
+        }
+      },
+      "id": "validate-secret-1",
+      "name": "Valida Webhook Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "unauthorized-response-1",
+      "name": "Resposta: Não Autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 460]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "Você é um assistente especializado em extração de dados de saúde. Analise a transcrição da consulta e extraia os seguintes dados em formato JSON: {diagnoses: [], medications: [], allergies: [], suggestedStatus: 'string'}. Retorne APENAS o JSON válido.",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.body.transcript }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "openai-extract-1",
+      "name": "OpenAI: Extrai Dados de Saúde",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FIREBASE_FUNCTIONS_URL }}/onTranscriptCallback",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "uid",
+              "value": "={{ $json.body.uid }}"
+            },
+            {
+              "name": "hasBloodTest",
+              "value": "={{ $json.body.hasBloodTest || false }}"
+            },
+            {
+              "name": "extractedHealthData",
+              "value": "={{ JSON.parse($json.choices?.[0]?.message?.content || '{}') }}"
+            },
+            {
+              "name": "suggestedStatus",
+              "value": "={{ JSON.parse($json.choices?.[0]?.message?.content || '{}').suggestedStatus || 'pending' }}"
+            }
+          ]
+        }
+      },
+      "id": "http-firebase-1",
+      "name": "HTTP Request: Firebase Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, extractedHealthData: JSON.parse($json.choices?.[0]?.message?.content || '{}'), timestamp: $now.toISO() } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success-response-1",
+      "name": "Resposta: Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Recebe Transcrição": {
+      "main": [
+        [{ "node": "Valida Webhook Secret", "type": "main", "index": 0 }]
+      ]
+    },
+    "Valida Webhook Secret": {
+      "main": [
+        [{ "node": "OpenAI: Extrai Dados de Saúde", "type": "main", "index": 0 }],
+        [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "OpenAI: Extrai Dados de Saúde": {
+      "main": [
+        [{ "node": "HTTP Request: Firebase Callback", "type": "main", "index": 0 }]
+      ]
+    },
+    "HTTP Request: Firebase Callback": {
+      "main": [
+        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": ["programa-4d", "transcript", "processamento"],
+  "pinData": {},
+  "versionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "id": "meet-processor-001",
+  "_meta": {
+    "description": "Processa transcrições de consultas e extrair dados de saúde (diagnósticos, medicamentos, alergias, status sugerido). Valida webhook secret, envia dados para Firebase via HTTP callback e responde com dados extraídos.",
+    "envVars": {
+      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions",
+      "FIREBASE_FUNCTIONS_URL": "URL base das Cloud Functions do Firebase"
+    },
+    "credentials": {
+      "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
+    },
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+  }
+}

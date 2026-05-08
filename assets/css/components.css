@@ -507,6 +507,156 @@ input[type='range']::-moz-range-thumb {
   50% { opacity: 1; }
 }
 
+/* ============================================================
+   Emoji Picker Modal
+   ============================================================ */
+.emoji-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 200ms ease;
+}
+
+.emoji-picker-modal {
+  background: var(--dash-surface, #1a1a22);
+  border-radius: 22px;
+  padding: 28px;
+  max-width: 360px;
+  width: calc(100vw - 40px);
+  position: relative;
+  text-align: center;
+  border: 1px solid var(--dash-border, rgba(255,255,255,0.1));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  animation: modalIn 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.emoji-picker-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emoji-picker-title {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--dash-text, #fff);
+}
+
+.emoji-picker-preview {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  margin: 18px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  transition: background 0.2s;
+}
+
+.emoji-picker-input {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 28px;
+  text-align: center;
+  border-radius: 12px;
+  border: 1.5px solid var(--dash-border, rgba(255,255,255,0.12));
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--dash-text, #fff);
+  outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.emoji-picker-input:focus {
+  border-color: rgba(240, 5, 154, 0.6);
+}
+
+.emoji-picker-hint {
+  font-size: 12px;
+  color: var(--dash-muted, rgba(255,255,255,0.45));
+  margin: 10px 0 0;
+  line-height: 1.4;
+}
+
+.emoji-picker-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.emoji-picker-actions button {
+  flex: 1;
+}
+
+/* ============================================================
+   Notification Dropdown Animations & Mobile Bottom Sheet
+   ============================================================ */
+.dash-notification-panel {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.97);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.dash-notification-panel.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.dash-notification-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+}
+
+@media (max-width: 600px) {
+  .dash-notification-panel {
+    position: fixed !important;
+    bottom: 0 !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 18px 18px 0 0 !important;
+    max-height: 70vh;
+    overflow-y: auto;
+    transform: translateY(20px) scale(1) !important;
+  }
+  .dash-notification-panel.is-open {
+    transform: translateY(0) scale(1) !important;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 /* Icon styles */
 .icon {
   width: 1em;
