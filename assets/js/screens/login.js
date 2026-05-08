@@ -5,6 +5,7 @@ import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
+import { notificationService } from '../modules/notifications.js';
 import { State, Session } from '../utils/helpers.js';
 
 export class LoginScreen extends BaseScreen {
@@ -225,6 +226,9 @@ export class LoginScreen extends BaseScreen {
 
       if (result.success) {
         const userProfile = await firestoreService.getUserProfile(result.uid);
+
+        // Toast efêmero de boas-vindas (não persistir)
+        notificationService.toast('Bem-vinda! 🌸', { type: 'success' });
 
         if (userProfile && userProfile.onboardingCompleted) {
           Session.set('onboardingCompleted', true);

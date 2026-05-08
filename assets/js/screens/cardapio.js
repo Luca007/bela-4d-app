@@ -513,7 +513,12 @@ export class CardapioScreen extends BaseScreen {
       const saved = await firestoreService.saveMenuForm(uid, formData, true);
       if (!saved) throw new Error('saveMenuForm failed');
 
-      notificationService.toast('Cardápio salvo com sucesso!', { type: 'success' });
+      notificationService.notify({
+        uid,
+        title: 'Cardápio salvo',
+        message: 'Cardápio salvo com sucesso!',
+        type: 'success',
+      });
       this.params.onNavigate?.(SCREENS.DASHBOARD);
     } catch (error) {
       console.error('[Cardapio] submit error:', error);

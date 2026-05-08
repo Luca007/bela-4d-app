@@ -152,6 +152,42 @@ class NotificationService {
       close: () => overlay.remove()
     };
   }
+
+  /**
+   * Notifica COM persistência: dispara toast E grava em users/{uid}/notifications.
+   * Idempotente em chamadas paralelas (não bloqueia o toast se a gravação falhar).
+   *
+   * @param {Object} opts
+   *   uid       — string  (obrigatório para persistir; sem uid, só dispara toast)
+   *   title     — string
+   *   message   — string  (texto do toast)
+   *   type      — 'success'|'error'|'warning'|'status'|'info'
+   *   priority  — 'urgent'|'high'|'normal'|'low'
+   *   payload   — qualquer dado contextual
+   *   persist   — boolean (default: true)
+   *   duration  — ms do toast (default: 3200)
+   * @returns {Promise<{notificationId: string|null}>}
+   */
+  async notify({ uid, title, message, type = 'status', priority = 'normal', payload = null, persist = true, duration = 3200 } = {}) {
+    if (message) this.toast(message, { type, duration });
+    if (!persist || !uid) return { notificationId: null };
+
+    try {
+      const { firestoreService } = await import('../services/firestore.js');
+      const id = await firestoreService.createNotification(uid, {
+        title: title || message?.slice(0, 60) || 'Notificação',
+        message: message || '',
+        type,
+        priority,
+        channel: 'app',
+        payload,
+      });
+      return { notificationId: id };
+    } catch (error) {
+      console.error('[NotificationService] notify persist error:', error);
+      return { notificationId: null };
+    }
+  }
 }
 
 export const notificationService = new NotificationService();

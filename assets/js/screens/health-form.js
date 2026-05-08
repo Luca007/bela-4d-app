@@ -20,6 +20,7 @@ import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
 import { firestoreService } from '../services/firestore.js';
+import { notificationService } from '../modules/notifications.js';
 import { HEALTH_FORM_SECTIONS, DIAGNOSTIC_OPTIONS } from '../config/constants.js';
 
 export class HealthFormScreen extends BaseScreen {
@@ -283,6 +284,7 @@ export class HealthFormScreen extends BaseScreen {
     const isLast = this.currentSection === this.totalSections - 1;
     const next = UIComponents.primaryButton(isLast ? '✅ Concluir Formulário' : 'Próximo →');
     next.style.flex = '2';
+    if (isLast) this._submitBtn = next;
     next.addEventListener('click', () => isLast ? this._submitForm() : this._goToSection(this.currentSection + 1));
     navBtns.appendChild(next);
 
@@ -802,6 +804,9 @@ export class HealthFormScreen extends BaseScreen {
     if (this.isSaving) return;
     this.isSaving = true;
 
+    const submitBtn = this._submitBtn;
+    const restoreBtn = submitBtn ? UIComponents.setButtonLoading(submitBtn, 'Salvando...') : null;
+
     try {
       const saved = await firestoreService.saveHealthForm(
         this.uid,
@@ -810,6 +815,12 @@ export class HealthFormScreen extends BaseScreen {
       );
 
       if (saved) {
+        notificationService.notify({
+          uid: this.uid,
+          title: 'Formulário concluído',
+          message: 'Seu formulário de saúde foi salvo!',
+          type: 'success',
+        });
         this._showSuccessToast();
         setTimeout(() => {
           this.params.onNavigate?.('dashboard');
@@ -824,6 +835,7 @@ export class HealthFormScreen extends BaseScreen {
       }
     } finally {
       this.isSaving = false;
+      if (restoreBtn) restoreBtn();
     }
   }
 

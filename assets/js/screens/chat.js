@@ -6,6 +6,7 @@ import { firestoreService } from '../services/firestore.js';
 import { authService } from '../services/auth.js';
 import { getFunctions } from '../config/firebase.js';
 import { buildChatPayload } from '../config/n8n.js';
+import { notificationService } from '../modules/notifications.js';
 
 let chatFunction = null;
 
@@ -135,6 +136,13 @@ export class ChatScreen extends BaseScreen {
 
         // Se a IA sugeriu uma receita, mostra inline
         if (result.data.type === 'recipe' && result.data.recipe) {
+          notificationService.notify({
+            uid: authService.currentUser.uid,
+            title: 'Nova receita gerada',
+            message: `A Guardiã criou uma receita: ${result.data.recipe.title}`,
+            type: 'success',
+            payload: { recipeId: result.data.recipe.id },
+          });
           this.showRecipeInChat(result.data.recipe);
         }
 

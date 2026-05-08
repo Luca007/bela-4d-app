@@ -203,6 +203,24 @@ export const UIComponents = {
     setTimeout(() => toast.remove(), 3000);
   },
 
+  /**
+   * Coloca um botão em estado de loading (disable + spinner inline).
+   * Retorna função `restore()` que devolve o botão ao estado original.
+   * @param {HTMLButtonElement} btn
+   * @param {string} loadingText texto durante o loading
+   */
+  setButtonLoading(btn, loadingText = 'Aguarde...') {
+    if (!btn) return () => {};
+    const originalHtml = btn.innerHTML;
+    const originalDisabled = btn.disabled;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="btn-spinner"></span>${loadingText}`;
+    return () => {
+      btn.disabled = originalDisabled;
+      btn.innerHTML = originalHtml;
+    };
+  },
+
   // Loading spinner
   spinner({ size = 18, color = null, thickness = 2.5 } = {}) {
     const spinner = DOM.create('div', 'spinner');

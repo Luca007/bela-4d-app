@@ -474,7 +474,7 @@ export class DashboardScreen extends BaseScreen {
     const loader = UIComponents.loaderOverlay({ message: 'Marcando notificações como lidas...', color: '#f0059a' });
     document.body.appendChild(loader);
     try {
-      await Promise.all(unread.map(notification => firestoreService.saveUserData(this.currentUser.uid, `notifications/${notification.id}`, { ...notification, read: true })));
+      await Promise.all(unread.map(notification => firestoreService.markNotificationRead(this.currentUser.uid, notification.id)));
     } catch (error) {
       console.error('[DashboardV2] markAllNotificationsRead failed:', error);
     } finally {
@@ -703,11 +703,11 @@ export class DashboardScreen extends BaseScreen {
           <div class="top">Guia Metabólico</div>
           <div class="bottom">Personalizado</div>
         </div>
+        <div class="dash-streak"><span>🔥</span><span>${this.streak}</span></div>
         <button class="dash-btn-icon" data-toggle-notifications title="Ver notificações" style="position:relative;">
           🔔
           ${unreadCount > 0 ? `<span style="position:absolute;top:6px;right:6px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#f0059a;color:#fff;font-size:10px;line-height:18px;font-weight:800;box-shadow:0 0 0 2px ${this.isDark ? '#0b0b0d' : '#fff'};">${unreadCount}</span>` : ''}
         </button>
-        <div class="dash-streak"><span>🔥</span><span>${this.streak}</span></div>
       </div>
     `;
   }
@@ -887,7 +887,7 @@ export class DashboardScreen extends BaseScreen {
             <div style="color:var(--dash-muted);font-size:13px;">Baseada no horário atual</div>
           </div>
         </div>
-        <div class="dash-card pad" style="border-color: rgba(31,204,116,0.2); background: rgba(31,204,116,0.04); display:flex; gap:16px; align-items:flex-start;">
+        <div class="dash-card pad" data-recipe-of-hour="${recipe.id}" style="border-color: rgba(31,204,116,0.2); background: rgba(31,204,116,0.04); display:flex; gap:16px; align-items:flex-start; cursor:pointer;">
           <div style="font-size:44px;line-height:1;flex-shrink:0;">${recipe.e}</div>
           <div style="flex:1;">
             <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:4px;">${recipe.nm}</div>
@@ -1398,10 +1398,10 @@ export class DashboardScreen extends BaseScreen {
           <div style="color:var(--dash-text);font-weight:600;font-size:14px;margin-bottom:10px;">Cor do avatar</div>
           <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:center;">
             ${PROFILE_COLORS.map(color => `<button class="dash-chip" data-avatar-color="${color}" style="width:40px;height:40px;padding:0;border-radius:50%;background:${color}33;border:3px solid ${this.profileAvatar.color === color ? color : 'transparent'};display:flex;align-items:center;justify-content:center;">${this.profileAvatar.color === color ? '✓' : ''}</button>`).join('')}
-            <button class="dash-chip" data-avatar-color-picker style="width:40px;height:40px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--dash-border);background:conic-gradient(from 0deg, #ff0033, #ff8800, #ffee00, #26ff00, #00ffe1, #0066ff, #9900ff, #ff0077, #ff0033);">
+            <button class="dash-chip" data-avatar-color-picker style="width:40px;height:40px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid ${!PROFILE_COLORS.includes(this.profileAvatar.color) ? this.profileAvatar.color : 'transparent'};background:conic-gradient(from 0deg, #ff0033, #ff8800, #ffee00, #26ff00, #00ffe1, #0066ff, #9900ff, #ff0077, #ff0033);">
               <span style="width:24px;height:24px;border-radius:50%;background:${this.profileAvatar.color};border:2px solid rgba(255,255,255,0.35);"></span>
             </button>
-            <input type="color" aria-label="Escolher cor do avatar" data-avatar-color-input value="${this.profileAvatar.color}" style="position:absolute;left:-9999px;opacity:0;pointer-events:none;" />
+            <input type="color" aria-label="Escolher cor do avatar" data-avatar-color-input value="${this.profileAvatar.color}" style="position:absolute;left:-9999px;opacity:0;" />
           </div>
           <div style="color:var(--dash-text);font-weight:600;font-size:14px;margin-bottom:8px;">Apelido público</div>
           <input class="dash-input" data-avatar-nick value="${this.profileAvatar.nick}" placeholder="@seunome" />
@@ -1505,6 +1505,17 @@ export class DashboardScreen extends BaseScreen {
         this.recipesView = button.getAttribute('data-recipes-view') || 'catalogo';
         this.mountPreservingScroll();
       });
+    });
+
+    this.element.querySelector('[data-recipe-of-hour]')?.addEventListener('click', () => {
+      const recipeId = this.element.querySelector('[data-recipe-of-hour]').getAttribute('data-recipe-of-hour');
+      const recipeCatalog = Array.isArray(this.recipes) && this.recipes.length ? this.recipes : RECIPES;
+      const recipe = recipeCatalog.find(item => item.id === recipeId);
+      if (recipe) {
+        this.selectedRecipe = recipe;
+        this.currentNav = 'receitas';
+        this.mountPreservingScroll();
+      }
     });
 
     this.element.querySelectorAll('[data-recipe-open]').forEach(card => {
@@ -1646,9 +1657,11 @@ export class DashboardScreen extends BaseScreen {
       this.mountPreservingScroll();
     });
 
-    this.element.querySelector('[data-avatar-color-picker]')?.addEventListener('click', () => {
+    this.element.querySelector('[data-avatar-color-picker]')?.addEventListener('click', (event) => {
+      event.preventDefault();
       const previousScroll = this.element.querySelector('.dash-content')?.scrollTop || 0;
-      this.element.querySelector('[data-avatar-color-input]')?.click();
+      const input = this.element.querySelector('[data-avatar-color-input]');
+      setTimeout(() => input?.click(), 0);
       requestAnimationFrame(() => {
         const nextHost = this.element.querySelector('.dash-content');
         if (nextHost) nextHost.scrollTop = previousScroll;

@@ -495,6 +495,49 @@ export class FirestoreService {
   }
 
   /**
+   * Cria um documento de notificação em users/{uid}/notifications.
+   * @param {string} uid
+   * @param {Object} data — { title, message, type, priority, channel, payload }
+   * @returns {Promise<string|null>} id do doc criado, ou null
+   */
+  async createNotification(uid, data) {
+    if (!uid) return null;
+    try {
+      const ref = await addDoc(this.subCol(uid, 'notifications'), {
+        title: data.title || 'Notificação',
+        message: data.message || '',
+        type: data.type || 'info',
+        priority: data.priority || 'normal',
+        channel: data.channel || 'app',
+        payload: data.payload || null,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+      return ref.id;
+    } catch (error) {
+      console.error('[FirestoreService] createNotification:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Marca notificação como lida.
+   */
+  async markNotificationRead(uid, notificationId) {
+    if (!uid || !notificationId) return false;
+    try {
+      await updateDoc(this.subDoc(uid, 'notifications', notificationId), {
+        read: true,
+        readAt: serverTimestamp(),
+      });
+      return true;
+    } catch (error) {
+      console.error('[FirestoreService] markNotificationRead:', error);
+      return false;
+    }
+  }
+
+  /**
    * Real-time listener para ações pendentes geradas pela equipe/IA.
    */
   onPendingActionsChange(uid, callback) {

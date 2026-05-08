@@ -226,6 +226,16 @@ class FoodSearchScreen {
       await this.firestore.saveFoodEvaluation(this.uid, this.lastEvaluation);
       this.evaluationHistory.unshift(this.lastEvaluation);
 
+      // Persist notification
+      const { notificationService } = await import('../modules/notifications.js');
+      notificationService.notify({
+        uid: this.uid,
+        title: 'Alimento avaliado',
+        message: `${foodName} foi adicionado ao seu histórico.`,
+        type: 'status',
+        persist: true,
+      });
+
       // Render result
       this._renderEvaluationResult(response);
     } catch (error) {

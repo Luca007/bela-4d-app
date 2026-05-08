@@ -290,14 +290,29 @@ class App {
         if (action.seen) continue;
         switch (action.type) {
           case 'blood_test_processed':
-            notificationService.toast('Exame processado! Preencha o formulário de saúde.', { type: 'success' });
+            notificationService.notify({
+              uid: this.currentUser?.uid,
+              title: 'Exame processado',
+              message: 'Seu exame foi analisado! Preencha o formulário de saúde.',
+              type: 'success',
+            });
             await this.routeByStatus(uid);
             break;
           case 'meeting_analyzed':
-            notificationService.toast('Reunião analisada! Seus dados foram pré-preenchidos.', { type: 'success' });
+            notificationService.notify({
+              uid: this.currentUser?.uid,
+              title: 'Reunião analisada',
+              message: 'Seus dados foram pré-preenchidos com base na reunião.',
+              type: 'success',
+            });
             break;
           case 'recipe_ready':
-            notificationService.toast('Nova receita disponível no chat!', { type: 'status' });
+            notificationService.notify({
+              uid: this.currentUser?.uid,
+              title: 'Nova receita disponível',
+              message: 'A Guardiã preparou uma nova receita para você no chat!',
+              type: 'status',
+            });
             break;
           default:
             notificationService.toast(action.message || 'Você tem uma nova atualização do programa.', { type: 'status' });
