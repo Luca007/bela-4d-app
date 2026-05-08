@@ -116,7 +116,7 @@ async function inject(idToken, uid) {
   const today = new Date().toISOString().split('T')[0];
 
   // 1. User profile
-  console.log('[Seed] 1/8 Perfil do usuário...');
+  console.log('[Seed] 1/10 Perfil do usuário...');
   await patchDoc(idToken, `users/${uid}`, {
     xp: 1500,
     level: 3,
@@ -140,13 +140,92 @@ async function inject(idToken, uid) {
       diagnostics: ['Diabetes tipo 2', 'Hipertensão arterial'],
     },
     diagnostics: ['Diabetes tipo 2', 'Hipertensão arterial'],
+    name: 'Maria Teste',
+    healthFormCompleted: true,
+    menuFormCompleted: true,
+    onboardingCompletedAt: new Date(Date.now() - 30 * 86400000).toISOString(),
     lastLoginAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
-  console.log('[Seed] ✓ Perfil salvo');
+  console.log('[Seed] ✓ Perfil salvo (status: active, onboardingCompleted: true)');
 
-  // 2. Achievements
-  console.log('[Seed] 2/8 Conquistas...');
+  // 2. Onboarding interview (AI-extracted from Google Meet transcript)
+  console.log('[Seed] 2/10 Entrevista de onboarding (transcrição IA)...');
+  await setDoc(idToken, `users/${uid}/onboardingInterview/data`, {
+    extractedHealthData: {
+      diagnostics: ['Diabetes tipo 2', 'Hipertensão arterial'],
+      medications: ['Metformina 850mg 2x/dia', 'Losartana 50mg 1x/dia'],
+      allergies: ['Penicilina'],
+      familyHistory: ['Diabetes (mãe)', 'Hipertensão (pai)'],
+      lifestyle: { smoker: false, alcohol: 'social', exercise: 'sedentário' },
+    },
+    transcript: 'Transcrição da reunião de onboarding (resumida): Maria, 41 anos, diagnosticada com diabetes tipo 2 há 3 anos e hipertensão há 5 anos. Toma metformina e losartana. Sem alergias além de penicilina. Histórico familiar relevante. Quer melhorar a alimentação e perder peso.',
+    suggestedStatus: 'filling_health_form',
+    hasBloodTest: true,
+    processedAt: new Date(Date.now() - 28 * 86400000).toISOString(),
+  });
+  console.log('[Seed] ✓ Entrevista salva');
+
+  // 3. Health form (Form 1) — completed
+  console.log('[Seed] 3/10 Formulário de saúde (Form 1)...');
+  await setDoc(idToken, `users/${uid}/healthForm/data`, {
+    completed: true,
+    aiPrefilled: true,
+    fullName: 'Maria Teste',
+    birthDate: '1985-03-15',
+    gender: 'feminino',
+    weight: 75,
+    height: 165,
+    diagnostics: ['Diabetes tipo 2', 'Hipertensão arterial'],
+    customDiagnostics: '',
+    medications: [
+      { name: 'Metformina', dose: '850mg', frequency: '2x/dia' },
+      { name: 'Losartana', dose: '50mg', frequency: '1x/dia' },
+    ],
+    allergies: 'Penicilina',
+    familyHistory: 'Diabetes (mãe), Hipertensão (pai)',
+    hba1c: 7.2,
+    hba1cDate: '2026-04-01',
+    fastingGlucose: 142,
+    bloodPressure: '130/85',
+    activityLevel: 'sedentário',
+    sleepQuality: 3,
+    stressLevel: 4,
+    smoker: false,
+    alcohol: 'social',
+    waterIntake: '1.5L',
+    doctorConsultation: true,
+    completedAt: new Date(Date.now() - 21 * 86400000).toISOString(),
+    createdAt: new Date(Date.now() - 25 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 21 * 86400000).toISOString(),
+  });
+  console.log('[Seed] ✓ Form 1 salvo');
+
+  // 4. Menu form (Form 3) — completed
+  console.log('[Seed] 4/10 Formulário de cardápio (Form 3)...');
+  await setDoc(idToken, `users/${uid}/menuForm/data`, {
+    completed: true,
+    breakfastTime: '07:00',
+    lunchTime: '12:30',
+    dinnerTime: '19:30',
+    snackPreferences: ['frutas', 'castanhas', 'iogurte natural'],
+    forbiddenFoods: ['carne de porco', 'frutos do mar'],
+    favoriteProteins: ['frango', 'peixe', 'ovos'],
+    dietRestrictions: ['baixo carboidrato', 'pouco sódio'],
+    cookingFrequency: 'diaria',
+    mealPrepStyle: 'rapido',
+    budget: 'medio',
+    kitchenEquipment: ['fogão', 'forno', 'liquidificador', 'air fryer'],
+    weeklyShoppingDay: 'sabado',
+    foodSourcePreference: 'supermercado',
+    completedAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+    createdAt: new Date(Date.now() - 8 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+  });
+  console.log('[Seed] ✓ Form 3 salvo');
+
+  // 5. Achievements
+  console.log('[Seed] 5/10 Conquistas...');
   const achievements = [
     { id: 'first_step', xpAwarded: 100, unlockedAt: new Date(Date.now() - 30 * 86400000).toISOString() },
     { id: 'scientist', xpAwarded: 50, unlockedAt: new Date(Date.now() - 20 * 86400000).toISOString() },
@@ -160,8 +239,27 @@ async function inject(idToken, uid) {
   }
   console.log('[Seed] ✓ Conquistas salvas');
 
-  // 3. Recipes
-  console.log('[Seed] 3/8 Receitas...');
+  // 5b. Blood test (already processed)
+  console.log('[Seed] 5b/10 Exame de sangue (processado)...');
+  await setDoc(idToken, `users/${uid}/bloodTests/seed-blood-test`, {
+    fileName: 'exame_inicial.pdf',
+    fileSize: 245000,
+    fileUrl: 'https://example.com/exames/seed-blood-test.pdf',
+    status: 'done',
+    extractedData: {
+      glucose: 142,
+      hba1c: 7.2,
+      cholesterol: { total: 198, hdl: 45, ldl: 130, triglycerides: 165 },
+      creatinine: 0.9,
+      tsh: 2.4,
+    },
+    processedAt: new Date(Date.now() - 23 * 86400000).toISOString(),
+    createdAt: new Date(Date.now() - 25 * 86400000).toISOString(),
+  });
+  console.log('[Seed] ✓ Exame salvo');
+
+  // 6. Recipes
+  console.log('[Seed] 6/10 Receitas...');
   const recipes = [
     { id: 'recipe-test-1', nm: 'Frango Grelhado com Salada', e: '🍗', desc: 'Receita leve e nutritiva para diabéticos', macros: { calories: 320, protein: 38, carbs: 12, fat: 14 }, favorited: true, createdAt: new Date().toISOString() },
     { id: 'recipe-test-2', nm: 'Omelete de Legumes', e: '🥚', desc: 'Café da manhã proteico e de baixo índice glicêmico', macros: { calories: 280, protein: 22, carbs: 8, fat: 18 }, favorited: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
@@ -172,8 +270,8 @@ async function inject(idToken, uid) {
   }
   console.log('[Seed] ✓ Receitas salvas');
 
-  // 4. Notifications
-  console.log('[Seed] 4/8 Notificações...');
+  // 7. Notifications
+  console.log('[Seed] 7/10 Notificações...');
   const notifications = [
     { title: 'Bem-vinda ao Programa 4D!', message: 'Sua jornada de saúde começa agora. Explore o app!', type: 'welcome', priority: 'high', read: false, createdAt: new Date(Date.now() - 30 * 86400000).toISOString() },
     { title: '🏆 Primeiro Passo', message: 'Completar onboarding (+100 XP)', type: 'achievement', priority: 'normal', read: true, createdAt: new Date(Date.now() - 30 * 86400000).toISOString() },
@@ -185,8 +283,8 @@ async function inject(idToken, uid) {
   }
   console.log('[Seed] ✓ Notificações salvas');
 
-  // 5. Pending actions
-  console.log('[Seed] 5/8 Ações pendentes...');
+  // 8. Pending actions
+  console.log('[Seed] 8/10 Ações pendentes...');
   await addDoc(idToken, `users/${uid}/pendingActions`, {
     type: 'achievement_unlocked',
     achievementId: 'polymath',
@@ -195,8 +293,8 @@ async function inject(idToken, uid) {
   });
   console.log('[Seed] ✓ Ações pendentes salvas');
 
-  // 6. Chat history
-  console.log('[Seed] 6/8 Histórico de chat...');
+  // 9. Chat history
+  console.log('[Seed] 9/10 Histórico de chat...');
   const chatMessages = [
     { role: 'user', content: 'Olá! Quais alimentos devo evitar com diabetes tipo 2?', type: 'text', timestamp: new Date(Date.now() - 2 * 86400000).toISOString() },
     { role: 'assistant', content: 'Olá Maria! Para o diabetes tipo 2, é importante evitar alimentos com alto índice glicêmico como pão branco, arroz branco, doces e refrigerantes. Prefira alimentos integrais, vegetais, proteínas magras e gorduras saudáveis.', type: 'text', timestamp: new Date(Date.now() - 2 * 86400000 + 30000).toISOString() },
@@ -208,16 +306,16 @@ async function inject(idToken, uid) {
   }
   console.log('[Seed] ✓ Chat salvo');
 
-  // 7. Section visits (for polymath achievement)
-  console.log('[Seed] 7/8 Visitas de seção...');
+  // 10a. Section visits (for polymath achievement)
+  console.log('[Seed] 10a/10 Visitas de seção...');
   await setDoc(idToken, `users/${uid}/sectionVisits/${today}`, {
     sections: ['home', 'receitas', 'chat', 'conquistas', 'perfil'],
     updatedAt: new Date().toISOString(),
   });
   console.log('[Seed] ✓ Visitas de seção salvas');
 
-  // 8. XP log
-  console.log('[Seed] 8/8 XP Log...');
+  // 10b. XP log
+  console.log('[Seed] 10b/10 XP Log...');
   const xpEvents = [
     { source: 'daily_login', amount: 10, eventId: 'login_today', timestamp: new Date().toISOString() },
     { source: 'achievement', amount: 100, eventId: 'achievement_first_step', timestamp: new Date(Date.now() - 30 * 86400000).toISOString() },
