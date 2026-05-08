@@ -7,18 +7,20 @@ import { authService } from '../services/auth.js';
 import { getFunctions } from '../config/firebase.js';
 import { buildChatPayload } from '../config/n8n.js';
 import { notificationService } from '../modules/notifications.js';
+import { DOM } from '../utils/helpers.js';
 
 let chatFunction = null;
 
 /**
  * ChatScreen — Chat com IA Guardiã
- * 
+ *
  * Tela interativa do chat em tempo real com a IA.
- * - Exibe histórico de mensagens
- * - Envia mensagens e recebe respostas
- * - Mostra receitas sugeridas dentro do chat
+ * - Exibe histórico de mensagens com visual refatorado
+ * - Envia mensagens e recebe respostas com timeout de 60s
+ * - Mostra receitas sugeridas dentro do chat (recipe cards)
+ * - Banner de receita fixado quando params.recipeId está definido
+ * - Animação "Guardiã está pensando..." durante requisição
  * - Trackeia XP ganho por interações
- * - Estados: loading, error, success
  */
 export class ChatScreen extends BaseScreen {
   constructor(params = {}) {
@@ -28,6 +30,18 @@ export class ChatScreen extends BaseScreen {
     this.chatHistory = [];
     this.isLoading = false;
     this.unsubscribers = [];
+
+    // New visual-refactor state
+    this.thinkingVisible = false;
+    this.thinkingAbortController = null;
+    this.pinnedRecipe = null;
+    this.draftInput = '';
+    this.suggestions = [
+      'Qual a melhor receita para meu diagnóstico?',
+      'Como está meu progresso?',
+      'O que comer no café da manhã?',
+      'Me dê uma dica para hoje',
+    ];
   }
 
   async mount() {
@@ -38,23 +52,37 @@ export class ChatScreen extends BaseScreen {
         chatFunction = functions.httpsCallable('agentChatMessage');
       }
 
+      // Handle pinned recipe from params
+      if (this.params?.recipeId) {
+        this.pinnedRecipe = {
+          id: this.params.recipeId,
+          name: this.params.recipeName || 'Receita',
+          emoji: this.params.recipeEmoji || '🍽️',
+        };
+        const uid = authService.currentUser?.uid;
+        if (uid) this.sessionId = uid + '_recipe_' + this.params.recipeId;
+        this.draftInput = `Quero editar esta receita: ${this.params.recipeName || 'receita'}. O que você sugere?`;
+      }
+
       // Carrega histórico do Firestore
       await this.loadChatHistory();
 
       // Listener em tempo real
-      this.unsubscribers.push(
-        firestoreService.onChatHistoryUpdate?.(authService.currentUser.uid, (messages) => {
-          this.chatHistory = messages;
-          this.render();
-        })
-      );
-
-      // Se é primeira mensagem, mostra placeholder com sugestões
-      if (this.chatHistory.length === 0) {
-        this.showInitialSuggestions();
+      if (authService.currentUser?.uid) {
+        this.unsubscribers.push(
+          firestoreService.onChatHistoryUpdate?.(authService.currentUser.uid, (messages) => {
+            this.chatHistory = messages;
+            this._render();
+          })
+        );
       }
 
-      this.render();
+      // Hide suggestions once there are messages
+      if (this.chatHistory.length > 0) {
+        this.suggestions = [];
+      }
+
+      this._render();
     } catch (error) {
       console.error('[ChatScreen] mount error:', error);
       this.showError('Erro ao carregar chat');
@@ -62,60 +90,66 @@ export class ChatScreen extends BaseScreen {
   }
 
   async loadChatHistory() {
-    const uid = authService.currentUser.uid;
+    const uid = authService.currentUser?.uid;
+    if (!uid) return;
     const messages = await firestoreService.getChatHistory(uid, 50);
     this.chatHistory = messages;
   }
 
-  showInitialSuggestions() {
-    const suggestionArea = document.getElementById('chat-suggestions');
-    if (!suggestionArea) return;
+  // ---------------------------------------------------------------------------
+  // Cloud function wrapper
+  // ---------------------------------------------------------------------------
 
-    const suggestions = [
-      { text: '💬 Qual é a melhor receita para meu diagnóstico?', emoji: '🍽️' },
-      { text: '📊 Como está meu progresso?', emoji: '📈' },
-      { text: '❓ O que comer no café da manhã?', emoji: '🥣' },
-      { text: '💡 Me dê uma dica para hoje', emoji: '⭐' },
-    ];
-
-    suggestionArea.innerHTML = suggestions.map(s => `
-      <button class="chat-suggestion-btn" data-message="${s.text}">
-        ${s.emoji} ${s.text}
-      </button>
-    `).join('');
-
-    suggestionArea.addEventListener('click', (e) => {
-      if (e.target.classList.contains('chat-suggestion-btn')) {
-        const message = e.target.dataset.message;
-        this.sendMessage(message);
-      }
+  async _callChatFunction(message) {
+    return chatFunction({
+      message,
+      sessionId: this.sessionId,
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Send message with 60s timeout + thinking animation
+  // ---------------------------------------------------------------------------
+
   async sendMessage(userMessage) {
     if (!userMessage?.trim() || this.isLoading) return;
-
     this.isLoading = true;
 
-    // Adiciona mensagem do user ao histórico imediatamente (optimistic update)
-    const userMsg = {
+    // Optimistic user message
+    this.chatHistory.push({
       id: `user_${Date.now()}`,
       role: 'user',
       content: userMessage,
       timestamp: new Date(),
       type: 'text',
-    };
-    this.chatHistory.push(userMsg);
-    this.render();
+    });
+    this.suggestions = [];
+    this.thinkingVisible = true;
+    this._render();
+    this._scrollToBottom();
+
+    const ctrl = new AbortController();
+    this.thinkingAbortController = ctrl;
+    const timeoutId = setTimeout(() => ctrl.abort('timeout'), 60000);
 
     try {
-      // Chama Cloud Function
-      const result = await chatFunction({
-        message: userMessage,
-        sessionId: this.sessionId,
-      });
+      const msgToSend = this.pinnedRecipe
+        ? `[[RECIPE_EDIT:${this.pinnedRecipe.id}]] ${userMessage}`
+        : userMessage;
 
-      if (result.data.success) {
+      const callPromise = this._callChatFunction(msgToSend);
+      const result = await Promise.race([
+        callPromise,
+        new Promise((_, reject) =>
+          ctrl.signal.addEventListener('abort', () =>
+            reject(new Error(ctrl.signal.reason === 'timeout' ? 'TIMEOUT' : 'CANCELLED'))
+          )
+        ),
+      ]);
+
+      clearTimeout(timeoutId);
+
+      if (result?.data?.success) {
         const aiMessage = {
           id: `ai_${Date.now()}`,
           role: 'assistant',
@@ -126,60 +160,49 @@ export class ChatScreen extends BaseScreen {
           xpAwarded: result.data.xpAwarded || 0,
         };
 
-        // Adiciona resposta da IA
         this.chatHistory.push(aiMessage);
 
-        // Se ganhou XP, mostra notificação
         if (aiMessage.xpAwarded > 0) {
           this.showXPNotification(aiMessage.xpAwarded);
         }
 
-        // Se a IA sugeriu uma receita, mostra inline
         if (result.data.type === 'recipe' && result.data.recipe) {
           notificationService.notify({
-            uid: authService.currentUser.uid,
+            uid: authService.currentUser?.uid,
             title: 'Nova receita gerada',
-            message: `A Guardiã criou uma receita: ${result.data.recipe.title}`,
+            message: `A Guardiã criou uma receita: ${result.data.recipe.title || result.data.recipe.name}`,
             type: 'success',
             payload: { recipeId: result.data.recipe.id },
           });
-          this.showRecipeInChat(result.data.recipe);
         }
-
-        this.render();
-        this.scrollToBottom();
       }
     } catch (error) {
-      console.error('[ChatScreen] sendMessage error:', error);
-      const offline = !navigator.onLine;
-      const errorMessage = {
+      clearTimeout(timeoutId);
+      const isTimeout = error.message === 'TIMEOUT';
+      this.chatHistory.push({
         id: `error_${Date.now()}`,
         role: 'system',
-        content: offline
-          ? 'Sem conexão com a internet. Verifique sua rede e tente novamente.'
-          : 'Não consegui responder agora. Tente novamente em instantes.',
         type: 'error',
+        content: isTimeout
+          ? '⏱️ A Guardiã demorou muito. Tente novamente.'
+          : navigator.onLine
+            ? '❌ Não consegui responder agora. Tente em instantes.'
+            : '📵 Sem conexão com a internet.',
         timestamp: new Date(),
-      };
-      this.chatHistory.push(errorMessage);
-      this.render();
+      });
     } finally {
+      clearTimeout(timeoutId);
       this.isLoading = false;
+      this.thinkingVisible = false;
+      this.thinkingAbortController = null;
+      this._render();
+      this._scrollToBottom();
     }
   }
 
-  showRecipeInChat(recipe) {
-    // Implementar card de receita inline no chat
-    const recipeMsg = {
-      id: `recipe_${Date.now()}`,
-      role: 'assistant',
-      content: 'Que tal tentar esta receita?',
-      type: 'recipe',
-      recipe,
-      timestamp: new Date(),
-    };
-    this.chatHistory.push(recipeMsg);
-  }
+  // ---------------------------------------------------------------------------
+  // XP notification (unchanged)
+  // ---------------------------------------------------------------------------
 
   showXPNotification(xp) {
     const notification = document.createElement('div');
@@ -205,182 +228,36 @@ export class ChatScreen extends BaseScreen {
     }, 2000);
   }
 
-  scrollToBottom() {
-    const messagesArea = document.getElementById('chat-messages');
-    if (messagesArea) {
-      setTimeout(() => {
-        messagesArea.scrollTop = messagesArea.scrollHeight;
-      }, 0);
-    }
+  // ---------------------------------------------------------------------------
+  // Navigation helpers
+  // ---------------------------------------------------------------------------
+
+  goToRecipe(recipeId) {
+    this.params.onNavigate?.(SCREENS.DASHBOARD, {
+      initialNav: 'receitas',
+      recipeId,
+    });
   }
 
-  render() {
-    if (this.element) {
-      // Re-render in-place (updates from sendMessage / onSnapshot)
-      this.element.innerHTML = this.renderHTML();
-      this.attachEventListeners();
-      this.scrollToBottom();
-      return this.element;
-    }
-    // First render: create the root element for BaseScreen.mount()
-    const el = DOM.create('div', 'chat-screen');
-    el.innerHTML = this.renderHTML();
-    return el;
+  // ---------------------------------------------------------------------------
+  // Render helpers
+  // ---------------------------------------------------------------------------
+
+  _escapeHTML(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
-  renderHTML() {
-    return `
-      <div class="chat-container">
-        <!-- Header com status da guardiã -->
-        <div class="chat-header">
-          <div class="guardian-status">
-            <div class="guardian-avatar">👩‍⚕️</div>
-            <div class="guardian-info">
-              <h2>Guardiã 4D</h2>
-              <span class="status-badge">Online</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Messages area -->
-        <div id="chat-messages" class="chat-messages">
-          ${this.renderMessages()}
-        </div>
-
-        <!-- Initial suggestions (mostrado se vazio) -->
-        ${this.chatHistory.length === 0 ? `
-          <div id="chat-suggestions" class="chat-suggestions"></div>
-        ` : ''}
-
-        <!-- Input area -->
-        <div class="chat-input-area">
-          <div class="chat-input-wrapper">
-            <input 
-              type="text" 
-              id="chat-input" 
-              class="chat-input" 
-              placeholder="Digite sua mensagem... (ex: O que posso comer agora?)"
-              ${this.isLoading ? 'disabled' : ''}
-            />
-            <button 
-              id="chat-send-btn" 
-              class="chat-send-btn"
-              ${this.isLoading ? 'disabled' : ''}
-            >
-              ${this.isLoading ? '⏳' : '➤'}
-            </button>
-          </div>
-          <div class="chat-input-hint">
-            💡 A Guardiã sabe sobre sua saúde, seus exames e pode gerar receitas personalizadas
-          </div>
-        </div>
-
-        <!-- Typing indicator -->
-        ${this.isLoading ? `
-          <div class="typing-indicator">
-            <span></span><span></span><span></span>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }
-
-  renderMessages() {
-    return this.chatHistory.map(msg => {
-      if (msg.role === 'user') {
-        return `
-          <div class="message user-message">
-            <div class="message-content">${this.escapeHTML(msg.content)}</div>
-            <div class="message-time">${this.formatTime(msg.timestamp)}</div>
-          </div>
-        `;
-      } else if (msg.role === 'assistant') {
-        if (msg.type === 'recipe' && msg.recipe) {
-          return this.renderRecipeMessage(msg);
-        } else {
-          return `
-            <div class="message ai-message">
-              <div class="message-avatar">👩‍⚕️</div>
-              <div class="message-wrapper">
-                <div class="message-content">${this.formatMessageContent(msg.content)}</div>
-                <div class="message-time">${this.formatTime(msg.timestamp)}</div>
-              </div>
-              ${msg.xpAwarded ? `<div class="message-xp">+${msg.xpAwarded} XP</div>` : ''}
-            </div>
-          `;
-        }
-      } else if (msg.role === 'system') {
-        return `
-          <div class="message system-message">
-            <div class="message-content">${this.escapeHTML(msg.content)}</div>
-          </div>
-        `;
-      }
-    }).join('');
-  }
-
-  renderRecipeMessage(msg) {
-    const recipe = msg.recipe;
-    return `
-      <div class="message ai-message recipe-message">
-        <div class="message-avatar">👩‍⚕️</div>
-        <div class="message-wrapper">
-          <div class="recipe-card">
-            <div class="recipe-header">
-              <h3>${this.escapeHTML(recipe.title)}</h3>
-              ${recipe.difficulty ? `<span class="difficulty-badge">${recipe.difficulty}</span>` : ''}
-            </div>
-
-            <div class="recipe-meta">
-              ${recipe.prepTimeMin ? `<span>⏱️ ${recipe.prepTimeMin}min</span>` : ''}
-              ${recipe.servings ? `<span>🍽️ ${recipe.servings} porção(ões)</span>` : ''}
-            </div>
-
-            ${recipe.macros ? `
-              <div class="recipe-macros">
-                <div class="macro">
-                  <span class="macro-label">Proteína</span>
-                  <span class="macro-value">${recipe.macros.protein}g</span>
-                </div>
-                <div class="macro">
-                  <span class="macro-label">Carbos</span>
-                  <span class="macro-value">${recipe.macros.carbs}g</span>
-                </div>
-                <div class="macro">
-                  <span class="macro-label">Gordura</span>
-                  <span class="macro-value">${recipe.macros.fat}g</span>
-                </div>
-                <div class="macro">
-                  <span class="macro-label">Cal</span>
-                  <span class="macro-value">${recipe.macros.calories}</span>
-                </div>
-              </div>
-            ` : ''}
-
-            ${recipe.ingredients && recipe.ingredients.length ? `
-              <div class="recipe-ingredients">
-                <h4>Ingredientes:</h4>
-                <ul>
-                  ${recipe.ingredients.map(ing => `
-                    <li>${ing.quantity} ${ing.unit} ${this.escapeHTML(ing.name)}</li>
-                  `).join('')}
-                </ul>
-              </div>
-            ` : ''}
-
-            <button class="recipe-action-btn" data-recipe-id="${recipe.id}">
-              ✨ Tentar Esta Receita
-            </button>
-          </div>
-          <div class="message-time">${this.formatTime(msg.timestamp)}</div>
-        </div>
-      </div>
-    `;
+  // Keep backwards-compat alias used in older code paths
+  escapeHTML(text) {
+    return this._escapeHTML(text);
   }
 
   formatMessageContent(content) {
-    // Básico markdown: *negrito*, _itálico_, links
-    return content
+    return this._escapeHTML(content)
       .replace(/\*([^*]+)\*/g, '<strong>$1</strong>')
       .replace(/_([^_]+)_/g, '<em>$1</em>')
       .replace(/\n/g, '<br/>');
@@ -395,49 +272,259 @@ export class ChatScreen extends BaseScreen {
     if (diff < 60000) return 'agora';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}min`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-    
+
     return date.toLocaleDateString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  escapeHTML(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  _renderMessages() {
+    const messages = this.chatHistory || [];
+    return messages.map((msg, i) => {
+      const isFirst = i === 0 || messages[i - 1].role !== msg.role;
+
+      if (msg.role === 'user') {
+        return `<div class="message user-message${isFirst ? ' is-first' : ''}">
+          <div class="message-avatar"></div>
+          <div class="message-bubble">${this._escapeHTML(msg.content || '')}</div>
+        </div>`;
+      }
+
+      if (msg.type === 'error' || msg.role === 'system') {
+        return `<div class="message ai-message is-first">
+          <div class="message-avatar">👩‍⚕️</div>
+          <div class="message-bubble error-bubble">${this._escapeHTML(msg.content || '')}</div>
+        </div>`;
+      }
+
+      if (msg.type === 'recipe' && msg.recipe) {
+        const r = msg.recipe;
+        const macros = r.macros || r.nutrition || {};
+        return `<div class="message ai-message${isFirst ? ' is-first' : ''}">
+          <div class="message-avatar">👩‍⚕️</div>
+          <div class="chat-recipe-card">
+            <span class="recipe-card-emoji">${r.emoji || r.e || '🍽️'}</span>
+            <div class="recipe-card-name">${this._escapeHTML(r.name || r.nm || r.title || 'Receita')}</div>
+            <div class="recipe-card-macros">
+              ${macros.calories || macros.kcal ? `<span class="macro-chip kcal">${macros.calories || macros.kcal} kcal</span>` : ''}
+              ${macros.carbs || macros.carbohydrates ? `<span class="macro-chip carb">${macros.carbs || macros.carbohydrates}g carb</span>` : ''}
+              ${macros.protein ? `<span class="macro-chip prot">${macros.protein}g prot</span>` : ''}
+              ${macros.fat ? `<span class="macro-chip fat">${macros.fat}g fat</span>` : ''}
+            </div>
+            <button class="recipe-card-btn" data-recipe-id="${this._escapeHTML(r.id || '')}">Ver receita completa</button>
+          </div>
+        </div>`;
+      }
+
+      // Default AI text message
+      return `<div class="message ai-message${isFirst ? ' is-first' : ''}">
+        <div class="message-avatar">👩‍⚕️</div>
+        <div class="message-bubble">${this.formatMessageContent(msg.content || msg.reply || '')}</div>
+      </div>`;
+    }).join('');
   }
 
-  attachEventListeners() {
-    const inputEl = document.getElementById('chat-input');
-    const sendBtn = document.getElementById('chat-send-btn');
+  _buildHTML() {
+    return `
+      <div class="chat-screen">
 
-    if (inputEl && sendBtn) {
-      inputEl.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !this.isLoading) {
-          this.sendMessage(inputEl.value);
-          inputEl.value = '';
+        <!-- Header -->
+        <div class="chat-header">
+          <button class="chat-back-btn" id="chat-back-btn">←</button>
+          <div class="chat-avatar-wrap">
+            <div class="chat-avatar">👩‍⚕️</div>
+            <div class="chat-online-dot"></div>
+          </div>
+          <div class="chat-header-info">
+            <div class="chat-header-name">Guardiã 4D</div>
+            <div class="chat-header-status">Online agora</div>
+          </div>
+        </div>
+
+        <!-- Pinned recipe banner -->
+        ${this.pinnedRecipe ? `
+        <div class="chat-recipe-banner">
+          <span class="banner-emoji">${this._escapeHTML(this.pinnedRecipe.emoji)}</span>
+          <div class="banner-info">
+            <span class="banner-label">Editando receita</span>
+            <span class="banner-name">${this._escapeHTML(this.pinnedRecipe.name)}</span>
+          </div>
+          <button class="banner-close" id="banner-close-btn">✕</button>
+        </div>
+        ` : ''}
+
+        <!-- Messages -->
+        <div class="chat-messages" id="chat-messages">
+          ${this._renderMessages()}
+          ${this.thinkingVisible ? `
+          <div class="thinking-bubble message ai-message is-first">
+            <div class="message-avatar">👩‍⚕️</div>
+            <div class="thinking-content">
+              <span class="thinking-label">Guardiã está pensando</span>
+              <div class="thinking-dots"><span></span><span></span><span></span></div>
+            </div>
+          </div>
+          ` : ''}
+        </div>
+
+        <!-- Suggestion chips -->
+        ${this.suggestions?.length ? `
+        <div class="chat-suggestions">
+          ${this.suggestions.map(s => `<button class="suggestion-chip" data-suggestion="${this._escapeHTML(s)}">${this._escapeHTML(s)}</button>`).join('')}
+        </div>
+        ` : ''}
+
+        <!-- Input area -->
+        <div class="chat-input-area">
+          <textarea
+            class="chat-textarea"
+            id="chat-input"
+            placeholder="Pergunte à Guardiã 4D..."
+            rows="1"
+            ${this.isLoading ? 'disabled' : ''}
+          >${this._escapeHTML(this.draftInput)}</textarea>
+          <button class="chat-send-btn" id="chat-send-btn" ${this.isLoading ? 'disabled' : ''}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Core render / re-render
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Called by BaseScreen.mount() on first render.
+   * Returns a DOM element that BaseScreen will append to #app.
+   */
+  render() {
+    const el = DOM.create('div');
+    el.innerHTML = this._buildHTML();
+    // BaseScreen.mount() assigns the return value to this.element
+    // We set it here so attachEventListeners can reference it immediately.
+    this.element = el;
+    this._attachEventListeners(el);
+    return el;
+  }
+
+  /**
+   * Re-render in-place (called after state changes).
+   */
+  _render() {
+    if (!this.element) return;
+    this.element.innerHTML = this._buildHTML();
+    this._attachEventListeners(this.element);
+    this._scrollToBottom();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Scroll
+  // ---------------------------------------------------------------------------
+
+  _scrollToBottom() {
+    const messagesArea = this.element
+      ? this.element.querySelector('#chat-messages')
+      : document.getElementById('chat-messages');
+    if (messagesArea) {
+      setTimeout(() => {
+        messagesArea.scrollTop = messagesArea.scrollHeight;
+      }, 0);
+    }
+  }
+
+  // Keep backwards-compat alias
+  scrollToBottom() {
+    this._scrollToBottom();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event listeners
+  // ---------------------------------------------------------------------------
+
+  _attachEventListeners(el) {
+    const textarea = el.querySelector('#chat-input');
+
+    // Auto-resize textarea
+    if (textarea) {
+      const autoResize = () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 140) + 'px';
+      };
+
+      textarea.addEventListener('input', autoResize);
+
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          const val = textarea.value.trim();
+          if (val) {
+            textarea.value = '';
+            textarea.style.height = 'auto';
+            this.draftInput = '';
+            this.sendMessage(val);
+          }
         }
       });
 
-      sendBtn.addEventListener('click', () => {
-        this.sendMessage(inputEl.value);
-        inputEl.value = '';
-      });
+      // Focus with cursor at end if we have a draft
+      if (this.draftInput) {
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        }, 100);
+      }
     }
 
-    // Recipe action buttons
-    document.addEventListener('click', (e) => {
-      if (e.target.classList.contains('recipe-action-btn')) {
-        const recipeId = e.target.dataset.recipeId;
-        this.goToRecipe(recipeId);
+    // Send button
+    el.querySelector('#chat-send-btn')?.addEventListener('click', () => {
+      const val = textarea?.value?.trim();
+      if (val) {
+        textarea.value = '';
+        textarea.style.height = 'auto';
+        this.draftInput = '';
+        this.sendMessage(val);
       }
+    });
+
+    // Back button
+    el.querySelector('#chat-back-btn')?.addEventListener('click', () => {
+      this.params?.onBack?.() || this.params?.onNavigate?.(SCREENS.DASHBOARD);
+    });
+
+    // Banner close
+    el.querySelector('#banner-close-btn')?.addEventListener('click', () => {
+      this.pinnedRecipe = null;
+      this._render();
+    });
+
+    // Suggestion chips
+    el.querySelectorAll('.suggestion-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const suggestion = chip.dataset.suggestion;
+        if (suggestion) this.sendMessage(suggestion);
+      });
+    });
+
+    // Recipe card buttons
+    el.querySelectorAll('.recipe-card-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const recipeId = btn.dataset.recipeId;
+        if (recipeId) this.goToRecipe(recipeId);
+      });
     });
   }
 
-  goToRecipe(recipeId) {
-    this.params.onNavigate?.(SCREENS.DASHBOARD, {
-      initialNav: 'receitas',
-      recipeId,
-    });
-  }
+  // BaseScreen.mount() calls setupEventListeners() after render().
+  // Override it as a no-op since we handle listeners inside _attachEventListeners.
+  setupEventListeners() {}
+
+  // ---------------------------------------------------------------------------
+  // Error state
+  // ---------------------------------------------------------------------------
 
   showError(message) {
     if (this.element) {
@@ -449,9 +536,20 @@ export class ChatScreen extends BaseScreen {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Cleanup
+  // ---------------------------------------------------------------------------
+
   destroy() {
+    // Cancel any in-flight request
+    if (this.thinkingAbortController) {
+      this.thinkingAbortController.abort('CANCELLED');
+    }
     this.unsubscribers.forEach(unsub => {
       if (typeof unsub === 'function') unsub();
     });
+    if (this.element) {
+      this.element.remove();
+    }
   }
 }
