@@ -150,14 +150,11 @@ function getGreeting() {
   return 'Boa noite';
 }
 
-function getRecipeOfHour() {
+function getRecipeOfHour(recipes) {
+  const pool = Array.isArray(recipes) && recipes.length ? recipes : RECIPES;
   const h = new Date().getHours();
-  if (h < 10) return RECIPES[0];
-  if (h < 12) return RECIPES[4];
-  if (h < 15) return RECIPES[2];
-  if (h < 18) return RECIPES[4];
-  if (h < 21) return RECIPES[3];
-  return RECIPES[5];
+  const idx = h < 10 ? 0 : h < 12 ? Math.min(4, pool.length - 1) : h < 15 ? Math.min(2, pool.length - 1) : h < 18 ? Math.min(4, pool.length - 1) : h < 21 ? Math.min(3, pool.length - 1) : Math.min(5, pool.length - 1);
+  return pool[idx] || pool[0] || RECIPES[0];
 }
 
 function renderSparkline(points, color, height = 110, labelColor = 'var(--dash-muted)') {
@@ -226,6 +223,10 @@ export class DashboardScreen extends BaseScreen {
     this.themeToggleLocked = false;
     this.examOrders = Array.isArray(this.userProfile?.examOrders) && this.userProfile.examOrders.length ? this.userProfile.examOrders : EXAM_ORDERS;
     this.dicas = State.get('belaTips') || this.userProfile.belaTips || DICAS.map((dica, index) => ({ ...dica, id: `dica-${index + 1}`, likes: 0, dislikes: 0, myVote: null }));
+    this.ranking = State.get('ranking') || RANKING;
+    this.examResults = State.get('examResults') || EXAM_RESULTS;
+    this._dataLoaded = false;
+    this._dataLoading = false;
     this.themeMode = this.loadThemeMode();
     this.isDark = this.resolveThemeIsDark(this.themeMode);
 
@@ -336,17 +337,102 @@ export class DashboardScreen extends BaseScreen {
     this.recipeUnsubscribe = firestoreService.onRecipesChange?.(this.currentUser.uid, recipes => {
       this.recipes = recipes;
       State.set('recipes', recipes);
+      this._refreshSection('receitas');
+      this._refreshSection('inicio');
     });
 
     this.achievementsUnsubscribe = firestoreService.onAchievementsChange?.(this.currentUser.uid, achievements => {
       this.achievements = achievements;
       State.set('achievements', achievements);
+      this._refreshSection('conquistas');
     });
 
     this.chatUnsubscribe = firestoreService.onChatHistoryChange?.(this.currentUser.uid, messages => {
       this.chatHistory = messages;
       State.set('chatHistory', messages);
     });
+  }
+
+  _refreshSection(navId) {
+    if (this.currentNav !== navId) return;
+    this.mountPreservingScroll();
+  }
+
+  async mount() {
+    super.mount();
+    if (!this._dataLoaded) {
+      await this._loadFirestoreData();
+    }
+  }
+
+  async _loadFirestoreData() {
+    if (this._dataLoading || this._dataLoaded) return;
+    this._dataLoading = true;
+    if (!this.currentUser?.uid) { this._dataLoading = false; return; }
+    const uid = this.currentUser.uid;
+
+    const [ranking, latestExam, latestRequest, menuForm, chatHistory] = await Promise.allSettled([
+      firestoreService.getTopRanking?.(20),
+      firestoreService.getLatestBloodTest?.(uid),
+      firestoreService.getLatestExamRequest?.(uid),
+      firestoreService.getMenuForm?.(uid),
+      firestoreService.getChatHistory?.(uid, 3),
+    ]);
+
+    let needsRefresh = false;
+
+    if (ranking.status === 'fulfilled' && Array.isArray(ranking.value) && ranking.value.length) {
+      this.ranking = ranking.value.map((user, i) => ({
+        p: user.position || i + 1,
+        nm: user.name || 'Usuária',
+        nk: `@${(user.name || 'user').split(' ')[0].toLowerCase()}`,
+        e: user.avatar || '🌸',
+        col: user.avatarColor || '#f0059a',
+        xp: user.xp || 0,
+        st: user.streak || 0,
+        me: user.uid === this.currentUser?.uid,
+      }));
+      State.set('ranking', this.ranking);
+      needsRefresh = true;
+    }
+
+    if (latestExam.status === 'fulfilled' && latestExam.value?.extractedData) {
+      this.examResults = latestExam.value.extractedData;
+      needsRefresh = true;
+    }
+
+    if (latestRequest.status === 'fulfilled' && latestRequest.value) {
+      this.examOrders = [latestRequest.value, ...(this.examOrders || []).filter(o => o.id !== latestRequest.value?.id)];
+      needsRefresh = true;
+    }
+
+    if (menuForm.status === 'fulfilled' && Array.isArray(menuForm.value?.mealTimes) && menuForm.value.mealTimes.length) {
+      this.dailyMeals = menuForm.value.mealTimes.filter(m => m.enabled !== false);
+      needsRefresh = true;
+    }
+
+    if (chatHistory.status === 'fulfilled' && Array.isArray(chatHistory.value) && chatHistory.value.length) {
+      const msgs = chatHistory.value.map(m => ({ r: m.role === 'user' ? 'user' : 'ai', t: m.content }));
+      if (msgs.length) this.homeChatMessages = msgs;
+      needsRefresh = true;
+    }
+
+    this._dataLoading = false;
+    this._dataLoaded = true;
+
+    if (needsRefresh) this._refreshSection(this.currentNav);
+
+    setTimeout(() => this._prefetchOtherSections(), 1200);
+  }
+
+  async _prefetchOtherSections() {
+    if (!this.currentUser?.uid) return;
+    const uid = this.currentUser.uid;
+    await Promise.allSettled([
+      firestoreService.getAllRecipes?.(uid),
+      firestoreService.getTopRanking?.(20),
+      firestoreService.getLatestBloodTest?.(uid),
+    ]);
   }
 
   destroy() {
@@ -763,7 +849,7 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderHome() {
-    const recipe = getRecipeOfHour();
+    const recipe = getRecipeOfHour(this.recipes);
     const meals = Array.isArray(this.dailyMeals) && this.dailyMeals.length ? this.dailyMeals : REFEICOES_DIA;
     const checkedCount = [...this.homeChecked].filter(id => meals.some(meal => meal.id === id)).length;
     const checkPct = meals.length ? Math.round((checkedCount / meals.length) * 100) : 0;
@@ -904,10 +990,10 @@ export class DashboardScreen extends BaseScreen {
                 ${graph.ref ? `<div style="color:var(--dash-muted);font-size:13px;margin-top:2px;">${graph.ref}</div>` : ''}
               </div>
               <div style="text-align:right;">
-                <div style="color:${graph.color};font-weight:800;font-size:28px;">${EXAM_RESULTS[graph.key][EXAM_RESULTS[graph.key].length - 1].v}<span style="font-size:14px;margin-left:3px;">${graph.unit}</span></div>
+                <div style="color:${graph.color};font-weight:800;font-size:28px;">${((this.examResults||EXAM_RESULTS)[graph.key])[((this.examResults||EXAM_RESULTS)[graph.key]).length - 1].v}<span style="font-size:14px;margin-left:3px;">${graph.unit}</span></div>
               </div>
             </div>
-            ${renderSparkline(EXAM_RESULTS[graph.key], graph.color, 110, 'var(--dash-muted)')}
+            ${renderSparkline(((this.examResults||EXAM_RESULTS)[graph.key]), graph.color, 110, 'var(--dash-muted)')}
           </div>
         `).join('')}
       </section>
@@ -1056,7 +1142,7 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderExams() {
-    const examChart = this.examTab === 'resultados' ? EXAM_RESULTS : null;
+    const examChart = this.examTab === 'resultados' ? (this.examResults||EXAM_RESULTS) : null;
     return `
       <section>
         <div class="dash-section-title">🔬 Exames e Resultados</div>
@@ -1103,7 +1189,7 @@ export class DashboardScreen extends BaseScreen {
                 <div style="color:#1fcc74;font-weight:800;font-size:28px;">98<span style="font-size:14px;margin-left:3px;">mg/dL</span></div>
               </div>
             </div>
-            ${renderSparkline(EXAM_RESULTS.glicemia, '#f0059a', 110, 'var(--dash-muted)')}
+            ${renderSparkline((this.examResults||EXAM_RESULTS).glicemia, '#f0059a', 110, 'var(--dash-muted)')}
           </div>
           <div class="dash-card pad" style="margin-bottom:14px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
@@ -1115,7 +1201,7 @@ export class DashboardScreen extends BaseScreen {
                 <div style="color:#a78bfa;font-weight:800;font-size:28px;">6.1<span style="font-size:14px;margin-left:3px;">%</span></div>
               </div>
             </div>
-            ${renderSparkline(EXAM_RESULTS.hba1c, '#a78bfa', 110, 'var(--dash-muted)')}
+            ${renderSparkline((this.examResults||EXAM_RESULTS).hba1c, '#a78bfa', 110, 'var(--dash-muted)')}
           </div>
           <div class="dash-card pad">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
@@ -1126,7 +1212,7 @@ export class DashboardScreen extends BaseScreen {
                 <div style="color:#38bdf8;font-weight:800;font-size:28px;">79.6<span style="font-size:14px;margin-left:3px;">kg</span></div>
               </div>
             </div>
-            ${renderSparkline(EXAM_RESULTS.peso, '#38bdf8', 110, 'var(--dash-muted)')}
+            ${renderSparkline((this.examResults||EXAM_RESULTS).peso, '#38bdf8', 110, 'var(--dash-muted)')}
           </div>
         `}
       </section>
@@ -1134,8 +1220,9 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderConquests() {
-    const me = { ...(RANKING.find(user => user.me) || RANKING[7]), xp: this.xp, st: this.streak };
-    const topThree = [RANKING[1], RANKING[0], RANKING[2]];
+    const rankList = Array.isArray(this.ranking) && this.ranking.length ? this.ranking : RANKING;
+    const me = { ...(rankList.find(user => user.me) || rankList[Math.min(7, rankList.length - 1)] || {}), xp: this.xp, st: this.streak };
+    const topThree = rankList.length >= 3 ? [rankList[1], rankList[0], rankList[2]] : rankList.slice(0, 3);
     const achievementCards = (Array.isArray(this.achievements) && this.achievements.length ? this.achievements : BADGES)
       .map(normalizeAchievement)
       .filter(Boolean);
@@ -1205,7 +1292,7 @@ export class DashboardScreen extends BaseScreen {
               </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              ${RANKING.map(user => `
+              ${rankList.map(user => `
                 <div class="dash-card pad" style="display:flex;align-items:center;gap:12px;border-color:${user.me ? 'rgba(240,5,154,0.3)' : 'var(--dash-border)'};background:${user.me ? 'rgba(240,5,154,0.06)' : 'var(--dash-surface)'};">
                   <div style="width:26px;text-align:center;">${user.p <= 3 ? ['🥇', '🥈', '🥉'][user.p - 1] : `<span style="color:${user.me ? '#f0059a' : 'var(--dash-muted)'};font-weight:800;font-size:14px;">#${user.p}</span>`}</div>
                   <div class="dash-avatar" style="width:38px;height:38px;background:${user.col}22;border:2px solid ${user.col}55;">${user.e}</div>

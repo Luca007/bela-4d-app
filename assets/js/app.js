@@ -22,18 +22,22 @@ import { authService } from './services/auth.js';
 import { firestoreService } from './services/firestore.js';
 import { notificationService } from './modules/notifications.js';
 
-// Telas
-import { LoginScreen }      from './screens/login.js';
-import { AwaitingScreen }   from './screens/awaiting.js';
-import { ExamUploadScreen } from './screens/exam-upload.js';
-import { HealthFormScreen } from './screens/health-form.js';
-import { OnboardingScreen } from './screens/onboarding.js';
-import { CardapioScreen }   from './screens/cardapio.js';
-import { DashboardScreen }  from './screens/dashboard-v2.js';
-import { ChatScreen }       from './screens/chat.js';
-import { RecipesScreen }    from './screens/recipes.js';
-import { FoodSearchScreen } from './screens/food-search.js';
-import { FormsScreen }      from './screens/forms.js';
+// Telas críticas (carregadas imediatamente)
+import { LoginScreen }    from './screens/login.js';
+import { AwaitingScreen } from './screens/awaiting.js';
+
+// Telas secundárias (lazy-loaded na primeira navegação)
+const lazyScreens = {
+  'exam-upload':  () => import('./screens/exam-upload.js').then(m => m.ExamUploadScreen),
+  'health-form':  () => import('./screens/health-form.js').then(m => m.HealthFormScreen),
+  'onboarding':   () => import('./screens/onboarding.js').then(m => m.OnboardingScreen),
+  'cardapio':     () => import('./screens/cardapio.js').then(m => m.CardapioScreen),
+  'dashboard':    () => import('./screens/dashboard-v2.js').then(m => m.DashboardScreen),
+  'chat':         () => import('./screens/chat.js').then(m => m.ChatScreen),
+  'recipes':      () => import('./screens/recipes.js').then(m => m.RecipesScreen),
+  'food-search':  () => import('./screens/food-search.js').then(m => m.FoodSearchScreen),
+  'forms':        () => import('./screens/forms.js').then(m => m.FormsScreen),
+};
 
 class App {
   constructor() {
@@ -42,19 +46,10 @@ class App {
     this.isInitialized = false;
     this.dataUnsubscribers = [];
 
-    // Mapa tela-id → classe
+    // Mapa tela-id → classe (pré-carregadas)
     this.screens = new Map([
-      [SCREENS.LOGIN,      LoginScreen],
-      [SCREENS.AWAITING,   AwaitingScreen],
-      [SCREENS.EXAM_UPLOAD, ExamUploadScreen],
-      [SCREENS.HEALTH_FORM, HealthFormScreen],
-      [SCREENS.ONBOARDING,  OnboardingScreen],
-      [SCREENS.CARDAPIO,    CardapioScreen],
-      [SCREENS.DASHBOARD,   DashboardScreen],
-      [SCREENS.CHAT,        ChatScreen],
-      [SCREENS.RECIPES,     RecipesScreen],
-      [SCREENS.FOOD_SEARCH, FoodSearchScreen],
-      [SCREENS.FORMS,       FormsScreen],
+      [SCREENS.LOGIN,    LoginScreen],
+      [SCREENS.AWAITING, AwaitingScreen],
     ]);
 
     this.statusRoutes = {
@@ -96,12 +91,23 @@ class App {
   // Navegação
   // ────────────────────────────────────────────────
 
-  navigate(screenId, params = {}) {
+  async navigate(screenId, params = {}) {
     if (this.currentScreen) {
       try { this.currentScreen.destroy?.(); } catch (_) {}
     }
 
-    const ScreenClass = this.screens.get(screenId);
+    let ScreenClass = this.screens.get(screenId);
+
+    if (!ScreenClass && lazyScreens[screenId]) {
+      try {
+        ScreenClass = await lazyScreens[screenId]();
+        this.screens.set(screenId, ScreenClass);
+      } catch (err) {
+        console.error(`[App] Failed to load screen: ${screenId}`, err);
+        return;
+      }
+    }
+
     if (!ScreenClass) {
       console.error(`[App] Screen not found: ${screenId}`);
       return;

@@ -143,15 +143,16 @@ export class ChatScreen extends BaseScreen {
       }
     } catch (error) {
       console.error('[ChatScreen] sendMessage error:', error);
-
+      const offline = !navigator.onLine;
       const errorMessage = {
         id: `error_${Date.now()}`,
         role: 'system',
-        content: 'Desculpa! Tive uma dificuldade em processar sua mensagem. Tente novamente.',
+        content: offline
+          ? 'Sem conexão com a internet. Verifique sua rede e tente novamente.'
+          : 'Não consegui responder agora. Tente novamente em instantes.',
         type: 'error',
         timestamp: new Date(),
       };
-
       this.chatHistory.push(errorMessage);
       this.render();
     } finally {

@@ -497,6 +497,16 @@ export class CardapioScreen extends BaseScreen {
       return;
     }
 
+    if (!this.selectedObjective) {
+      notificationService.toast('Selecione seu objetivo antes de continuar.', { type: 'warning' });
+      return;
+    }
+
+    if (!navigator.onLine) {
+      notificationService.toast('Sem conexão com a internet. Verifique sua rede.', { type: 'error' });
+      return;
+    }
+
     this._setSubmitting(true);
     try {
       const formData = this._collectFormData();

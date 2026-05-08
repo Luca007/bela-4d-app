@@ -14,6 +14,8 @@
 
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const axios = require('axios');
@@ -22,18 +24,56 @@ initializeApp();
 const db = getFirestore();
 
 // ─────────────────────────────────────────────
-// CONFIGURAÇÃO (usar Firebase Secrets em produção)
-// firebase functions:secrets:set N8N_BASE_URL
+// SECRETS — definir via: firebase functions:secrets:set N8N_BASE_URL
 // ─────────────────────────────────────────────
-const N8N_BASE_URL = process.env.N8N_BASE_URL || 'https://SEU-N8N.cloud/webhook';
-const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO';
+const secretN8nBaseUrl = defineSecret('N8N_BASE_URL');
+const secretN8nWebhookSecret = defineSecret('N8N_WEBHOOK_SECRET');
 
 const REGION = 'southamerica-east1';
+const SECRETS = [secretN8nBaseUrl, secretN8nWebhookSecret];
 
-const n8nHeaders = {
-  'Content-Type': 'application/json',
-  'X-Webhook-Secret': N8N_WEBHOOK_SECRET,
-};
+// Resolvidos em runtime (dentro das funções, não no topo do módulo)
+function getN8nBaseUrl() {
+  return secretN8nBaseUrl.value() || process.env.N8N_BASE_URL || 'https://SEU-N8N.cloud/webhook';
+}
+function getN8nWebhookSecret() {
+  return secretN8nWebhookSecret.value() || process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO';
+}
+function getN8nHeaders() {
+  return { 'Content-Type': 'application/json', 'X-Webhook-Secret': getN8nWebhookSecret() };
+}
+
+// ─────────────────────────────────────────────
+// Structured logging helper
+// ─────────────────────────────────────────────
+function log(severity, message, data = {}) {
+  const entry = { severity: severity.toUpperCase(), message, ...data, ts: new Date().toISOString() };
+  if (severity === 'error') console.error(JSON.stringify(entry));
+  else if (severity === 'warn') console.warn(JSON.stringify(entry));
+  else console.log(JSON.stringify(entry));
+}
+
+// Helper: desbloqueia conquista (idempotente)
+async function unlockAchievement(uid, achievementId) {
+  try {
+    const ref = db.doc(`users/${uid}/achievements/${achievementId}`);
+    const existing = await ref.get();
+    if (existing.exists) return false;
+    await ref.set({ id: achievementId, unlocked: true, seen: false, unlockedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+    await db.collection(`users/${uid}/pendingActions`).add({
+      type: 'achievement_unlocked',
+      seen: false,
+      message: `Nova conquista desbloqueada!`,
+      payload: { achievementId },
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return true;
+  } catch (e) {
+    console.error('[Functions] unlockAchievement error:', e.message);
+    return false;
+  }
+}
 
 // Helper: garante que o usuário está autenticado
 function requireAuth(auth) {
@@ -42,8 +82,8 @@ function requireAuth(auth) {
 
 // Helper: chama webhook n8n
 async function callN8n(endpoint, payload) {
-  const url = `${N8N_BASE_URL}/${endpoint}`;
-  const response = await axios.post(url, payload, { headers: n8nHeaders, timeout: 30000 });
+  const url = `${getN8nBaseUrl()}/${endpoint}`;
+  const response = await axios.post(url, payload, { headers: getN8nHeaders(), timeout: 30000 });
   return response.data;
 }
 
@@ -64,7 +104,7 @@ async function callN8nWithRetry(endpoint, payload, maxRetries = 3) {
 
 function verifyWebhookSecret(req) {
   const received = req.get('x-webhook-secret') || req.get('X-Webhook-Secret');
-  if (!received || received !== N8N_WEBHOOK_SECRET) {
+  if (!received || received !== getN8nWebhookSecret()) {
     throw new HttpsError('permission-denied', 'Webhook secret inválido');
   }
 }
@@ -72,7 +112,7 @@ function verifyWebhookSecret(req) {
 // ─────────────────────────────────────────────
 // 1. PROCESSAR TRANSCRIÇÃO DO GOOGLE MEET
 // ─────────────────────────────────────────────
-exports.processOnboardingTranscript = onCall({ region: REGION }, async (request) => {
+exports.processOnboardingTranscript = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { transcriptText, driveFileUrl } = request.data;
@@ -91,7 +131,7 @@ exports.processOnboardingTranscript = onCall({ region: REGION }, async (request)
     },
     transcriptText,
     driveFileUrl: driveFileUrl || null,
-    callbackUrl: `${N8N_BASE_URL}/4d-transcript-callback`,
+    callbackUrl: `${getN8nBaseUrl()}/4d-transcript-callback`,
   };
 
   try {
@@ -124,7 +164,7 @@ exports.processOnboardingTranscript = onCall({ region: REGION }, async (request)
 // ─────────────────────────────────────────────
 // 2. PROCESSAR EXAME DE SANGUE
 // ─────────────────────────────────────────────
-exports.processBloodTest = onCall({ region: REGION }, async (request) => {
+exports.processBloodTest = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { bloodTestId, driveFileUrl } = request.data;
@@ -140,7 +180,7 @@ exports.processBloodTest = onCall({ region: REGION }, async (request) => {
     bloodTestId,
     driveFileUrl,
     existingHealthData: healthData,
-    callbackUrl: `${N8N_BASE_URL}/4d-blood-test-callback`,
+    callbackUrl: `${getN8nBaseUrl()}/4d-blood-test-callback`,
   };
 
   try {
@@ -166,7 +206,7 @@ exports.processBloodTest = onCall({ region: REGION }, async (request) => {
 // ─────────────────────────────────────────────
 // 3. GERAR PEDIDO DE EXAMES (sem exame disponível)
 // ─────────────────────────────────────────────
-exports.generateExamRequest = onCall({ region: REGION }, async (request) => {
+exports.generateExamRequest = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
 
@@ -215,7 +255,7 @@ exports.generateExamRequest = onCall({ region: REGION }, async (request) => {
 // ─────────────────────────────────────────────
 // 4. AGENTE DE CHAT IA (função principal do app)
 // ─────────────────────────────────────────────
-exports.agentChatMessage = onCall({ region: REGION }, async (request) => {
+exports.agentChatMessage = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { message, sessionId } = request.data;
@@ -272,6 +312,8 @@ exports.agentChatMessage = onCall({ region: REGION }, async (request) => {
       });
     }
 
+    await unlockAchievement(uid, 'chat_starter');
+
     return { success: true, reply: result.reply, type: result.type, recipe: result.recipe };
   } catch (error) {
     console.error('[Functions] agentChatMessage error:', error.message);
@@ -282,7 +324,7 @@ exports.agentChatMessage = onCall({ region: REGION }, async (request) => {
 // ─────────────────────────────────────────────
 // 5. GERAR RECEITA (chamada direta, sem chat)
 // ─────────────────────────────────────────────
-exports.generateRecipe = onCall({ region: REGION }, async (request) => {
+exports.generateRecipe = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { preferences } = request.data;
@@ -313,6 +355,8 @@ exports.generateRecipe = onCall({ region: REGION }, async (request) => {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
+    await unlockAchievement(uid, 'first_recipe');
+
     return { success: true, recipeId: recipeRef.id, recipe: result.recipe };
   } catch (error) {
     console.error('[Functions] generateRecipe error:', error.message);
@@ -323,7 +367,7 @@ exports.generateRecipe = onCall({ region: REGION }, async (request) => {
 // ─────────────────────────────────────────────
 // 5. REMOVER RECEITA
 // ─────────────────────────────────────────────
-exports.deleteRecipe = onCall({ region: REGION }, async (request) => {
+exports.deleteRecipe = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { recipeId } = request.data;
@@ -367,7 +411,7 @@ exports.deleteRecipe = onCall({ region: REGION }, async (request) => {
 // ─────────────────────────────────────────────
 // 6. AVALIADOR DE ALIMENTOS
 // ─────────────────────────────────────────────
-exports.evaluateFood = onCall({ region: REGION }, async (request) => {
+exports.evaluateFood = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { foodName, quantity } = request.data;
@@ -388,6 +432,11 @@ exports.evaluateFood = onCall({ region: REGION }, async (request) => {
 
   try {
     const result = await callN8nWithRetry('4d-evaluate-food', payload);
+
+    // Conquista: 10 alimentos avaliados
+    const evalCount = (await db.collection(`users/${uid}/foodEvaluations`).count().get()).data().count;
+    if (evalCount >= 10) await unlockAchievement(uid, 'food_explorer');
+
     return { success: true, evaluation: result.evaluation };
   } catch (error) {
     console.error('[Functions] evaluateFood error:', error.message);
@@ -396,9 +445,32 @@ exports.evaluateFood = onCall({ region: REGION }, async (request) => {
 });
 
 // ─────────────────────────────────────────────
-// 7. CALLBACKS HTTP (n8n -> Firebase)
+// 7. DOWNLOAD PDF DE PEDIDO DE EXAME
 // ─────────────────────────────────────────────
-exports.onTranscriptCallback = onRequest({ region: REGION }, async (req, res) => {
+exports.downloadExamPdf = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Login necessário');
+
+  const { examRequestId } = request.data || {};
+  if (!examRequestId) throw new HttpsError('invalid-argument', 'examRequestId obrigatório');
+
+  const examRef = db.doc(`users/${uid}/examRequests/${examRequestId}`);
+  const examDoc = await examRef.get();
+  if (!examDoc.exists) throw new HttpsError('not-found', 'Pedido de exame não encontrado');
+
+  const data = examDoc.data() || {};
+  if (!data.driveFileUrl) throw new HttpsError('not-found', 'PDF ainda não foi gerado para este pedido');
+
+  return { fileUrl: data.driveFileUrl, fileName: data.fileName || 'pedido_exame.pdf' };
+});
+
+// ─────────────────────────────────────────────
+// 8. CALLBACKS HTTP (n8n -> Firebase)
+// ─────────────────────────────────────────────
+exports.onTranscriptCallback = onRequest({ region: REGION, secrets: SECRETS }, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', getN8nBaseUrl().replace(/\/webhook.*$/, ''));
+  res.set('Access-Control-Allow-Methods', 'POST');
+  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
   try {
     if (req.method !== 'POST') {
       res.status(405).json({ success: false, error: 'method-not-allowed' });
@@ -463,7 +535,10 @@ exports.onTranscriptCallback = onRequest({ region: REGION }, async (req, res) =>
   }
 });
 
-exports.onBloodTestCallback = onRequest({ region: REGION }, async (req, res) => {
+exports.onBloodTestCallback = onRequest({ region: REGION, secrets: SECRETS }, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', getN8nBaseUrl().replace(/\/webhook.*$/, ''));
+  res.set('Access-Control-Allow-Methods', 'POST');
+  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
   try {
     if (req.method !== 'POST') {
       res.status(405).json({ success: false, error: 'method-not-allowed' });
@@ -603,7 +678,7 @@ async function sendWhatsAppNotification(uid, profile, notification, metadata = {
   return result;
 }
 
-exports.sendPatientNotification = onCall({ region: REGION }, async (request) => {
+exports.sendPatientNotification = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { title, message, type = 'manual', priority = 'normal', metadata = {} } = request.data || {};
@@ -630,7 +705,7 @@ exports.onBloodTestCreated = onDocumentCreated(
         uid,
         bloodTestId: testId,
         driveFileUrl: data.driveFileUrl,
-        callbackUrl: `${N8N_BASE_URL}/4d-blood-test-callback`,
+        callbackUrl: `${getN8nBaseUrl()}/4d-blood-test-callback`,
       };
 
       try {
@@ -664,5 +739,38 @@ exports.onUserStatusUpdated = onDocumentUpdated(
       statusTo: after.status,
       source: 'firestore_status_trigger',
     });
+  }
+);
+
+// ─────────────────────────────────────────────
+// Scheduled: Atualiza ranking global diariamente
+// ─────────────────────────────────────────────
+exports.updateGlobalRanking = onSchedule(
+  { schedule: 'every 24 hours', region: REGION, timeZone: 'America/Sao_Paulo' },
+  async () => {
+    const snapshot = await db.collection('users')
+      .orderBy('xp', 'desc')
+      .limit(100)
+      .get();
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc, i) => {
+      const data = doc.data();
+      const ref = db.doc(`globalRanking/${doc.id}`);
+      batch.set(ref, {
+        uid: doc.id,
+        position: i + 1,
+        name: data.name || 'Usuária',
+        avatar: data.avatar || '🌸',
+        avatarColor: data.avatarColor || '#f0059a',
+        xp: data.xp || 0,
+        streak: data.streak || 0,
+        level: data.level || 1,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
+
+    await batch.commit();
+    console.log(`[Ranking] Updated global ranking with ${snapshot.size} users`);
   }
 );

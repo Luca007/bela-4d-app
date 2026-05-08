@@ -193,9 +193,26 @@ export class LoginScreen extends BaseScreen {
     return container;
   }
 
-  handleLogin() {
+  _friendlyAuthError(rawError) {
+    const msg = String(rawError || '').toLowerCase();
+    if (!navigator.onLine) return 'Sem conexão com a internet. Verifique sua rede e tente novamente.';
+    if (msg.includes('invalid-credential') || msg.includes('wrong-password') || msg.includes('user-not-found') || msg.includes('invalid-email')) {
+      return 'E-mail ou senha incorretos. Verifique seus dados.';
+    }
+    if (msg.includes('too-many-requests')) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+    if (msg.includes('network') || msg.includes('timeout')) return 'Erro de conexão. Tente novamente.';
+    if (msg.includes('user-disabled')) return 'Esta conta foi desativada. Entre em contato com o suporte.';
+    return 'Erro ao entrar. Tente novamente.';
+  }
+
+  async handleLogin() {
     if (!this.email || !this.password) {
-      this.showError('Por favor, preencha todos os campos');
+      this.showError('Por favor, preencha e-mail e senha.');
+      return;
+    }
+
+    if (!navigator.onLine) {
+      this.showError('Sem conexão com a internet. Verifique sua rede.');
       return;
     }
 
@@ -203,31 +220,28 @@ export class LoginScreen extends BaseScreen {
     this.loginBtn.disabled = true;
     this.loginBtn.innerHTML = '<span class="spinner" style="margin-right: 8px;"></span>Entrando…';
 
-    // Use Firebase Authentication
-    authService.login(this.email, this.password).then(async (result) => {
+    try {
+      const result = await authService.login(this.email, this.password);
+
       if (result.success) {
-        console.log('✅ Login successful:', result.uid);
-        
-        // User exists in Firebase Auth
-        // Now load their profile from Firestore to check if onboarding is complete
         const userProfile = await firestoreService.getUserProfile(result.uid);
-        
+
         if (userProfile && userProfile.onboardingCompleted) {
-          // User has completed onboarding, go to dashboard
           Session.set('onboardingCompleted', true);
           State.set('userProfile', userProfile);
           this.params.onNavigate('dashboard');
         } else {
-          // User needs to complete onboarding
           Session.set('onboardingCompleted', false);
           this.params.onNavigate('onboarding');
         }
       } else {
-        // Login failed
-        this.showError(result.error);
+        this.showError(this._friendlyAuthError(result.error));
         this.resetLoginButton();
       }
-    });
+    } catch (err) {
+      this.showError(this._friendlyAuthError(err?.message || err));
+      this.resetLoginButton();
+    }
   }
 
   showError(message) {
@@ -265,14 +279,11 @@ export class LoginScreen extends BaseScreen {
   }
 
   setupEventListeners() {
-    const passwordInput = this.element.querySelector('input[type="password"]');
-    if (passwordInput) {
-      passwordInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-          this.handleLogin();
-        }
+    this.element.querySelectorAll('input[type="password"], input[type="email"]').forEach(input => {
+      input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.handleLogin();
       });
-    }
+    });
   }
 }
 

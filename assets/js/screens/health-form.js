@@ -817,7 +817,11 @@ export class HealthFormScreen extends BaseScreen {
       }
     } catch (e) {
       console.error('[HealthForm] submit error:', e);
-      this._showErrorToast('Erro ao salvar. Tente novamente.');
+      if (!navigator.onLine) {
+        this._showErrorToast('Sem conexão. Verifique sua internet e tente novamente.');
+      } else {
+        this._showErrorToast('Erro ao salvar o formulário. Tente novamente.');
+      }
     } finally {
       this.isSaving = false;
     }

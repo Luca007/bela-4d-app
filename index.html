@@ -6,11 +6,23 @@
   <meta name="description" content="Guia Metabólico Personalizado - Seu programa exclusivo de controle de glicemia">
   <title>Guia Metabólico Personalizado | GMP</title>
   
-  <!-- Fonts -->
+  <!-- DNS prefetch e preconnect para recursos críticos -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Outfit:wght@400;700;800&display=swap" rel="stylesheet">
-  
+  <link rel="preconnect" href="https://firestore.googleapis.com">
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com">
+  <link rel="dns-prefetch" href="https://southamerica-east1-bela-4d-app.cloudfunctions.net">
+
+  <!-- Fontes com display=swap para não bloquear render -->
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Outfit:wght@400;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Outfit:wght@400;700;800&display=swap" rel="stylesheet">
+  </noscript>
+
+  <!-- Preload de CSS críticos -->
+  <link rel="preload" href="assets/css/variables.css" as="style">
+  <link rel="preload" href="assets/css/reset.css" as="style">
+
   <!-- Stylesheets -->
   <link rel="stylesheet" href="assets/css/reset.css">
   <link rel="stylesheet" href="assets/css/variables.css">
@@ -48,5 +60,14 @@
   
   <!-- Main App Scripts -->
   <script type="module" src="assets/js/app.js"></script>
+
+  <!-- Service Worker para cache offline -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+  </script>
 </body>
 </html>

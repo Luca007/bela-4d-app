@@ -59,7 +59,12 @@ export class FirestoreService {
   constructor() {
     this.db = null;
     this.initialized = false;
+    this._cache = new Map();
   }
+
+  _cacheGet(key) { return this._cache.get(key); }
+  _cacheSet(key, value) { this._cache.set(key, value); }
+  _cacheDelete(key) { this._cache.delete(key); }
 
   async initialize() {
     if (this.initialized) return;
@@ -86,9 +91,14 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async getUserProfile(uid) {
+    const cacheKey = `profile_${uid}`;
+    const cached = this._cacheGet(cacheKey);
+    if (cached !== undefined) return cached;
     try {
       const snap = await getDoc(this.userRef(uid));
-      return snap.exists() ? snap.data() : null;
+      const value = snap.exists() ? snap.data() : null;
+      this._cacheSet(cacheKey, value);
+      return value;
     } catch (e) {
       console.error('[Firestore] getUserProfile:', e);
       return null;
@@ -96,6 +106,7 @@ export class FirestoreService {
   }
 
   async saveUserProfile(uid, data) {
+    this._cacheDelete(`profile_${uid}`);
     try {
       const toSave = { ...data, updatedAt: serverTimestamp() };
       const existing = await getDoc(this.userRef(uid));
@@ -120,6 +131,7 @@ export class FirestoreService {
 
   /** Atualiza só o status do usuário */
   async updateUserStatus(uid, status) {
+    this._cacheDelete(`profile_${uid}`);
     try {
       await updateDoc(this.userRef(uid), { status, updatedAt: serverTimestamp() });
       return true;
@@ -134,9 +146,14 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async getHealthForm(uid) {
+    const cacheKey = `healthForm_${uid}`;
+    const cached = this._cacheGet(cacheKey);
+    if (cached !== undefined) return cached;
     try {
       const snap = await getDoc(this.subDoc(uid, 'healthForm', 'data'));
-      return snap.exists() ? snap.data() : null;
+      const value = snap.exists() ? snap.data() : null;
+      this._cacheSet(cacheKey, value);
+      return value;
     } catch (e) {
       console.error('[Firestore] getHealthForm:', e);
       return null;
@@ -151,6 +168,7 @@ export class FirestoreService {
    * @param {boolean} completed   — se o usuário confirmou/completou
    */
   async saveHealthForm(uid, formData, { aiPrefilled = false, completed = false } = {}) {
+    this._cacheDelete(`healthForm_${uid}`);
     try {
       const ref = this.subDoc(uid, 'healthForm', 'data');
       const existing = await getDoc(ref);
@@ -208,9 +226,14 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async getMenuForm(uid) {
+    const cacheKey = `menuForm_${uid}`;
+    const cached = this._cacheGet(cacheKey);
+    if (cached !== undefined) return cached;
     try {
       const snap = await getDoc(this.subDoc(uid, 'menuForm', 'data'));
-      return snap.exists() ? snap.data() : null;
+      const value = snap.exists() ? snap.data() : null;
+      this._cacheSet(cacheKey, value);
+      return value;
     } catch (e) {
       console.error('[Firestore] getMenuForm:', e);
       return null;
@@ -218,6 +241,7 @@ export class FirestoreService {
   }
 
   async saveMenuForm(uid, formData, completed = false) {
+    this._cacheDelete(`menuForm_${uid}`);
     try {
       const ref = this.subDoc(uid, 'menuForm', 'data');
       const existing = await getDoc(ref);
@@ -653,6 +677,18 @@ export class FirestoreService {
 
   async awardXp(uid, xpAmount, eventId = null) {
     try {
+      // Deduplicação: evitar XP duplicado por mesmo eventId em menos de 60s
+      if (eventId && eventId !== 'daily_login') {
+        const recentQuery = query(
+          collection(this.getDb(), 'users', uid, 'xpLog'),
+          where('eventId', '==', eventId),
+          where('timestamp', '>', new Date(Date.now() - 60000)),
+          limit(1)
+        );
+        const recentSnap = await getDocs(recentQuery);
+        if (!recentSnap.empty) return 0;
+      }
+
       const { increment } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js');
       const profile = await this.getUserProfile(uid);
       const newXp = (profile?.xp || 0) + xpAmount;

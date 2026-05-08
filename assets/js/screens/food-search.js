@@ -230,9 +230,12 @@ class FoodSearchScreen {
       this._renderEvaluationResult(response);
     } catch (error) {
       console.error('Erro ao avaliar alimento:', error);
+      const offline = !navigator.onLine;
       resultsDiv.innerHTML = `
         <div class="food-error">
-          <p>❌ Erro ao avaliar o alimento. Tente novamente.</p>
+          <p>${offline
+            ? '📡 Sem conexão. Verifique sua internet e tente novamente.'
+            : '❌ Não consegui avaliar este alimento agora. Tente outro nome ou tente novamente.'}</p>
         </div>
       `;
     } finally {
