@@ -116,7 +116,8 @@ const XP_LEVELS = [
 function normalizeAvatarEmoji(value, fallback = '🌙') {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim();
-  if (!trimmed || trimmed === '??' || trimmed.includes('?')) return fallback;
+  const isInvalidEmoji = !trimmed || trimmed === '??' || trimmed.includes('?');
+  if (isInvalidEmoji) return fallback;
   return trimmed;
 }
 
@@ -404,23 +405,14 @@ export class DashboardScreen extends BaseScreen {
     }
   }
 
-  async _loadFirestoreData() {
-    if (this._dataLoading || this._dataLoaded) return;
-    this._dataLoading = true;
-    if (!this.currentUser?.uid) { this._dataLoading = false; return; }
-    const uid = this.currentUser.uid;
-
-    const [ranking, latestExam, latestRequest, menuForm, chatHistory] = await Promise.allSettled([
+  async _loadUserData(uid) {
+    const [ranking] = await Promise.allSettled([
       firestoreService.getTopRanking?.(20),
-      firestoreService.getLatestBloodTest?.(uid),
-      firestoreService.getLatestExamRequest?.(uid),
-      firestoreService.getMenuForm?.(uid),
-      firestoreService.getChatHistory?.(uid, 3),
     ]);
-
     let needsRefresh = false;
 
-    if (ranking.status === 'fulfilled' && Array.isArray(ranking.value) && ranking.value.length) {
+    const hasRankingData = ranking.status === 'fulfilled' && Array.isArray(ranking.value) && ranking.value.length > 0;
+    if (hasRankingData) {
       this.ranking = ranking.value.map((user, i) => ({
         p: user.position || i + 1,
         nm: user.name || 'Usuária',
@@ -434,6 +426,18 @@ export class DashboardScreen extends BaseScreen {
       State.set('ranking', this.ranking);
       needsRefresh = true;
     }
+
+    return needsRefresh;
+  }
+
+  async _loadActivityData(uid) {
+    const [latestExam, latestRequest, menuForm, chatHistory] = await Promise.allSettled([
+      firestoreService.getLatestBloodTest?.(uid),
+      firestoreService.getLatestExamRequest?.(uid),
+      firestoreService.getMenuForm?.(uid),
+      firestoreService.getChatHistory?.(uid, 3),
+    ]);
+    let needsRefresh = false;
 
     if (latestExam.status === 'fulfilled' && latestExam.value?.extractedData) {
       this.examResults = latestExam.value.extractedData;
@@ -455,6 +459,21 @@ export class DashboardScreen extends BaseScreen {
       if (msgs.length) this.homeChatMessages = msgs;
       needsRefresh = true;
     }
+
+    return needsRefresh;
+  }
+
+  async _loadFirestoreData() {
+    if (this._dataLoading || this._dataLoaded) return;
+    this._dataLoading = true;
+    if (!this.currentUser?.uid) { this._dataLoading = false; return; }
+    const uid = this.currentUser.uid;
+
+    const [userRefresh, activityRefresh] = await Promise.all([
+      this._loadUserData(uid),
+      this._loadActivityData(uid),
+    ]);
+    const needsRefresh = userRefresh || activityRefresh;
 
     this._dataLoading = false;
     this._dataLoaded = true;
@@ -1808,7 +1827,7 @@ export class DashboardScreen extends BaseScreen {
     setTimeout(() => input.focus(), 100);
   }
 
-  setupEventListeners() {
+  _setupNavigationListeners() {
     this.element.querySelectorAll('[data-nav-item]').forEach(button => {
       button.addEventListener('click', () => {
         this.currentNav = button.getAttribute('data-nav-item');
@@ -1817,47 +1836,17 @@ export class DashboardScreen extends BaseScreen {
       });
     });
 
-    // Reivindicar conquista — dispara claim + popup XP + animação de confete.
-    this.element.querySelectorAll('[data-claim-achievement]').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const id = btn.getAttribute('data-claim-achievement');
-        if (!id) return;
-        btn.disabled = true;
-        btn.innerHTML = '⏳ Reivindicando...';
-
-        try {
-          const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === id);
-          const xpGained = achievement?.xp || 0;
-          const profileBefore = await firestoreService.getUserProfile(this.currentUser.uid);
-          const xpBefore = profileBefore?.xp || 0;
-          const levelBefore = profileBefore?.level || 1;
-
-          const ok = await firestoreService.claimAchievement(this.currentUser.uid, id);
-          if (ok) {
-            const xpAfter = xpBefore + xpGained;
-            const levelAfter = this._getLevelForXp(xpAfter);
-            this._showXpPopup({ xpBefore, xpAfter, xpGained, levelBefore, levelAfter });
-            this._showAchievementConfetti(btn);
-            setTimeout(() => {
-              if (typeof this.mountPreservingScroll === 'function') this.mountPreservingScroll();
-              else this.mount();
-            }, 1500);
-          } else {
-            btn.disabled = false;
-            btn.innerHTML = '🎁 Tentar novamente';
-          }
-        } catch (err) {
-          console.error('[Dashboard] claim error:', err);
-          btn.disabled = false;
-          btn.innerHTML = '🎁 Tentar novamente';
-        }
-      });
-    });
-
     this.element.querySelector('[data-open-drawer]')?.addEventListener('click', () => {
       this.sideOpen = !this.sideOpen;
       this.mount();
+    });
+
+    // attach close listeners to all matching elements (backdrop + close button)
+    this.element.querySelectorAll('[data-close-drawer]').forEach(el => {
+      el.addEventListener('click', () => {
+        this.sideOpen = false;
+        this.mount();
+      });
     });
 
     this.element.querySelector('.dash-streak')?.addEventListener('click', () => {
@@ -1865,6 +1854,32 @@ export class DashboardScreen extends BaseScreen {
       this.mount();
     });
 
+    // stable theme toggle (dark <-> light), guarded against rapid multi-clicks
+    this.element.querySelectorAll('[data-toggle-theme]').forEach(button => {
+      button.addEventListener('click', () => {
+        if (this.themeToggleLocked) return;
+        this.themeToggleLocked = true;
+        this.saveTheme(!this.isDark);
+        this.mountPreservingScroll();
+        window.setTimeout(() => { this.themeToggleLocked = false; }, 180);
+      });
+    });
+
+    this.element.querySelectorAll('[data-meal-toggle]').forEach(button => {
+      button.addEventListener('click', () => {
+        const mealId = button.getAttribute('data-meal-toggle');
+        const contentEl = this.element.querySelector('.dash-content');
+        const scrollPos = contentEl ? contentEl.scrollTop : 0;
+        if (this.homeChecked.has(mealId)) this.homeChecked.delete(mealId);
+        else this.homeChecked.add(mealId);
+        this.mount();
+        // restore scroll after render
+        requestAnimationFrame(() => { const el = this.element.querySelector('.dash-content'); if (el) el.scrollTop = scrollPos; });
+      });
+    });
+  }
+
+  _setupNotificationListeners() {
     this.element.querySelector('[data-toggle-notifications]')?.addEventListener('click', () => {
       const panel = this.element.querySelector('.dash-notification-panel');
       const bell = this.element.querySelector('[data-toggle-notifications]');
@@ -1978,62 +1993,56 @@ export class DashboardScreen extends BaseScreen {
       wrapper.addEventListener('pointerup', onPointerUp);
       wrapper.addEventListener('pointercancel', onPointerUp);
     });
+  }
 
-    // attach close listeners to all matching elements (backdrop + close button)
-    this.element.querySelectorAll('[data-close-drawer]').forEach(el => {
-      el.addEventListener('click', () => {
-        this.sideOpen = false;
+  _setupAchievementListeners() {
+    // Reivindicar conquista — dispara claim + popup XP + animação de confete.
+    this.element.querySelectorAll('[data-claim-achievement]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-claim-achievement');
+        if (!id) return;
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Reivindicando...';
+
+        try {
+          const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === id);
+          const xpGained = achievement?.xp || 0;
+          const profileBefore = await firestoreService.getUserProfile(this.currentUser.uid);
+          const xpBefore = profileBefore?.xp || 0;
+          const levelBefore = profileBefore?.level || 1;
+
+          const ok = await firestoreService.claimAchievement(this.currentUser.uid, id);
+          if (ok) {
+            const xpAfter = xpBefore + xpGained;
+            const levelAfter = this._getLevelForXp(xpAfter);
+            this._showXpPopup({ xpBefore, xpAfter, xpGained, levelBefore, levelAfter });
+            this._showAchievementConfetti(btn);
+            setTimeout(() => {
+              if (typeof this.mountPreservingScroll === 'function') this.mountPreservingScroll();
+              else this.mount();
+            }, 1500);
+          } else {
+            btn.disabled = false;
+            btn.innerHTML = '🎁 Tentar novamente';
+          }
+        } catch (err) {
+          console.error('[Dashboard] claim error:', err);
+          btn.disabled = false;
+          btn.innerHTML = '🎁 Tentar novamente';
+        }
+      });
+    });
+
+    this.element.querySelectorAll('[data-conquest-tab]').forEach(button => {
+      button.addEventListener('click', () => {
+        this.communityTab = button.getAttribute('data-conquest-tab');
         this.mount();
       });
     });
+  }
 
-    // stable theme toggle (dark <-> light), guarded against rapid multi-clicks
-    this.element.querySelectorAll('[data-toggle-theme]').forEach(button => {
-      button.addEventListener('click', () => {
-        if (this.themeToggleLocked) return;
-        this.themeToggleLocked = true;
-        this.saveTheme(!this.isDark);
-        this.mountPreservingScroll();
-        window.setTimeout(() => { this.themeToggleLocked = false; }, 180);
-      });
-    });
-
-    this.element.querySelectorAll('[data-meal-toggle]').forEach(button => {
-      button.addEventListener('click', () => {
-        const mealId = button.getAttribute('data-meal-toggle');
-        const contentEl = this.element.querySelector('.dash-content');
-        const scrollPos = contentEl ? contentEl.scrollTop : 0;
-        if (this.homeChecked.has(mealId)) this.homeChecked.delete(mealId);
-        else this.homeChecked.add(mealId);
-        this.mount();
-        // restore scroll after render
-        requestAnimationFrame(() => { const el = this.element.querySelector('.dash-content'); if (el) el.scrollTop = scrollPos; });
-      });
-    });
-
-    this.element.querySelector('[data-home-chat-input]')?.addEventListener('input', event => {
-      this.homeChatInput = event.target.value;
-    });
-
-    this.element.querySelector('[data-home-send]')?.addEventListener('click', () => {
-      this.sendDashboardChatMessage(this.homeChatInput);
-    });
-
-    this.element.querySelectorAll('[data-recipe-filter]').forEach(button => {
-      button.addEventListener('click', () => {
-        this.recipeFilter = button.getAttribute('data-recipe-filter');
-        this.selectedRecipe = null;
-        this.mount();
-      });
-    });
-
-    this.element.querySelectorAll('[data-recipes-view]').forEach(button => {
-      button.addEventListener('click', () => {
-        this.recipesView = button.getAttribute('data-recipes-view') || 'catalogo';
-        this.mountPreservingScroll();
-      });
-    });
-
+  _setupRecipeListeners() {
     const recipeOfHourEl = this.element.querySelector('[data-recipe-of-hour]');
     if (recipeOfHourEl) {
       recipeOfHourEl.addEventListener('click', async (e) => {
@@ -2116,123 +2125,17 @@ export class DashboardScreen extends BaseScreen {
       });
     });
 
-    this.element.querySelectorAll('[data-exam-tab]').forEach(button => {
+    this.element.querySelectorAll('[data-recipe-filter]').forEach(button => {
       button.addEventListener('click', () => {
-        this.examTab = button.getAttribute('data-exam-tab');
+        this.recipeFilter = button.getAttribute('data-recipe-filter');
+        this.selectedRecipe = null;
         this.mount();
       });
     });
 
-    this.element.querySelectorAll('[data-conquest-tab]').forEach(button => {
+    this.element.querySelectorAll('[data-recipes-view]').forEach(button => {
       button.addEventListener('click', () => {
-        this.communityTab = button.getAttribute('data-conquest-tab');
-        this.mount();
-      });
-    });
-
-    this.element.querySelectorAll('[data-community-like]').forEach(button => {
-      button.addEventListener('click', () => {
-        const feedId = button.getAttribute('data-community-like');
-        this.communityFeed = this.communityFeed.map(item => item.id === feedId ? { ...item, lk: item.liked ? item.lk - 1 : item.lk + 1, liked: !item.liked } : item);
-        this.persistProfileFields({ communityFeed: this.communityFeed });
-        this.mountPreservingScroll();
-      });
-    });
-
-    this.element.querySelectorAll('[data-community-toggle-comment]').forEach(button => {
-      button.addEventListener('click', () => {
-        const feedId = button.getAttribute('data-community-toggle-comment');
-        this.commentOpenId = this.commentOpenId === feedId ? null : feedId;
-        this.commentText = '';
-        this.mountPreservingScroll();
-      });
-    });
-
-    this.element.querySelector('[data-community-comment-input]')?.addEventListener('input', event => {
-      this.commentText = event.target.value;
-    });
-
-    this.element.querySelector('[data-community-comment-send]')?.addEventListener('click', () => {
-      if (!this.commentText.trim() || !this.commentOpenId) return;
-      this.communityFeed = this.communityFeed.map(item => item.id === this.commentOpenId ? { ...item, cm: [...item.cm, { u: 'Você', t: this.commentText.trim() }] } : item);
-      this.commentText = '';
-      this.commentOpenId = null;
-      this.persistProfileFields({ communityFeed: this.communityFeed });
-      this.mountPreservingScroll();
-    });
-
-    this.element.querySelector('[data-community-comment-close]')?.addEventListener('click', () => {
-      this.commentOpenId = null;
-      this.commentText = '';
-      this.mountPreservingScroll();
-    });
-
-    this.element.querySelector('[data-chat-input]')?.addEventListener('input', event => {
-      this.homeChatInput = event.target.value;
-    });
-
-    this.element.querySelector('[data-chat-send]')?.addEventListener('click', () => {
-      this.sendDashboardChatMessage(this.homeChatInput);
-    });
-
-    this.element.querySelectorAll('[data-chat-suggestion]').forEach(button => {
-      button.addEventListener('click', () => {
-        this.homeChatInput = button.getAttribute('data-chat-suggestion') || '';
-        this.mount();
-      });
-    });
-
-    this.element.querySelector('[data-clear-chat-context]')?.addEventListener('click', () => {
-      this.chatRecipeContext = null;
-      this.mountPreservingScroll();
-    });
-
-    this.element.querySelectorAll('[data-avatar-emoji]').forEach(button => {
-      button.addEventListener('click', () => {
-        this.profileAvatar = { ...this.profileAvatar, emoji: button.getAttribute('data-avatar-emoji') };
-        this.mountPreservingScroll();
-      });
-    });
-
-    this.element.querySelectorAll('[data-avatar-color]').forEach(button => {
-      button.addEventListener('click', () => {
-        this.profileAvatar = { ...this.profileAvatar, color: button.getAttribute('data-avatar-color') };
-        this.mountPreservingScroll();
-      });
-    });
-
-    this.element.querySelector('[data-avatar-custom]')?.addEventListener('click', () => {
-      this._openEmojiPickerModal();
-    });
-
-    this.element.querySelector('[data-avatar-color-input]')?.addEventListener('change', event => {
-      const color = event.target.value;
-      this.profileAvatar = { ...this.profileAvatar, color };
-      this.mountPreservingScroll();
-    });
-
-    this.element.querySelectorAll('[data-tip-vote]').forEach(button => {
-      button.addEventListener('click', () => {
-        const raw = button.getAttribute('data-tip-vote') || '';
-        const [tipId, vote] = raw.split(':');
-        this.dicas = this.dicas.map(item => {
-          if (item.id !== tipId) return item;
-          const currentVote = item.myVote || null;
-          let likes = Number(item.likes || 0);
-          let dislikes = Number(item.dislikes || 0);
-          if (currentVote === vote) {
-            if (vote === 'like') likes = Math.max(0, likes - 1);
-            if (vote === 'dislike') dislikes = Math.max(0, dislikes - 1);
-            return { ...item, likes, dislikes, myVote: null };
-          }
-          if (currentVote === 'like') likes = Math.max(0, likes - 1);
-          if (currentVote === 'dislike') dislikes = Math.max(0, dislikes - 1);
-          if (vote === 'like') likes += 1;
-          if (vote === 'dislike') dislikes += 1;
-          return { ...item, likes, dislikes, myVote: vote };
-        });
-        State.set('belaTips', this.dicas);
-        this.persistProfileFields({ belaTips: this.dicas });
+        this.recipesView = button.getAttribute('data-recipes-view') || 'catalogo';
         this.mountPreservingScroll();
       });
     });
@@ -2291,8 +2194,8 @@ export class DashboardScreen extends BaseScreen {
       button.addEventListener('click', async () => {
         const orderId = button.getAttribute('data-order-download');
         const order = (this.examOrders || []).find(item => item.id === orderId);
-        const ready = Boolean(order?.fileReady || order?.pdfReady || order?.fileUrl || order?.driveFileUrl);
-        if (!ready) {
+        const isFileReady = Boolean(order?.fileReady || order?.pdfReady || order?.fileUrl || order?.driveFileUrl);
+        if (!isFileReady) {
           const { notificationService } = await import('../modules/notifications.js');
           notificationService.toast('Pedido ainda indisponível. Aguarde processamento do n8n.');
           return;
@@ -2324,6 +2227,69 @@ export class DashboardScreen extends BaseScreen {
           notificationService.toast('Não foi possível baixar o pedido agora.');
         }
       });
+    });
+
+    this.element.querySelectorAll('[data-exam-tab]').forEach(button => {
+      button.addEventListener('click', () => {
+        this.examTab = button.getAttribute('data-exam-tab');
+        this.mount();
+      });
+    });
+  }
+
+  _setupChatListeners() {
+    this.element.querySelector('[data-home-chat-input]')?.addEventListener('input', event => {
+      this.homeChatInput = event.target.value;
+    });
+
+    this.element.querySelector('[data-home-send]')?.addEventListener('click', () => {
+      this.sendDashboardChatMessage(this.homeChatInput);
+    });
+
+    this.element.querySelector('[data-chat-input]')?.addEventListener('input', event => {
+      this.homeChatInput = event.target.value;
+    });
+
+    this.element.querySelector('[data-chat-send]')?.addEventListener('click', () => {
+      this.sendDashboardChatMessage(this.homeChatInput);
+    });
+
+    this.element.querySelectorAll('[data-chat-suggestion]').forEach(button => {
+      button.addEventListener('click', () => {
+        this.homeChatInput = button.getAttribute('data-chat-suggestion') || '';
+        this.mount();
+      });
+    });
+
+    this.element.querySelector('[data-clear-chat-context]')?.addEventListener('click', () => {
+      this.chatRecipeContext = null;
+      this.mountPreservingScroll();
+    });
+  }
+
+  _setupProfileListeners() {
+    this.element.querySelectorAll('[data-avatar-emoji]').forEach(button => {
+      button.addEventListener('click', () => {
+        this.profileAvatar = { ...this.profileAvatar, emoji: button.getAttribute('data-avatar-emoji') };
+        this.mountPreservingScroll();
+      });
+    });
+
+    this.element.querySelectorAll('[data-avatar-color]').forEach(button => {
+      button.addEventListener('click', () => {
+        this.profileAvatar = { ...this.profileAvatar, color: button.getAttribute('data-avatar-color') };
+        this.mountPreservingScroll();
+      });
+    });
+
+    this.element.querySelector('[data-avatar-custom]')?.addEventListener('click', () => {
+      this._openEmojiPickerModal();
+    });
+
+    this.element.querySelector('[data-avatar-color-input]')?.addEventListener('change', event => {
+      const color = event.target.value;
+      this.profileAvatar = { ...this.profileAvatar, color };
+      this.mountPreservingScroll();
     });
 
     this.element.querySelector('[data-avatar-nick]')?.addEventListener('input', event => {
@@ -2364,6 +2330,81 @@ export class DashboardScreen extends BaseScreen {
         console.error('[Dashboard] logout error:', error);
       }
     });
+  }
+
+  _setupCommunityListeners() {
+    this.element.querySelectorAll('[data-community-like]').forEach(button => {
+      button.addEventListener('click', () => {
+        const feedId = button.getAttribute('data-community-like');
+        this.communityFeed = this.communityFeed.map(item => item.id === feedId ? { ...item, lk: item.liked ? item.lk - 1 : item.lk + 1, liked: !item.liked } : item);
+        this.persistProfileFields({ communityFeed: this.communityFeed });
+        this.mountPreservingScroll();
+      });
+    });
+
+    this.element.querySelectorAll('[data-community-toggle-comment]').forEach(button => {
+      button.addEventListener('click', () => {
+        const feedId = button.getAttribute('data-community-toggle-comment');
+        this.commentOpenId = this.commentOpenId === feedId ? null : feedId;
+        this.commentText = '';
+        this.mountPreservingScroll();
+      });
+    });
+
+    this.element.querySelector('[data-community-comment-input]')?.addEventListener('input', event => {
+      this.commentText = event.target.value;
+    });
+
+    this.element.querySelector('[data-community-comment-send]')?.addEventListener('click', () => {
+      if (!this.commentText.trim() || !this.commentOpenId) return;
+      this.communityFeed = this.communityFeed.map(item => item.id === this.commentOpenId ? { ...item, cm: [...item.cm, { u: 'Você', t: this.commentText.trim() }] } : item);
+      this.commentText = '';
+      this.commentOpenId = null;
+      this.persistProfileFields({ communityFeed: this.communityFeed });
+      this.mountPreservingScroll();
+    });
+
+    this.element.querySelector('[data-community-comment-close]')?.addEventListener('click', () => {
+      this.commentOpenId = null;
+      this.commentText = '';
+      this.mountPreservingScroll();
+    });
+
+    this.element.querySelectorAll('[data-tip-vote]').forEach(button => {
+      button.addEventListener('click', () => {
+        const raw = button.getAttribute('data-tip-vote') || '';
+        const [tipId, vote] = raw.split(':');
+        this.dicas = this.dicas.map(item => {
+          if (item.id !== tipId) return item;
+          const currentVote = item.myVote || null;
+          let likes = Number(item.likes || 0);
+          let dislikes = Number(item.dislikes || 0);
+          if (currentVote === vote) {
+            if (vote === 'like') likes = Math.max(0, likes - 1);
+            if (vote === 'dislike') dislikes = Math.max(0, dislikes - 1);
+            return { ...item, likes, dislikes, myVote: null };
+          }
+          if (currentVote === 'like') likes = Math.max(0, likes - 1);
+          if (currentVote === 'dislike') dislikes = Math.max(0, dislikes - 1);
+          if (vote === 'like') likes += 1;
+          if (vote === 'dislike') dislikes += 1;
+          return { ...item, likes, dislikes, myVote: vote };
+        });
+        State.set('belaTips', this.dicas);
+        this.persistProfileFields({ belaTips: this.dicas });
+        this.mountPreservingScroll();
+      });
+    });
+  }
+
+  setupEventListeners() {
+    this._setupNavigationListeners();
+    this._setupNotificationListeners();
+    this._setupAchievementListeners();
+    this._setupRecipeListeners();
+    this._setupChatListeners();
+    this._setupProfileListeners();
+    this._setupCommunityListeners();
   }
 }
 
