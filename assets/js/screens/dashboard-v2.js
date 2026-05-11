@@ -439,22 +439,26 @@ export class DashboardScreen extends BaseScreen {
     ]);
     let needsRefresh = false;
 
-    if (latestExam.status === 'fulfilled' && latestExam.value?.extractedData) {
+    const hasExamData = latestExam.status === 'fulfilled' && Boolean(latestExam.value?.extractedData);
+    if (hasExamData) {
       this.examResults = latestExam.value.extractedData;
       needsRefresh = true;
     }
 
-    if (latestRequest.status === 'fulfilled' && latestRequest.value) {
+    const hasExamRequest = latestRequest.status === 'fulfilled' && Boolean(latestRequest.value);
+    if (hasExamRequest) {
       this.examOrders = [latestRequest.value, ...(this.examOrders || []).filter(o => o.id !== latestRequest.value?.id)];
       needsRefresh = true;
     }
 
-    if (menuForm.status === 'fulfilled' && Array.isArray(menuForm.value?.mealTimes) && menuForm.value.mealTimes.length) {
+    const hasMenuForm = menuForm.status === 'fulfilled' && Array.isArray(menuForm.value?.mealTimes) && menuForm.value.mealTimes.length > 0;
+    if (hasMenuForm) {
       this.dailyMeals = menuForm.value.mealTimes.filter(m => m.enabled !== false);
       needsRefresh = true;
     }
 
-    if (chatHistory.status === 'fulfilled' && Array.isArray(chatHistory.value) && chatHistory.value.length) {
+    const hasChatHistory = chatHistory.status === 'fulfilled' && Array.isArray(chatHistory.value) && chatHistory.value.length > 0;
+    if (hasChatHistory) {
       const msgs = chatHistory.value.map(m => ({ r: m.role === 'user' ? 'user' : 'ai', t: m.content }));
       if (msgs.length) this.homeChatMessages = msgs;
       needsRefresh = true;
@@ -1903,7 +1907,9 @@ export class DashboardScreen extends BaseScreen {
       this._outsideClickHandler = (e) => {
         const panel = this.element.querySelector('.dash-notification-panel');
         const bell = this.element.querySelector('[data-toggle-notifications]');
-        if (panel && panel.classList.contains('is-open') && !panel.contains(e.target) && bell && !bell.contains(e.target)) {
+        const isPanelOpen = panel && panel.classList.contains('is-open');
+        const isClickOutside = !panel.contains(e.target) && bell && !bell.contains(e.target);
+        if (isPanelOpen && isClickOutside) {
           panel.classList.remove('is-open');
           bell.setAttribute('aria-expanded', 'false');
         }
