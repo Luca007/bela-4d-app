@@ -4,7 +4,7 @@ import { Colors } from '../config/colors.js';
 import { SCREENS, XP_EVENTS } from '../config/constants.js';
 import { firestoreService } from '../services/firestore.js';
 import { authService } from '../services/auth.js';
-import { getFunctions } from '../config/firebase.js';
+import { getFunctions, httpsCallable } from '../config/firebase.js';
 import { buildChatPayload } from '../config/n8n.js';
 import { notificationService } from '../modules/notifications.js';
 import { DOM } from '../utils/helpers.js';
@@ -49,7 +49,7 @@ export class ChatScreen extends BaseScreen {
       // Inicializa Cloud Function reference
       if (!chatFunction) {
         const functions = getFunctions();
-        chatFunction = functions.httpsCallable('agentChatMessage');
+        chatFunction = httpsCallable(functions, 'agentChatMessage');
       }
 
       // Handle pinned recipe from params

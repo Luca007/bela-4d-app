@@ -319,26 +319,34 @@ export class LoginScreen extends BaseScreen {
 
   _friendlyAuthError(rawError) {
     const msg = String(rawError || '').toLowerCase();
-    if (!navigator.onLine) return 'Sem conexão com a internet. Verifique sua rede e tente novamente.';
-    if (msg.includes('invalid-credential') || msg.includes('wrong-password') || msg.includes('user-not-found') || msg.includes('invalid-email')) {
-      return 'E-mail ou senha incorretos. Verifique seus dados.';
-    }
-    if (msg.includes('too-many-requests')) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
-    if (msg.includes('network') || msg.includes('timeout')) return 'Erro de conexão. Tente novamente.';
-    if (msg.includes('user-disabled')) return 'Esta conta foi desativada. Entre em contato com o suporte.';
+    const isOffline = !navigator.onLine;
+    const isInvalidCredential = msg.includes('invalid-credential') || msg.includes('wrong-password') || msg.includes('user-not-found') || msg.includes('invalid-email');
+    const isTooManyRequests = msg.includes('too-many-requests');
+    const isNetworkError = msg.includes('network') || msg.includes('timeout');
+    const isUserDisabled = msg.includes('user-disabled');
+
+    if (isOffline) return 'Sem conexão com a internet. Verifique sua rede e tente novamente.';
+    if (isInvalidCredential) return 'E-mail ou senha incorretos. Verifique seus dados.';
+    if (isTooManyRequests) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+    if (isNetworkError) return 'Erro de conexão. Tente novamente.';
+    if (isUserDisabled) return 'Esta conta foi desativada. Entre em contato com o suporte.';
     return 'Erro ao entrar. Tente novamente.';
   }
 
-  async handleLogin() {
+  _validateLoginForm() {
     if (!this.email || !this.password) {
       this.showError('Por favor, preencha e-mail e senha.');
-      return;
+      return false;
     }
-
     if (!navigator.onLine) {
       this.showError('Sem conexão com a internet. Verifique sua rede.');
-      return;
+      return false;
     }
+    return true;
+  }
+
+  async handleLogin() {
+    if (!this._validateLoginForm()) return;
 
     this.isLoading = true;
     this.loginBtn.disabled = true;

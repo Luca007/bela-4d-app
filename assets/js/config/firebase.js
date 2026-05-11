@@ -4,7 +4,7 @@
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
 import { getAuth as getAuthInstance } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 import { getFirestore as getFirestoreInstance } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { getFunctions as getFunctionsInstance } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js';
+import { getFunctions as getFunctionsInstance, httpsCallable } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js';
 import { getAnalytics as getAnalyticsInstance, isSupported as isAnalyticsSupported } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js';
 
 export const firebaseConfig = {
@@ -79,3 +79,5 @@ export function getApp() {
   }
   return app;
 }
+
+export { httpsCallable };

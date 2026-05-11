@@ -67,6 +67,15 @@ export class FirestoreService {
   _cacheSet(key, value) { this._cache.set(key, value); }
   _cacheDelete(key) { this._cache.delete(key); }
 
+  async _run(fn, label, fallback = null) {
+    try {
+      return await fn();
+    } catch (e) {
+      console.error(`[Firestore] ${label}:`, e);
+      return fallback;
+    }
+  }
+
   async initialize() {
     if (this.initialized) return;
     try {
@@ -95,20 +104,17 @@ export class FirestoreService {
     const cacheKey = `profile_${uid}`;
     const cached = this._cacheGet(cacheKey);
     if (cached !== undefined) return cached;
-    try {
+    return this._run(async () => {
       const snap = await getDoc(this.userRef(uid));
       const value = snap.exists() ? snap.data() : null;
       this._cacheSet(cacheKey, value);
       return value;
-    } catch (e) {
-      console.error('[Firestore] getUserProfile:', e);
-      return null;
-    }
+    }, 'getUserProfile');
   }
 
   async saveUserProfile(uid, data) {
     this._cacheDelete(`profile_${uid}`);
-    try {
+    return this._run(async () => {
       const toSave = { ...data, updatedAt: serverTimestamp() };
       const existing = await getDoc(this.userRef(uid));
       if (!existing.exists()) {
@@ -124,10 +130,7 @@ export class FirestoreService {
       }
       await setDoc(this.userRef(uid), toSave, { merge: true });
       return true;
-    } catch (e) {
-      console.error('[Firestore] saveUserProfile:', e);
-      return false;
-    }
+    }, 'saveUserProfile', false);
   }
 
   /**
@@ -138,7 +141,7 @@ export class FirestoreService {
    */
   async ensureUserDocument(uid, email = null) {
     if (!uid) return null;
-    try {
+    return this._run(async () => {
       const ref = this.userRef(uid);
       const snap = await getDoc(ref);
       if (snap.exists()) {
@@ -195,22 +198,16 @@ export class FirestoreService {
       }
 
       return initialData;
-    } catch (e) {
-      console.error('[Firestore] ensureUserDocument:', e);
-      return null;
-    }
+    }, 'ensureUserDocument');
   }
 
   /** Atualiza só o status do usuário */
   async updateUserStatus(uid, status) {
     this._cacheDelete(`profile_${uid}`);
-    try {
+    return this._run(async () => {
       await updateDoc(this.userRef(uid), { status, updatedAt: serverTimestamp() });
       return true;
-    } catch (e) {
-      console.error('[Firestore] updateUserStatus:', e);
-      return false;
-    }
+    }, 'updateUserStatus', false);
   }
 
   // ─────────────────────────────────────────────
@@ -221,15 +218,12 @@ export class FirestoreService {
     const cacheKey = `healthForm_${uid}`;
     const cached = this._cacheGet(cacheKey);
     if (cached !== undefined) return cached;
-    try {
+    return this._run(async () => {
       const snap = await getDoc(this.subDoc(uid, 'healthForm', 'data'));
       const value = snap.exists() ? snap.data() : null;
       this._cacheSet(cacheKey, value);
       return value;
-    } catch (e) {
-      console.error('[Firestore] getHealthForm:', e);
-      return null;
-    }
+    }, 'getHealthForm');
   }
 
   /**
@@ -241,7 +235,7 @@ export class FirestoreService {
    */
   async saveHealthForm(uid, formData, { aiPrefilled = false, completed = false } = {}) {
     this._cacheDelete(`healthForm_${uid}`);
-    try {
+    return this._run(async () => {
       const ref = this.subDoc(uid, 'healthForm', 'data');
       const existing = await getDoc(ref);
       const toSave = {
@@ -258,10 +252,7 @@ export class FirestoreService {
         await this.awardXp(uid, XP_EVENTS.HEALTH_FORM_COMPLETED, 'health_form_done');
       }
       return true;
-    } catch (e) {
-      console.error('[Firestore] saveHealthForm:', e);
-      return false;
-    }
+    }, 'saveHealthForm', false);
   }
 
   // ─────────────────────────────────────────────
@@ -270,18 +261,15 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async getOnboardingInterview(uid) {
-    try {
+    return this._run(async () => {
       const snap = await getDoc(this.subDoc(uid, 'onboardingInterview', 'data'));
       return snap.exists() ? snap.data() : null;
-    } catch (e) {
-      console.error('[Firestore] getOnboardingInterview:', e);
-      return null;
-    }
+    }, 'getOnboardingInterview');
   }
 
   async saveOnboardingData(uid, data) {
     if (!uid) return false;
-    try {
+    return this._run(async () => {
       const userRef = doc(this.db, 'users', uid);
       await setDoc(userRef, {
         onboardingData: {
@@ -306,24 +294,18 @@ export class FirestoreService {
       }, { merge: true });
       this._cacheDelete(`profile_${uid}`);
       return true;
-    } catch (e) {
-      console.error('[Firestore] saveOnboardingData:', e);
-      return false;
-    }
+    }, 'saveOnboardingData', false);
   }
 
   async saveOnboardingInterview(uid, data) {
-    try {
+    return this._run(async () => {
       const ref = this.subDoc(uid, 'onboardingInterview', 'data');
       await setDoc(ref, {
         ...data,
         processedAt: serverTimestamp(),
       }, { merge: true });
       return true;
-    } catch (e) {
-      console.error('[Firestore] saveOnboardingInterview:', e);
-      return false;
-    }
+    }, 'saveOnboardingInterview', false);
   }
 
   // ─────────────────────────────────────────────
@@ -334,20 +316,17 @@ export class FirestoreService {
     const cacheKey = `menuForm_${uid}`;
     const cached = this._cacheGet(cacheKey);
     if (cached !== undefined) return cached;
-    try {
+    return this._run(async () => {
       const snap = await getDoc(this.subDoc(uid, 'menuForm', 'data'));
       const value = snap.exists() ? snap.data() : null;
       this._cacheSet(cacheKey, value);
       return value;
-    } catch (e) {
-      console.error('[Firestore] getMenuForm:', e);
-      return null;
-    }
+    }, 'getMenuForm');
   }
 
   async saveMenuForm(uid, formData, completed = false) {
     this._cacheDelete(`menuForm_${uid}`);
-    try {
+    return this._run(async () => {
       const ref = this.subDoc(uid, 'menuForm', 'data');
       const existing = await getDoc(ref);
       const toSave = { ...formData, completed, updatedAt: serverTimestamp() };
@@ -359,10 +338,7 @@ export class FirestoreService {
         await this.awardXp(uid, XP_EVENTS.MENU_FORM_COMPLETED, 'menu_form_done');
       }
       return true;
-    } catch (e) {
-      console.error('[Firestore] saveMenuForm:', e);
-      return false;
-    }
+    }, 'saveMenuForm', false);
   }
 
   // ─────────────────────────────────────────────
@@ -370,7 +346,7 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async saveBloodTest(uid, { fileUrl, fileName, fileSize, extractedData = null, status = 'pending' }) {
-    try {
+    return this._run(async () => {
       const ref = await addDoc(this.subCol(uid, 'bloodTests'), {
         fileUrl,
         fileName,
@@ -386,15 +362,12 @@ export class FirestoreService {
       await this.awardXp(uid, XP_EVENTS.BLOOD_TEST_UPLOADED, 'blood_test_uploaded');
 
       return ref.id;
-    } catch (e) {
-      console.error('[Firestore] saveBloodTest:', e);
-      return null;
-    }
+    }, 'saveBloodTest');
   }
 
   /** Chamado pelo n8n após processar o exame */
   async updateBloodTestExtraction(uid, bloodTestId, extractedData) {
-    try {
+    return this._run(async () => {
       await updateDoc(this.subDoc(uid, 'bloodTests', bloodTestId), {
         extractedData,
         status: 'done',
@@ -403,23 +376,17 @@ export class FirestoreService {
       // Avança para preenchimento do Form 1
       await this.updateUserStatus(uid, 'filling_health_form');
       return true;
-    } catch (e) {
-      console.error('[Firestore] updateBloodTestExtraction:', e);
-      return false;
-    }
+    }, 'updateBloodTestExtraction', false);
   }
 
   async getLatestBloodTest(uid) {
-    try {
+    return this._run(async () => {
       const q = query(this.subCol(uid, 'bloodTests'), orderBy('uploadedAt', 'desc'), limit(1));
       const snap = await getDocs(q);
       if (snap.empty) return null;
       const d = snap.docs[0];
       return { id: d.id, ...d.data() };
-    } catch (e) {
-      console.error('[Firestore] getLatestBloodTest:', e);
-      return null;
-    }
+    }, 'getLatestBloodTest');
   }
 
   // ─────────────────────────────────────────────
@@ -427,7 +394,7 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async saveExamRequest(uid, { fileUrl, fileName, preFilledData }) {
-    try {
+    return this._run(async () => {
       const ref = await addDoc(this.subCol(uid, 'examRequests'), {
         fileUrl,
         fileName,
@@ -436,23 +403,17 @@ export class FirestoreService {
       });
       await this.updateUserStatus(uid, 'exam_request_sent');
       return ref.id;
-    } catch (e) {
-      console.error('[Firestore] saveExamRequest:', e);
-      return null;
-    }
+    }, 'saveExamRequest');
   }
 
   async getLatestExamRequest(uid) {
-    try {
+    return this._run(async () => {
       const q = query(this.subCol(uid, 'examRequests'), orderBy('createdAt', 'desc'), limit(1));
       const snap = await getDocs(q);
       if (snap.empty) return null;
       const d = snap.docs[0];
       return { id: d.id, ...d.data() };
-    } catch (e) {
-      console.error('[Firestore] getLatestExamRequest:', e);
-      return null;
-    }
+    }, 'getLatestExamRequest');
   }
 
   // ─────────────────────────────────────────────
@@ -460,7 +421,7 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async saveChatMessage(uid, { role, content, type = 'text', conversationId = null }) {
-    try {
+    return this._run(async () => {
       const ref = await addDoc(this.subCol(uid, 'chatHistory'), {
         role,          // 'user' | 'assistant'
         content,
@@ -482,10 +443,7 @@ export class FirestoreService {
       }
 
       return ref.id;
-    } catch (e) {
-      console.error('[Firestore] saveChatMessage:', e);
-      return null;
-    }
+    }, 'saveChatMessage');
   }
 
   async getChatHistory(uid, maxMessages = 50) {

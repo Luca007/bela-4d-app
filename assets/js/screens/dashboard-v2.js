@@ -5,7 +5,7 @@ import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
-import { ACHIEVEMENTS_CATALOG } from '../config/constants.js';
+import { ACHIEVEMENTS_CATALOG, LEVELS } from '../config/constants.js';
 import { offlineQueue } from '../modules/offline-queue.js';
 
 const NAV_ITEMS = [
@@ -620,6 +620,53 @@ export class DashboardScreen extends BaseScreen {
     }
   }
 
+  _getLevelForXp(xp) {
+    for (let i = LEVELS.length - 1; i >= 0; i--) {
+      if (xp >= LEVELS[i].minXp) return LEVELS[i].level;
+    }
+    return 1;
+  }
+
+  _showXpPopup({ xpBefore, xpAfter, xpGained, levelBefore, levelAfter }) {
+    const leveledUp = levelAfter > levelBefore;
+    const levelData = LEVELS.find(l => l.level === levelAfter) || LEVELS[0];
+    const nextLevel = LEVELS.find(l => l.level === levelAfter + 1);
+    const rangeMin = levelData.minXp;
+    const rangeMax = nextLevel ? nextLevel.minXp : levelData.minXp + 500;
+    const pctBefore = Math.min(100, Math.max(0, Math.round(((xpBefore - rangeMin) / (rangeMax - rangeMin)) * 100)));
+    const pctAfter = Math.min(100, Math.max(0, Math.round(((xpAfter - rangeMin) / (rangeMax - rangeMin)) * 100)));
+
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-popup-overlay';
+    overlay.innerHTML = `
+      <div class="xp-popup-card${leveledUp ? ' leveled-up' : ''}">
+        ${leveledUp ? `<div class="xp-popup-levelup">🎉 SUBIU DE NÍVEL!</div>` : ''}
+        <div class="xp-popup-emoji">${levelData.emoji || '⭐'}</div>
+        <div class="xp-popup-level">Nível ${levelAfter} — ${levelData.title || ''}</div>
+        <div class="xp-popup-bar-wrap">
+          <div class="xp-popup-bar" style="width:${pctBefore}%" data-target="${pctAfter}"></div>
+        </div>
+        <div class="xp-popup-numbers">
+          <span class="xp-before">${xpBefore} XP</span>
+          <span class="xp-gained">+${xpGained} XP</span>
+          <span class="xp-after">${xpAfter} XP</span>
+        </div>
+        <button class="xp-popup-close">Continuar</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      const bar = overlay.querySelector('.xp-popup-bar');
+      if (bar) bar.style.width = bar.dataset.target + '%';
+    });
+
+    const close = () => overlay.remove();
+    overlay.querySelector('.xp-popup-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    setTimeout(close, 7000);
+  }
+
   async markAllNotificationsRead() {
     if (!this.currentUser?.uid) return;
     const unread = (this.notifications || []).filter(notification => !notification.read && notification.id);
@@ -857,6 +904,7 @@ export class DashboardScreen extends BaseScreen {
           <div class="top">Guia Metabólico</div>
           <div class="bottom">Personalizado</div>
         </div>
+        <div class="dash-streak" style="cursor:pointer;" title="Ver conquistas"><span>🔥</span><span>${this.streak}</span></div>
         <button class="dash-bell-btn" data-toggle-notifications aria-label="Notificações" style="position:relative;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,255,255,0.07);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;flex-shrink:0;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:rgba(255,255,255,0.85)">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -864,7 +912,6 @@ export class DashboardScreen extends BaseScreen {
           </svg>
           ${unreadCount > 0 ? `<span style="position:absolute;top:4px;right:4px;min-width:16px;height:16px;padding:0 4px;background:linear-gradient(135deg,#f0059a,#c0027c);border-radius:8px;border:2px solid var(--dash-bg,#0f0f1a);box-shadow:0 0 6px rgba(240,5,154,0.7);color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1;">${unreadCount > 9 ? '9+' : unreadCount}</span>` : ''}
         </button>
-        <div class="dash-streak"><span>🔥</span><span>${this.streak}</span></div>
       </div>
     `;
   }
@@ -945,7 +992,7 @@ export class DashboardScreen extends BaseScreen {
               <div style="color:var(--dash-muted);font-size:12px;">Histórico recente da sua conta</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <button class="dash-ghost-btn" data-mark-notifications-read style="min-height:34px;padding:8px 10px;border-radius:10px;font-size:12px;">Marcar lidas</button>
+              <button class="dash-ghost-btn" data-mark-notifications-read style="min-height:34px;padding:8px 10px;border-radius:10px;font-size:12px;">Marcar todas como lidas</button>
               <button data-close-notification-panel aria-label="Fechar notificações" style="width:32px;height:32px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--dash-muted);font-size:16px;line-height:1;">✕</button>
             </div>
           </div>
@@ -1739,7 +1786,7 @@ export class DashboardScreen extends BaseScreen {
       });
     });
 
-    // Reivindicar conquista — dispara claim + animação de confete.
+    // Reivindicar conquista — dispara claim + popup XP + animação de confete.
     this.element.querySelectorAll('[data-claim-achievement]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -1749,14 +1796,22 @@ export class DashboardScreen extends BaseScreen {
         btn.innerHTML = '⏳ Reivindicando...';
 
         try {
+          const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === id);
+          const xpGained = achievement?.xp || 0;
+          const profileBefore = await firestoreService.getUserProfile(this.currentUser.uid);
+          const xpBefore = profileBefore?.xp || 0;
+          const levelBefore = profileBefore?.level || 1;
+
           const ok = await firestoreService.claimAchievement(this.currentUser.uid, id);
           if (ok) {
+            const xpAfter = xpBefore + xpGained;
+            const levelAfter = this._getLevelForXp(xpAfter);
+            this._showXpPopup({ xpBefore, xpAfter, xpGained, levelBefore, levelAfter });
             this._showAchievementConfetti(btn);
-            // Re-render after a short delay so user sees confetti
             setTimeout(() => {
               if (typeof this.mountPreservingScroll === 'function') this.mountPreservingScroll();
               else this.mount();
-            }, 1100);
+            }, 1500);
           } else {
             btn.disabled = false;
             btn.innerHTML = '🎁 Tentar novamente';
@@ -1771,6 +1826,11 @@ export class DashboardScreen extends BaseScreen {
 
     this.element.querySelector('[data-open-drawer]')?.addEventListener('click', () => {
       this.sideOpen = !this.sideOpen;
+      this.mount();
+    });
+
+    this.element.querySelector('.dash-streak')?.addEventListener('click', () => {
+      this.currentNav = 'conquistas';
       this.mount();
     });
 
@@ -1959,7 +2019,8 @@ export class DashboardScreen extends BaseScreen {
           // Try to find by partial match
           const anyRecipe = pool[0];
           if (anyRecipe) {
-            this.recipeOriginNav = this.currentNav; // captura origem (provavelmente 'inicio')
+            this.recipeOriginNav = this.currentNav;
+            this.recipesView = 'catalogo';
             this.selectedRecipe = anyRecipe;
             this.currentNav = 'receitas';
             await this.mount();
@@ -1968,6 +2029,7 @@ export class DashboardScreen extends BaseScreen {
           return;
         }
         this.recipeOriginNav = this.currentNav; // captura origem (provavelmente 'inicio')
+        this.recipesView = 'catalogo'; // garantir que abre o detalhe, não o planner
         this.selectedRecipe = recipe;
         this.currentNav = 'receitas';
         await this.mount();
@@ -2016,8 +2078,9 @@ export class DashboardScreen extends BaseScreen {
     this.element.querySelectorAll('[data-recipe-remove]').forEach(button => {
       button.addEventListener('click', async event => {
         event.stopPropagation();
-        const recipeCatalog = Array.isArray(this.recipes) && this.recipes.length ? this.recipes : RECIPES;
-        const recipe = recipeCatalog.find(item => item.id === button.getAttribute('data-recipe-remove'));
+        const id = button.getAttribute('data-recipe-remove');
+        const pool = [...(Array.isArray(this.recipes) ? this.recipes : []), ...RECIPES];
+        const recipe = pool.find(item => item.id === id);
         if (recipe) await this.removeRecipe(recipe);
       });
     });

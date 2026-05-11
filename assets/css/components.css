@@ -774,3 +774,95 @@ input[type='range']::-moz-range-thumb {
 .swipe-action-right { color: #f0059a; opacity: 0; transition: opacity 0.15s; }
 .notification-swipe-wrapper.swiping-left .swipe-action-left { opacity: 1; }
 .notification-swipe-wrapper.swiping-right .swipe-action-right { opacity: 1; }
+
+/* ===== XP Popup Overlay ===== */
+.xp-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+.xp-popup-card {
+  background: var(--dash-surface, #1a1a22);
+  border-radius: 20px;
+  padding: 28px 24px;
+  max-width: 340px;
+  width: calc(100vw - 48px);
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: modalIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.xp-popup-card.leveled-up {
+  border-color: #f0059a;
+  box-shadow: 0 0 40px rgba(240, 5, 154, 0.35), 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.xp-popup-levelup {
+  color: #f0059a;
+  font-size: 17px;
+  font-weight: 900;
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+}
+.xp-popup-emoji {
+  font-size: 48px;
+  margin-bottom: 6px;
+  line-height: 1;
+}
+.xp-popup-level {
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+  margin-bottom: 18px;
+}
+.xp-popup-bar-wrap {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.xp-popup-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #f0059a, #9b02c8);
+  border-radius: 6px;
+  transition: width 1.1s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 8px rgba(240, 5, 154, 0.5);
+}
+.xp-popup-numbers {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 22px;
+}
+.xp-gained {
+  color: #f0059a;
+  font-weight: 900;
+  font-size: 16px;
+}
+.xp-before, .xp-after {
+  font-size: 12px;
+}
+.xp-popup-close {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #f0059a, #c0027c);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 4px 16px rgba(240, 5, 154, 0.4);
+}
+.xp-popup-close:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(240, 5, 154, 0.5);
+}
