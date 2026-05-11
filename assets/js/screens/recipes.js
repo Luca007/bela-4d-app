@@ -353,6 +353,69 @@ class RecipesScreen {
     });
   }
 
+  _renderNutritionSection(nutrition) {
+    return `
+      <div class="recipe-modal-nutrition">
+        <h3>Informação Nutricional</h3>
+        <div class="recipe-nutrition-grid">
+          <div class="nutrition-stat">
+            <div class="nutrition-stat-value">${nutrition?.calories || '--'}</div>
+            <div class="nutrition-stat-label">Kcal</div>
+          </div>
+          <div class="nutrition-stat">
+            <div class="nutrition-stat-value">${nutrition?.proteins || '--'}g</div>
+            <div class="nutrition-stat-label">Proteína</div>
+          </div>
+          <div class="nutrition-stat">
+            <div class="nutrition-stat-value">${nutrition?.carbs || '--'}g</div>
+            <div class="nutrition-stat-label">Carboidratos</div>
+          </div>
+          <div class="nutrition-stat">
+            <div class="nutrition-stat-value">${nutrition?.fats || '--'}g</div>
+            <div class="nutrition-stat-label">Gordura</div>
+          </div>
+          <div class="nutrition-stat">
+            <div class="nutrition-stat-value">${nutrition?.glycemicIndex || '--'}</div>
+            <div class="nutrition-stat-label">IG</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderIngredientsSection(ingredients) {
+    return `
+      <div class="recipe-modal-ingredients">
+        <h3>Ingredientes</h3>
+        <ul class="recipe-ingredients-list">
+          ${(ingredients || []).map(ing => `
+            <li class="recipe-ingredient-item">
+              <span class="ingredient-checkbox">☐</span>
+              <span class="ingredient-name">${ing.name}</span>
+              <span class="ingredient-quantity">${ing.quantity} ${ing.unit}</span>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  _renderInstructionsSection(instructions) {
+    return `
+      <div class="recipe-modal-instructions">
+        <h3>Modo de Fazer</h3>
+        <ol class="recipe-instructions-list">
+          ${(instructions || []).map((instruction, idx) => `
+            <li class="recipe-instruction-item">
+              <span class="instruction-number">${idx + 1}</span>
+              <span class="instruction-text">${instruction}</span>
+            </li>
+          `).join('')}
+        </ol>
+      </div>
+    `;
+  }
+
   _createRecipeModal(recipe) {
     const isFavorite = this.favorites.has(recipe.id);
 
@@ -372,60 +435,13 @@ class RecipesScreen {
 
         <div class="recipe-modal-content">
           <div class="recipe-modal-image">
-            <img src="${recipe.imageUrl || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/%3E%3C/svg%3E'}" 
+            <img src="${recipe.imageUrl || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/%3E%3C/svg%3E'}"
                  alt="${recipe.title}">
           </div>
 
-          <div class="recipe-modal-nutrition">
-            <h3>Informação Nutricional</h3>
-            <div class="recipe-nutrition-grid">
-              <div class="nutrition-stat">
-                <div class="nutrition-stat-value">${recipe.nutrition?.calories || '--'}</div>
-                <div class="nutrition-stat-label">Kcal</div>
-              </div>
-              <div class="nutrition-stat">
-                <div class="nutrition-stat-value">${recipe.nutrition?.proteins || '--'}g</div>
-                <div class="nutrition-stat-label">Proteína</div>
-              </div>
-              <div class="nutrition-stat">
-                <div class="nutrition-stat-value">${recipe.nutrition?.carbs || '--'}g</div>
-                <div class="nutrition-stat-label">Carboidratos</div>
-              </div>
-              <div class="nutrition-stat">
-                <div class="nutrition-stat-value">${recipe.nutrition?.fats || '--'}g</div>
-                <div class="nutrition-stat-label">Gordura</div>
-              </div>
-              <div class="nutrition-stat">
-                <div class="nutrition-stat-value">${recipe.nutrition?.glycemicIndex || '--'}</div>
-                <div class="nutrition-stat-label">IG</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="recipe-modal-ingredients">
-            <h3>Ingredientes</h3>
-            <ul class="recipe-ingredients-list">
-              ${(recipe.ingredients || []).map(ing => `
-                <li class="recipe-ingredient-item">
-                  <span class="ingredient-checkbox">☐</span>
-                  <span class="ingredient-name">${ing.name}</span>
-                  <span class="ingredient-quantity">${ing.quantity} ${ing.unit}</span>
-                </li>
-              `).join('')}
-            </ul>
-          </div>
-
-          <div class="recipe-modal-instructions">
-            <h3>Modo de Fazer</h3>
-            <ol class="recipe-instructions-list">
-              ${(recipe.instructions || []).map((instruction, idx) => `
-                <li class="recipe-instruction-item">
-                  <span class="instruction-number">${idx + 1}</span>
-                  <span class="instruction-text">${instruction}</span>
-                </li>
-              `).join('')}
-            </ol>
-          </div>
+          ${this._renderNutritionSection(recipe.nutrition)}
+          ${this._renderIngredientsSection(recipe.ingredients)}
+          ${this._renderInstructionsSection(recipe.instructions)}
 
           ${recipe.tips ? `
             <div class="recipe-modal-tips">

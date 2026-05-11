@@ -329,7 +329,7 @@ export class DashboardScreen extends BaseScreen {
     ];
 
     stats.forEach(stat => {
-      const card = UIComponents.statCard(stat.label, stat.value, stat.unit, '📊', stat.color);
+      const card = UIComponents.statCard({ label: stat.label, value: stat.value, unit: stat.unit, icon: '📊', color: stat.color });
       const delta = DOM.create('div');
       DOM.setStyle(delta, {
         color: stat.color,

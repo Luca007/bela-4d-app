@@ -253,31 +253,49 @@ class FoodSearchScreen {
     }
   }
 
-  _renderEvaluationResult(evaluation) {
+  _renderFoodCard(evaluation) {
     const verdict = evaluation.evaluation;
     const scoreClass = verdict.score <= 3 ? 'red' : (verdict.score <= 6 ? 'yellow' : 'green');
     const icon = verdict.score <= 3 ? '🔴' : (verdict.score <= 6 ? '🟡' : '🟢');
 
-    const resultsDiv = document.getElementById('food-search-results');
-    resultsDiv.innerHTML = `
+    const alternativesHtml = verdict.alternatives && verdict.alternatives.length > 0 ? `
+      <div class="food-result-alternatives">
+        <h3>✨ Alternativas Recomendadas</h3>
+        <div class="alternatives-list">
+          ${verdict.alternatives.map(alt => `
+            <button class="alternative-item" data-food="${alt}">
+              <span>${alt}</span>
+              <span class="alternative-action">→</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
+
+    const whenOkHtml = verdict.whenOk ? `
+      <div class="food-result-when-ok">
+        <h3>📅 Quando é Aceitável?</h3>
+        <p>${verdict.whenOk}</p>
+      </div>
+    ` : '';
+
+    return `
       <div class="food-result-card">
         <div class="food-result-header ${scoreClass}">
           <div class="food-result-icon">${icon}</div>
           <div class="food-result-verdict">
-            <h2>${evaluation.evaluation.verdict}</h2>
-            <p>${evaluation.evaluation.food} (${evaluation.evaluation.quantity})</p>
+            <h2>${verdict.verdict}</h2>
+            <p>${verdict.food} (${verdict.quantity})</p>
           </div>
           <div class="food-result-score">
             <div class="score-circle">
-              <span>${evaluation.evaluation.score}/<span style="opacity: 0.5;">10</span></span>
+              <span>${verdict.score}/<span style="opacity: 0.5;">10</span></span>
             </div>
           </div>
         </div>
-
         <div class="food-result-explanation">
-          <p>${evaluation.evaluation.explanation}</p>
+          <p>${verdict.explanation}</p>
         </div>
-
         <div class="food-result-impact">
           <h3>💭 Impacto Glicêmico</h3>
           <div class="impact-badge ${verdict.glycemicImpact.toLowerCase()}">
@@ -287,28 +305,8 @@ class FoodSearchScreen {
             ${this._getGlycemicExplanation(verdict.glycemicImpact)}
           </p>
         </div>
-
-        ${evaluation.evaluation.alternatives && evaluation.evaluation.alternatives.length > 0 ? `
-          <div class="food-result-alternatives">
-            <h3>✨ Alternativas Recomendadas</h3>
-            <div class="alternatives-list">
-              ${evaluation.evaluation.alternatives.map((alt, idx) => `
-                <button class="alternative-item" data-food="${alt}">
-                  <span>${alt}</span>
-                  <span class="alternative-action">→</span>
-                </button>
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        ${evaluation.evaluation.whenOk ? `
-          <div class="food-result-when-ok">
-            <h3>📅 Quando é Aceitável?</h3>
-            <p>${evaluation.evaluation.whenOk}</p>
-          </div>
-        ` : ''}
-
+        ${alternativesHtml}
+        ${whenOkHtml}
         <div class="food-result-actions">
           <button class="btn-secondary food-action-save-btn">📌 Salvar</button>
           <button class="btn-secondary food-action-share-btn">📤 Compartilhar</button>
@@ -316,6 +314,13 @@ class FoodSearchScreen {
         </div>
       </div>
     `;
+  }
+
+  _renderEvaluationResult(evaluation) {
+    const verdict = evaluation.evaluation;
+
+    const resultsDiv = document.getElementById('food-search-results');
+    resultsDiv.innerHTML = this._renderFoodCard(evaluation);
 
     // Attach handlers
     resultsDiv.querySelectorAll('.alternative-item').forEach(btn => {
@@ -331,7 +336,7 @@ class FoodSearchScreen {
     });
 
     resultsDiv.querySelector('.food-action-share-btn')?.addEventListener('click', () => {
-      const text = `${verdict.verdict}\n\n${evaluation.evaluation.food}: ${evaluation.evaluation.explanation}\n\nAvaliação feita via Programa 4D da Bela Nutrição`;
+      const text = `${verdict.verdict}\n\n${verdict.food}: ${verdict.explanation}\n\nAvaliação feita via Programa 4D da Bela Nutrição`;
       if (navigator.share) {
         navigator.share({ title: 'Avaliação de Alimento', text });
       }
@@ -347,9 +352,9 @@ class FoodSearchScreen {
 
     // Log XP event
     this.firestore.logXPEvent(this.uid, 'FOOD_EVALUATED', {
-      foodName: evaluation.evaluation.food,
-      score: evaluation.evaluation.score,
-      verdict: evaluation.evaluation.verdict
+      foodName: verdict.food,
+      score: verdict.score,
+      verdict: verdict.verdict
     });
   }
 

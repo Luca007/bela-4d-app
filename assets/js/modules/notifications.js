@@ -15,8 +15,7 @@ class NotificationService {
     document.body.appendChild(this.container);
   }
 
-  // small toast
-  toast(text, opts = {}) {
+  _createToastElement(text, opts = {}) {
     const type = opts.type || 'status';
     const palette = {
       error: { bg: '#ef4444', border: '#b91c1c', icon: '⛔' },
@@ -69,16 +68,16 @@ class NotificationService {
       flexShrink: '0',
     });
 
-    const dismiss = () => {
-      el.style.opacity = '0';
-      el.style.transform = 'translateX(40px)';
-      window.setTimeout(() => el.remove(), 190);
-    };
+    el.appendChild(icon);
+    el.appendChild(message);
+    el.appendChild(closeBtn);
+    return { el, closeBtn };
+  }
 
-    closeBtn.addEventListener('click', dismiss);
-
+  _attachSwipeHandlers(el, onDismiss) {
     let pointerStartX = null;
     let deltaX = 0;
+
     el.addEventListener('pointerdown', event => {
       pointerStartX = event.clientX;
       deltaX = 0;
@@ -95,7 +94,7 @@ class NotificationService {
 
     const finishSwipe = () => {
       if (pointerStartX === null) return;
-      if (Math.abs(deltaX) > 90) dismiss();
+      if (Math.abs(deltaX) > 90) onDismiss();
       else el.style.transform = 'translateX(0)';
       pointerStartX = null;
       deltaX = 0;
@@ -103,14 +102,29 @@ class NotificationService {
 
     el.addEventListener('pointerup', finishSwipe);
     el.addEventListener('pointercancel', finishSwipe);
+  }
 
-    el.appendChild(icon);
-    el.appendChild(message);
-    el.appendChild(closeBtn);
-    this.container.appendChild(el);
+  _scheduleAutoDismiss(el, duration, onDismiss) {
     setTimeout(() => {
-      if (el.isConnected) dismiss();
-    }, opts.duration || 3200);
+      if (el.isConnected) onDismiss();
+    }, duration);
+  }
+
+  // small toast
+  toast(text, opts = {}) {
+    const { el, closeBtn } = this._createToastElement(text, opts);
+
+    const dismiss = () => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateX(40px)';
+      window.setTimeout(() => el.remove(), 190);
+    };
+
+    closeBtn.addEventListener('click', dismiss);
+    this._attachSwipeHandlers(el, dismiss);
+
+    this.container.appendChild(el);
+    this._scheduleAutoDismiss(el, opts.duration || 3200, dismiss);
   }
 
   // large achievement popup

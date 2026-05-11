@@ -658,21 +658,18 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async saveFoodEvaluation(uid, evaluationData) {
-    try {
+    return this._run(async () => {
       const ref = await addDoc(this.subCol(uid, 'foodEvaluations'), {
         ...evaluationData,
         createdAt: serverTimestamp(),
       });
       await this.awardXp(uid, XP_EVENTS.FOOD_EVALUATED, 'food_evaluated');
       return ref.id;
-    } catch (e) {
-      console.error('[Firestore] saveFoodEvaluation:', e);
-      return null;
-    }
+    }, 'saveFoodEvaluation');
   }
 
   async getFoodEvaluations(uid, limit_ = 50) {
-    try {
+    return this._run(async () => {
       const q = query(
         this.subCol(uid, 'foodEvaluations'),
         orderBy('createdAt', 'desc'),
@@ -680,10 +677,7 @@ export class FirestoreService {
       );
       const snap = await getDocs(q);
       return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch (e) {
-      console.error('[Firestore] getFoodEvaluations:', e);
-      return [];
-    }
+    }, 'getFoodEvaluations', []);
   }
 
   // ─────────────────────────────────────────────
@@ -691,7 +685,7 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async getUserData(uid, path) {
-    try {
+    return this._run(async () => {
       // Se path contém /, trata como subcoleção/documento
       if (path.includes('/')) {
         const [subCollection, docId] = path.split('/');
@@ -702,14 +696,11 @@ export class FirestoreService {
         const profile = await this.getUserProfile(uid);
         return profile ? profile[path] : null;
       }
-    } catch (e) {
-      console.error('[Firestore] getUserData:', e);
-      return null;
-    }
+    }, 'getUserData');
   }
 
   async saveUserData(uid, path, data) {
-    try {
+    return this._run(async () => {
       if (path.includes('/')) {
         const [subCollection, docId] = path.split('/');
         const ref = this.subDoc(uid, subCollection, docId);
@@ -718,10 +709,7 @@ export class FirestoreService {
         await this.saveUserProfile(uid, { [path]: data });
       }
       return true;
-    } catch (e) {
-      console.error('[Firestore] saveUserData:', e);
-      return false;
-    }
+    }, 'saveUserData', false);
   }
 
   // ─────────────────────────────────────────────
@@ -912,7 +900,7 @@ export class FirestoreService {
 
   async unlockAchievement(uid, achievementId) {
     if (!uid || !achievementId) return false;
-    try {
+    return this._run(async () => {
       const ref = this.subDoc(uid, 'achievements', achievementId);
       const existing = await getDoc(ref);
       if (existing.exists()) return false; // idempotente
@@ -949,15 +937,12 @@ export class FirestoreService {
       }
 
       return true;
-    } catch (e) {
-      console.error('[Firestore] unlockAchievement:', e);
-      return false;
-    }
+    }, 'unlockAchievement', false);
   }
 
   async claimAchievement(uid, achievementId) {
     if (!uid || !achievementId) return false;
-    try {
+    return this._run(async () => {
       const ref = this.subDoc(uid, 'achievements', achievementId);
       const snap = await getDoc(ref);
       if (!snap.exists()) {
@@ -982,14 +967,11 @@ export class FirestoreService {
       }
 
       return true;
-    } catch (e) {
-      console.error('[Firestore] claimAchievement:', e);
-      return false;
-    }
+    }, 'claimAchievement', false);
   }
 
   async getTopRanking(limitCount = 10) {
-    try {
+    return this._run(async () => {
       const q = query(collection(this.getDb(), 'users'), orderBy('xp', 'desc'), limit(limitCount));
       const snap = await getDocs(q);
       return snap.docs.map((docSnap, index) => {
@@ -1005,23 +987,17 @@ export class FirestoreService {
           avatarColor: data.avatarColor || '#f0059a',
         };
       });
-    } catch (e) {
-      console.error('[Firestore] getTopRanking:', e);
-      return [];
-    }
+    }, 'getTopRanking', []);
   }
 
   async markActionSeen(uid, actionId) {
-    try {
+    return this._run(async () => {
       await updateDoc(this.subDoc(uid, 'pendingActions', actionId), {
         seen: true,
         seenAt: serverTimestamp(),
       });
       return true;
-    } catch (e) {
-      console.error('[Firestore] markActionSeen:', e);
-      return false;
-    }
+    }, 'markActionSeen', false);
   }
 
   /**

@@ -35,6 +35,16 @@ class N8nService {
     return fn(data);
   }
 
+  async _callAndUnpack(functionName, data, label) {
+    try {
+      const result = await this._call(functionName, data);
+      return result.data;
+    } catch (e) {
+      console.error(`[N8N] ${label}:`, e);
+      throw e;
+    }
+  }
+
   // ──────────────────────────────────────────────────────────
   // PROCESSAMENTO DA TRANSCRIÇÃO DO GOOGLE MEET
   // Workflow n8n: "4D - Process Onboarding Transcript"
@@ -52,17 +62,7 @@ class N8nService {
    * @param {string} driveFileUrl    — link do arquivo no Google Drive (opcional)
    */
   async processOnboardingTranscript(uid, transcriptText, driveFileUrl = null) {
-    try {
-      const result = await this._call('processOnboardingTranscript', {
-        uid,
-        transcriptText,
-        driveFileUrl,
-      });
-      return result.data;
-    } catch (e) {
-      console.error('[N8N] processOnboardingTranscript:', e);
-      throw e;
-    }
+    return this._callAndUnpack('processOnboardingTranscript', { uid, transcriptText, driveFileUrl }, 'processOnboardingTranscript');
   }
 
   // ──────────────────────────────────────────────────────────
@@ -83,17 +83,7 @@ class N8nService {
    * @param {string} driveFileUrl   — URL do arquivo no Google Drive
    */
   async processBloodTest(uid, bloodTestId, driveFileUrl) {
-    try {
-      const result = await this._call('processBloodTest', {
-        uid,
-        bloodTestId,
-        driveFileUrl,
-      });
-      return result.data;
-    } catch (e) {
-      console.error('[N8N] processBloodTest:', e);
-      throw e;
-    }
+    return this._callAndUnpack('processBloodTest', { uid, bloodTestId, driveFileUrl }, 'processBloodTest');
   }
 
   // ──────────────────────────────────────────────────────────
@@ -108,16 +98,7 @@ class N8nService {
    * @param {Object} clientData — dados pré-extraídos da transcrição
    */
   async generateExamRequest(uid, clientData) {
-    try {
-      const result = await this._call('generateExamRequest', {
-        uid,
-        clientData,
-      });
-      return result.data;
-    } catch (e) {
-      console.error('[N8N] generateExamRequest:', e);
-      throw e;
-    }
+    return this._callAndUnpack('generateExamRequest', { uid, clientData }, 'generateExamRequest');
   }
 
   /**
@@ -126,13 +107,7 @@ class N8nService {
    * downloads/stores the PDF from Google Drive and returns a signed URL.
    */
   async downloadExamPdf(uid, examRequestId) {
-    try {
-      const result = await this._call('downloadExamPdf', { uid, examRequestId });
-      return result.data; // { fileUrl }
-    } catch (e) {
-      console.error('[N8N] downloadExamPdf:', e);
-      throw e;
-    }
+    return this._callAndUnpack('downloadExamPdf', { uid, examRequestId }, 'downloadExamPdf');
   }
 
   // ──────────────────────────────────────────────────────────
@@ -148,17 +123,7 @@ class N8nService {
    * @param {string} sessionId   — ID da conversa (para contexto)
    */
   async sendChatMessage(uid, message, sessionId) {
-    try {
-      const result = await this._call('agentChatMessage', {
-        uid,
-        message,
-        sessionId,
-      });
-      return result.data; // { reply: string, type: 'text'|'recipe', recipe?: Object }
-    } catch (e) {
-      console.error('[N8N] sendChatMessage:', e);
-      throw e;
-    }
+    return this._callAndUnpack('agentChatMessage', { uid, message, sessionId }, 'sendChatMessage');
   }
 
   // ──────────────────────────────────────────────────────────
@@ -172,29 +137,11 @@ class N8nService {
    * @param {Object} preferences — { mealType, maxPrepTime, avoidIngredients, preferIngredients }
    */
   async generateRecipe(uid, preferences = {}) {
-    try {
-      const result = await this._call('generateRecipe', {
-        uid,
-        preferences,
-      });
-      return result.data; // Recipe object
-    } catch (e) {
-      console.error('[N8N] generateRecipe:', e);
-      throw e;
-    }
+    return this._callAndUnpack('generateRecipe', { uid, preferences }, 'generateRecipe');
   }
 
   async deleteRecipe(uid, recipeId) {
-    try {
-      const result = await this._call('deleteRecipe', {
-        uid,
-        recipeId,
-      });
-      return result.data;
-    } catch (e) {
-      console.error('[N8N] deleteRecipe:', e);
-      throw e;
-    }
+    return this._callAndUnpack('deleteRecipe', { uid, recipeId }, 'deleteRecipe');
   }
 
   // ──────────────────────────────────────────────────────────
@@ -209,17 +156,7 @@ class N8nService {
    * @param {number|null} quantity — em gramas (opcional)
    */
   async evaluateFood(uid, foodName, quantity = null) {
-    try {
-      const result = await this._call('evaluateFood', {
-        uid,
-        foodName,
-        quantity,
-      });
-      return result.data;
-    } catch (e) {
-      console.error('[N8N] evaluateFood:', e);
-      throw e;
-    }
+    return this._callAndUnpack('evaluateFood', { uid, foodName, quantity }, 'evaluateFood');
   }
 }
 

@@ -92,38 +92,41 @@ class App {
   // Navegação
   // ────────────────────────────────────────────────
 
-  async navigate(screenId, params = {}) {
-    if (this.currentScreen) {
-      try { this.currentScreen.destroy?.(); } catch (_) {}
-    }
-
+  async _loadScreen(screenId) {
     let ScreenClass = this.screens.get(screenId);
-
     if (!ScreenClass && lazyScreens[screenId]) {
       try {
         ScreenClass = await lazyScreens[screenId]();
         this.screens.set(screenId, ScreenClass);
       } catch (err) {
         console.error(`[App] Failed to load screen: ${screenId}`, err);
-        return;
+        return null;
       }
     }
+    return ScreenClass || null;
+  }
 
-    if (!ScreenClass) {
-      console.error(`[App] Screen not found: ${screenId}`);
-      return;
+  _activateScreen(ScreenClass, screenId, params) {
+    if (this.currentScreen) {
+      try { this.currentScreen.destroy?.(); } catch (_) {}
     }
-
     const screenParams = {
       ...params,
       onNavigate: (nextId, nextParams) => this.navigate(nextId, nextParams),
     };
-
     this.currentScreen = new ScreenClass(screenParams);
     this.currentScreen.mount?.();
-
     document.title = this._pageTitle(screenId);
     console.log(`[App] → ${screenId}`, params.status || '');
+  }
+
+  async navigate(screenId, params = {}) {
+    const ScreenClass = await this._loadScreen(screenId);
+    if (!ScreenClass) {
+      console.error(`[App] Screen not found: ${screenId}`);
+      return;
+    }
+    this._activateScreen(ScreenClass, screenId, params);
   }
 
   _pageTitle(screenId) {
@@ -285,59 +288,66 @@ class App {
     authService.onAuthStateChanged((user) => this.handleAuthStateChange(user));
   }
 
+  async _handlePendingAction(action, uid) {
+    switch (action.type) {
+      case 'blood_test_processed':
+        notificationService.notify({
+          uid: this.currentUser?.uid,
+          title: 'Exame processado',
+          message: 'Seu exame foi analisado! Preencha o formulário de saúde.',
+          type: 'success',
+        });
+        await this.routeByStatus(uid);
+        break;
+      case 'meeting_analyzed':
+        notificationService.notify({
+          uid: this.currentUser?.uid,
+          title: 'Reunião analisada',
+          message: 'Seus dados foram pré-preenchidos com base na reunião.',
+          type: 'success',
+        });
+        break;
+      case 'recipe_ready':
+        notificationService.notify({
+          uid: this.currentUser?.uid,
+          title: 'Nova receita disponível',
+          message: 'A Guardiã preparou uma nova receita para você no chat!',
+          type: 'status',
+        });
+        break;
+      default:
+        notificationService.toast(action.message || 'Você tem uma nova atualização do programa.', { type: 'status' });
+        break;
+    }
+
+    if (action.id) {
+      await firestoreService.markActionSeen(uid, action.id);
+    }
+  }
+
   /** Escuta pendingActions para notificações em tempo real */
   _watchPendingActions(uid) {
     const unsubscribe = firestoreService.onPendingActionsChange?.(uid, async (actions) => {
       if (!actions?.length) return;
-
       for (const action of actions) {
         if (action.seen) continue;
-        switch (action.type) {
-          case 'blood_test_processed':
-            notificationService.notify({
-              uid: this.currentUser?.uid,
-              title: 'Exame processado',
-              message: 'Seu exame foi analisado! Preencha o formulário de saúde.',
-              type: 'success',
-            });
-            await this.routeByStatus(uid);
-            break;
-          case 'meeting_analyzed':
-            notificationService.notify({
-              uid: this.currentUser?.uid,
-              title: 'Reunião analisada',
-              message: 'Seus dados foram pré-preenchidos com base na reunião.',
-              type: 'success',
-            });
-            break;
-          case 'recipe_ready':
-            notificationService.notify({
-              uid: this.currentUser?.uid,
-              title: 'Nova receita disponível',
-              message: 'A Guardiã preparou uma nova receita para você no chat!',
-              type: 'status',
-            });
-            break;
-          default:
-            notificationService.toast(action.message || 'Você tem uma nova atualização do programa.', { type: 'status' });
-            break;
-        }
-
-        if (action.id) {
-          await firestoreService.markActionSeen(uid, action.id);
-        }
+        await this._handlePendingAction(action, uid);
       }
     });
     if (unsubscribe) this.dataUnsubscribers.push(unsubscribe);
   }
 
+  _onNotificationsUpdate(notifications) {
+    State.set('notifications', notifications || []);
+    if (notifications?.length) {
+      console.log('[App] Notificações atualizadas:', notifications.length);
+    }
+  }
+
   /** Escuta notificações do usuário para exibição futura na UI */
   _watchNotifications(uid) {
     const unsubscribe = firestoreService.onNotificationsChange?.(uid, (notifications) => {
-      State.set('notifications', notifications || []);
-      if (notifications?.length) {
-        console.log('[App] Notificações atualizadas:', notifications.length);
-      }
+      this._onNotificationsUpdate(notifications);
     });
     if (unsubscribe) this.dataUnsubscribers.push(unsubscribe);
   }

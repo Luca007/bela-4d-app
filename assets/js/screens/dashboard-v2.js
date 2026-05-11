@@ -1214,6 +1214,115 @@ export class DashboardScreen extends BaseScreen {
     `;
   }
 
+  _renderRecipePlanner(meals, recipesViewTabs) {
+    return `
+      <section>
+        <div class="dash-section-title">🗓️ Refeições do Dia</div>
+        <div class="dash-section-subtitle">Personalize quantas refeições quer exibir no seu painel inicial</div>
+        ${recipesViewTabs}
+        <div class="dash-card pad" style="margin-bottom:12px;">
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+            ${meals.map(meal => `
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div style="width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;">${meal.icon}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="color:var(--dash-text);font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${meal.nome}</div>
+                  <div style="color:var(--dash-muted);font-size:12px;">${meal.hora} · ${meal.desc}</div>
+                </div>
+                <button class="dash-ghost-btn" data-meal-remove="${meal.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;">Remover</button>
+              </div>
+            `).join('')}
+          </div>
+          <div style="display:grid;grid-template-columns:72px 1fr 92px;gap:8px;margin-bottom:8px;">
+            <input class="dash-input" data-meal-draft-icon value="${this.mealDraft.icon}" maxlength="2" placeholder="🍽️" style="text-align:center;padding:10px 8px;" />
+            <input class="dash-input" data-meal-draft-name value="${this.mealDraft.nome.replace(/"/g, '&quot;')}" placeholder="Nome da refeição" style="padding:10px 12px;" />
+            <input type="time" class="dash-input" data-meal-draft-time value="${this.mealDraft.hora}" style="padding:10px 12px;" />
+          </div>
+          <div style="display:flex;gap:8px;">
+            <input class="dash-input" data-meal-draft-desc value="${this.mealDraft.desc.replace(/"/g, '&quot;')}" placeholder="Descrição da refeição" style="padding:10px 12px;" />
+            <button class="dash-primary-btn" data-meal-add style="min-height:42px;padding:10px 14px;border-radius:10px;">Adicionar</button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  _renderRecipeDetail(recipe) {
+    const ingredients = Array.isArray(recipe.ig) ? recipe.ig
+      : Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+    const steps = Array.isArray(recipe.st) ? recipe.st
+      : Array.isArray(recipe.steps) ? recipe.steps : [];
+    const time = recipe.tm || recipe.prepTime || '—';
+    const kcal = recipe.kc ?? recipe.macros?.calories ?? recipe.calories ?? '—';
+    const category = recipe.ct || recipe.category || 'Receita';
+    const difficulty = recipe.df || recipe.difficulty || 'Fácil';
+    const emoji = recipe.e || recipe.emoji || '🍽️';
+    const name = recipe.nm || recipe.name || 'Receita';
+    return `
+      <section>
+        <button class="dash-ghost-btn" data-recipe-back style="margin-bottom:20px;padding:10px 18px;min-height:44px;border-radius:12px;">← Voltar às receitas</button>
+        <div class="dash-card pad">
+          <div style="font-size:52px;margin-bottom:12px;">${emoji}</div>
+          <div class="dash-section-title" style="font-size:23px;">${name}</div>
+          <div class="dash-chip-row" style="margin: 0 0 22px;">
+            <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${time}</span>
+            <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${kcal} kcal</span>
+            <span class="dash-chip">${category}</span>
+            <span class="dash-chip">${difficulty}</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
+            <button class="dash-primary-btn" data-recipe-edit="${recipe.id}" style="min-height:44px;padding:10px 14px;border-radius:10px;">✏️ Editar receita</button>
+            <button class="dash-ghost-btn" data-recipe-remove="${recipe.id}" style="min-height:44px;padding:10px 14px;border-radius:10px;border-color:rgba(244,63,94,0.25);color:#f43f5e;">🗑 Remover receita</button>
+          </div>
+          <div style="background:rgba(240,5,154,0.06);border:1px solid rgba(240,5,154,0.16);border-radius:14px;padding:12px 14px;margin-bottom:18px;">
+            <div style="color:#f0059a;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;">Receita #${recipe.id}</div>
+            <div style="color:var(--dash-muted);font-size:13px;margin-top:4px;">Esse marcador único vai junto quando você mandar a receita para edição no chat.</div>
+          </div>
+          <div style="margin-bottom:22px;">
+            <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:12px;">🥘 Ingredientes</div>
+            ${ingredients.length ? ingredients.map(item => `<div style="display:flex;gap:10px;margin-bottom:9px;"><div style="width:7px;height:7px;border-radius:50%;background:#f0059a;flex-shrink:0;margin-top:8px;"></div><span style="color:var(--dash-muted);font-size:16px;">${item}</span></div>`).join('') : `<div style="color:var(--dash-muted);font-size:14px;font-style:italic;">Ingredientes ainda não disponíveis para esta receita.</div>`}
+          </div>
+          <div>
+            <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:12px;">👩‍🍳 Modo de preparo</div>
+            ${steps.length ? steps.map((step, index) => `<div style="display:flex;gap:14px;margin-bottom:16px;"><div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f0059a,#c0027c);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:13px;font-weight:800;">${index + 1}</div><span style="color:var(--dash-muted);font-size:15px;line-height:1.7;padding-top:4px;">${step}</span></div>`).join('') : `<div style="color:var(--dash-muted);font-size:14px;font-style:italic;">Modo de preparo ainda não disponível para esta receita.</div>`}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  _renderRecipeCatalog(recipesViewTabs) {
+    const filters = ['Todas', ...new Set(RECIPES.map(recipe => recipe.ct))];
+    const filtered = this.recipeFilter === 'Todas' ? RECIPES : RECIPES.filter(recipe => recipe.ct === this.recipeFilter);
+    return `
+      <section>
+        <div class="dash-section-title">🥗 Receitas do seu Cardápio</div>
+        <div class="dash-section-subtitle">Todas selecionadas especialmente para o controle glicêmico</div>
+        ${recipesViewTabs}
+        <div class="dash-chip-row" style="margin-bottom:18px;">
+          ${filters.map(filter => `<button class="dash-chip ${this.recipeFilter === filter ? 'active' : ''}" data-recipe-filter="${filter}">${filter}</button>`).join('')}
+        </div>
+        <div class="dash-recipe-grid">
+          ${filtered.map(recipe => `
+            <div class="dash-card dash-recipe-card" data-recipe-open="${recipe.id}">
+              <div style="font-size:38px;margin-bottom:10px;">${recipe.e}</div>
+              <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:4px;">${recipe.nm}</div>
+              <div style="color:var(--dash-muted);font-size:13px;margin-bottom:10px;">${recipe.ct}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">⏱ ${recipe.tm}</span>
+                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">🔥 ${recipe.kc}</span>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                <button class="dash-ghost-btn" data-recipe-edit="${recipe.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;">✏️ Editar</button>
+                <button class="dash-ghost-btn" data-recipe-remove="${recipe.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;border-color:rgba(244,63,94,0.25);color:#f43f5e;">🗑 Remover</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+    `;
+  }
+
   renderRecipes() {
     const meals = Array.isArray(this.dailyMeals) && this.dailyMeals.length ? this.dailyMeals : [];
     const recipesViewTabs = `
@@ -1224,36 +1333,7 @@ export class DashboardScreen extends BaseScreen {
     `;
 
     if (this.recipesView === 'planner') {
-      return `
-        <section>
-          <div class="dash-section-title">🗓️ Refeições do Dia</div>
-          <div class="dash-section-subtitle">Personalize quantas refeições quer exibir no seu painel inicial</div>
-          ${recipesViewTabs}
-          <div class="dash-card pad" style="margin-bottom:12px;">
-            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
-              ${meals.map(meal => `
-                <div style="display:flex;align-items:center;gap:10px;">
-                  <div style="width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;">${meal.icon}</div>
-                  <div style="flex:1;min-width:0;">
-                    <div style="color:var(--dash-text);font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${meal.nome}</div>
-                    <div style="color:var(--dash-muted);font-size:12px;">${meal.hora} · ${meal.desc}</div>
-                  </div>
-                  <button class="dash-ghost-btn" data-meal-remove="${meal.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;">Remover</button>
-                </div>
-              `).join('')}
-            </div>
-            <div style="display:grid;grid-template-columns:72px 1fr 92px;gap:8px;margin-bottom:8px;">
-              <input class="dash-input" data-meal-draft-icon value="${this.mealDraft.icon}" maxlength="2" placeholder="🍽️" style="text-align:center;padding:10px 8px;" />
-              <input class="dash-input" data-meal-draft-name value="${this.mealDraft.nome.replace(/"/g, '&quot;')}" placeholder="Nome da refeição" style="padding:10px 12px;" />
-              <input type="time" class="dash-input" data-meal-draft-time value="${this.mealDraft.hora}" style="padding:10px 12px;" />
-            </div>
-            <div style="display:flex;gap:8px;">
-              <input class="dash-input" data-meal-draft-desc value="${this.mealDraft.desc.replace(/"/g, '&quot;')}" placeholder="Descrição da refeição" style="padding:10px 12px;" />
-              <button class="dash-primary-btn" data-meal-add style="min-height:42px;padding:10px 14px;border-radius:10px;">Adicionar</button>
-            </div>
-          </div>
-        </section>
-      `;
+      return this._renderRecipePlanner(meals, recipesViewTabs);
     }
 
     if (!this.recipesUnlocked) {
@@ -1289,80 +1369,10 @@ export class DashboardScreen extends BaseScreen {
     }
 
     if (this.selectedRecipe) {
-      const recipe = this.selectedRecipe;
-      const ingredients = Array.isArray(recipe.ig) ? recipe.ig
-        : Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
-      const steps = Array.isArray(recipe.st) ? recipe.st
-        : Array.isArray(recipe.steps) ? recipe.steps : [];
-      const time = recipe.tm || recipe.prepTime || '—';
-      const kcal = recipe.kc ?? recipe.macros?.calories ?? recipe.calories ?? '—';
-      const category = recipe.ct || recipe.category || 'Receita';
-      const difficulty = recipe.df || recipe.difficulty || 'Fácil';
-      const emoji = recipe.e || recipe.emoji || '🍽️';
-      const name = recipe.nm || recipe.name || 'Receita';
-      return `
-        <section>
-          <button class="dash-ghost-btn" data-recipe-back style="margin-bottom:20px;padding:10px 18px;min-height:44px;border-radius:12px;">← Voltar às receitas</button>
-          <div class="dash-card pad">
-            <div style="font-size:52px;margin-bottom:12px;">${emoji}</div>
-            <div class="dash-section-title" style="font-size:23px;">${name}</div>
-            <div class="dash-chip-row" style="margin: 0 0 22px;">
-              <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${time}</span>
-              <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${kcal} kcal</span>
-              <span class="dash-chip">${category}</span>
-              <span class="dash-chip">${difficulty}</span>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
-              <button class="dash-primary-btn" data-recipe-edit="${recipe.id}" style="min-height:44px;padding:10px 14px;border-radius:10px;">✏️ Editar receita</button>
-              <button class="dash-ghost-btn" data-recipe-remove="${recipe.id}" style="min-height:44px;padding:10px 14px;border-radius:10px;border-color:rgba(244,63,94,0.25);color:#f43f5e;">🗑 Remover receita</button>
-            </div>
-            <div style="background:rgba(240,5,154,0.06);border:1px solid rgba(240,5,154,0.16);border-radius:14px;padding:12px 14px;margin-bottom:18px;">
-              <div style="color:#f0059a;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;">Receita #${recipe.id}</div>
-              <div style="color:var(--dash-muted);font-size:13px;margin-top:4px;">Esse marcador único vai junto quando você mandar a receita para edição no chat.</div>
-            </div>
-            <div style="margin-bottom:22px;">
-              <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:12px;">🥘 Ingredientes</div>
-              ${ingredients.length ? ingredients.map(item => `<div style="display:flex;gap:10px;margin-bottom:9px;"><div style="width:7px;height:7px;border-radius:50%;background:#f0059a;flex-shrink:0;margin-top:8px;"></div><span style="color:var(--dash-muted);font-size:16px;">${item}</span></div>`).join('') : `<div style="color:var(--dash-muted);font-size:14px;font-style:italic;">Ingredientes ainda não disponíveis para esta receita.</div>`}
-            </div>
-            <div>
-              <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:12px;">👩‍🍳 Modo de preparo</div>
-              ${steps.length ? steps.map((step, index) => `<div style="display:flex;gap:14px;margin-bottom:16px;"><div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f0059a,#c0027c);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:13px;font-weight:800;">${index + 1}</div><span style="color:var(--dash-muted);font-size:15px;line-height:1.7;padding-top:4px;">${step}</span></div>`).join('') : `<div style="color:var(--dash-muted);font-size:14px;font-style:italic;">Modo de preparo ainda não disponível para esta receita.</div>`}
-            </div>
-          </div>
-        </section>
-      `;
+      return this._renderRecipeDetail(this.selectedRecipe);
     }
 
-    const filters = ['Todas', ...new Set(RECIPES.map(recipe => recipe.ct))];
-    const filtered = this.recipeFilter === 'Todas' ? RECIPES : RECIPES.filter(recipe => recipe.ct === this.recipeFilter);
-
-    return `
-      <section>
-        <div class="dash-section-title">🥗 Receitas do seu Cardápio</div>
-        <div class="dash-section-subtitle">Todas selecionadas especialmente para o controle glicêmico</div>
-        ${recipesViewTabs}
-        <div class="dash-chip-row" style="margin-bottom:18px;">
-          ${filters.map(filter => `<button class="dash-chip ${this.recipeFilter === filter ? 'active' : ''}" data-recipe-filter="${filter}">${filter}</button>`).join('')}
-        </div>
-        <div class="dash-recipe-grid">
-          ${filtered.map(recipe => `
-            <div class="dash-card dash-recipe-card" data-recipe-open="${recipe.id}">
-              <div style="font-size:38px;margin-bottom:10px;">${recipe.e}</div>
-              <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:4px;">${recipe.nm}</div>
-              <div style="color:var(--dash-muted);font-size:13px;margin-bottom:10px;">${recipe.ct}</div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">⏱ ${recipe.tm}</span>
-                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">🔥 ${recipe.kc}</span>
-              </div>
-              <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                <button class="dash-ghost-btn" data-recipe-edit="${recipe.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;">✏️ Editar</button>
-                <button class="dash-ghost-btn" data-recipe-remove="${recipe.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;border-color:rgba(244,63,94,0.25);color:#f43f5e;">🗑 Remover</button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </section>
-    `;
+    return this._renderRecipeCatalog(recipesViewTabs);
   }
 
   renderExams() {
@@ -1443,6 +1453,58 @@ export class DashboardScreen extends BaseScreen {
     `;
   }
 
+  _renderAchievementCounter(claimedCount, totalCount) {
+    const pct = totalCount > 0 ? (claimedCount / totalCount) * 100 : 0;
+    return `
+      <div class="dash-ach-counter" style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(240,5,154,0.08),rgba(155,2,200,0.08));border:1px solid rgba(240,5,154,0.2);border-radius:14px;padding:14px 18px;margin-bottom:18px;">
+        <div style="font-size:32px;font-weight:900;color:#f0059a;">${claimedCount}<span style="font-size:18px;color:var(--dash-muted);font-weight:700;">/${totalCount}</span></div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;color:var(--dash-text);margin-bottom:6px;">Conquistas reivindicadas</div>
+          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#f0059a,#9b02c8);border-radius:3px;transition:width 0.4s ease;box-shadow:0 0 8px rgba(240,5,154,0.5);"></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderPlatinumBadge(claimedCount, totalCount) {
+    if (claimedCount !== totalCount || totalCount === 0) return '';
+    return `
+      <div class="dash-platinum-badge" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);border-radius:18px;padding:24px;margin-bottom:20px;text-align:center;animation:achPlatinumShine 3s infinite;color:#1a1500;">
+        <div style="font-size:48px;margin-bottom:6px;">💎</div>
+        <div style="font-size:20px;font-weight:900;letter-spacing:2px;margin-bottom:4px;">PLATINA DESBLOQUEADA</div>
+        <div style="font-size:13px;font-weight:700;opacity:0.85;">Você reivindicou todas as ${totalCount} conquistas, incluindo as ocultas!</div>
+      </div>
+    `;
+  }
+
+  _renderAchievementCard(a) {
+    const bg = a.ok
+      ? (a.claimed ? 'linear-gradient(180deg,rgba(240,5,154,0.08),rgba(240,5,154,0.02))' : 'linear-gradient(180deg,rgba(240,5,154,0.18),rgba(240,5,154,0.06))')
+      : 'rgba(255,255,255,0.03)';
+    const borderColor = (a.ok && !a.claimed) ? 'rgba(240,5,154,0.6)' : (a.ok ? 'rgba(240,5,154,0.2)' : 'rgba(255,255,255,0.07)');
+    const animation = (a.ok && !a.claimed) ? 'animation:achGlowPulse 2s infinite;' : '';
+    let actionHTML;
+    if (a.ok && !a.claimed) {
+      actionHTML = `<button class="ach-claim-btn" data-claim-achievement="${a.id}" style="width:100%;margin-top:6px;padding:8px 10px;background:linear-gradient(135deg,#f0059a,#c0027c);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:0 2px 10px rgba(240,5,154,0.4);transition:transform 0.15s;">🎁 Reivindicar +${a.xp} XP</button>`;
+    } else if (a.ok && a.claimed) {
+      actionHTML = `<div style="font-size:11px;color:#34d399;font-weight:700;margin-top:4px;">✓ Reivindicado +${a.xp} XP</div>`;
+    } else if (a.hidden) {
+      actionHTML = `<div style="font-size:10px;color:var(--dash-muted);font-weight:600;margin-top:4px;">🔒 Oculta</div>`;
+    } else {
+      actionHTML = `<div style="font-size:10px;color:var(--dash-muted);font-weight:600;margin-top:4px;">+${a.xp} XP</div>`;
+    }
+    return `
+      <div class="dash-achievement-card ${a.ok ? 'unlocked' : ''} ${a.hidden ? 'hidden-locked' : ''} ${a.ok && !a.claimed ? 'pending-claim' : ''}" data-achievement-id="${a.id}" style="position:relative;background:${bg};border:1px solid ${borderColor};border-radius:16px;padding:16px 14px;text-align:center;transition:all 0.2s;${animation}">
+        <div style="font-size:34px;margin-bottom:8px;filter:${a.ok ? 'none' : 'grayscale(0.7)'};opacity:${a.ok ? 1 : 0.6};">${a.e}</div>
+        <div style="font-size:13px;font-weight:800;color:${a.ok ? 'var(--dash-text)' : 'rgba(255,255,255,0.6)'};margin-bottom:4px;line-height:1.2;">${a.t}</div>
+        <div style="font-size:11px;color:var(--dash-muted);line-height:1.35;margin-bottom:${a.ok ? '10px' : '6px'};">${a.d}</div>
+        ${actionHTML}
+      </div>
+    `;
+  }
+
   renderConquests() {
     const rankList = Array.isArray(this.ranking) && this.ranking.length ? this.ranking : RANKING;
     const me = { ...(rankList.find(user => user.me) || rankList[Math.min(7, rankList.length - 1)] || {}), xp: this.xp, st: this.streak };
@@ -1478,22 +1540,8 @@ export class DashboardScreen extends BaseScreen {
     return `
       <section>
         <div class="dash-section-title">🏆 Conquistas & Ranking</div>
-        <div class="dash-ach-counter" style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(240,5,154,0.08),rgba(155,2,200,0.08));border:1px solid rgba(240,5,154,0.2);border-radius:14px;padding:14px 18px;margin-bottom:18px;">
-          <div style="font-size:32px;font-weight:900;color:#f0059a;">${claimedCount}<span style="font-size:18px;color:var(--dash-muted);font-weight:700;">/${totalCount}</span></div>
-          <div style="flex:1;">
-            <div style="font-size:13px;font-weight:700;color:var(--dash-text);margin-bottom:6px;">Conquistas reivindicadas</div>
-            <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
-              <div style="height:100%;width:${totalCount > 0 ? (claimedCount/totalCount)*100 : 0}%;background:linear-gradient(90deg,#f0059a,#9b02c8);border-radius:3px;transition:width 0.4s ease;box-shadow:0 0 8px rgba(240,5,154,0.5);"></div>
-            </div>
-          </div>
-        </div>
-        ${claimedCount === totalCount && totalCount > 0 ? `
-          <div class="dash-platinum-badge" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);border-radius:18px;padding:24px;margin-bottom:20px;text-align:center;animation:achPlatinumShine 3s infinite;color:#1a1500;">
-            <div style="font-size:48px;margin-bottom:6px;">💎</div>
-            <div style="font-size:20px;font-weight:900;letter-spacing:2px;margin-bottom:4px;">PLATINA DESBLOQUEADA</div>
-            <div style="font-size:13px;font-weight:700;opacity:0.85;">Você reivindicou todas as ${totalCount} conquistas, incluindo as ocultas!</div>
-          </div>
-        ` : ''}
+        ${this._renderAchievementCounter(claimedCount, totalCount)}
+        ${this._renderPlatinumBadge(claimedCount, totalCount)}
         <div class="dash-card pad" style="margin-bottom:20px;border-color: rgba(240,5,154,0.15); background: rgba(240,5,154,0.06); display:flex;align-items:center;gap:14px;">
           <div class="dash-avatar" style="width:48px;height:48px;background:${me.col}22;border:2px solid ${me.col}55;">${me.e}</div>
           <div style="flex:1;">
@@ -1523,24 +1571,7 @@ export class DashboardScreen extends BaseScreen {
               <div style="margin-bottom:18px;">
                 <div style="color:var(--dash-muted);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">${category}</div>
                 <div class="dash-grid-2">
-                  ${categoryItems.map(a => `
-                    <div class="dash-achievement-card ${a.ok ? 'unlocked' : ''} ${a.hidden ? 'hidden-locked' : ''} ${a.ok && !a.claimed ? 'pending-claim' : ''}" data-achievement-id="${a.id}" style="position:relative;background:${a.ok ? (a.claimed ? 'linear-gradient(180deg,rgba(240,5,154,0.08),rgba(240,5,154,0.02))' : 'linear-gradient(180deg,rgba(240,5,154,0.18),rgba(240,5,154,0.06))') : 'rgba(255,255,255,0.03)'};border:1px solid ${a.ok && !a.claimed ? 'rgba(240,5,154,0.6)' : (a.ok ? 'rgba(240,5,154,0.2)' : 'rgba(255,255,255,0.07)')};border-radius:16px;padding:16px 14px;text-align:center;transition:all 0.2s;${a.ok && !a.claimed ? 'animation:achGlowPulse 2s infinite;' : ''}">
-                      <div style="font-size:34px;margin-bottom:8px;filter:${a.ok ? 'none' : 'grayscale(0.7)'};opacity:${a.ok ? 1 : 0.6};">${a.e}</div>
-                      <div style="font-size:13px;font-weight:800;color:${a.ok ? 'var(--dash-text)' : 'rgba(255,255,255,0.6)'};margin-bottom:4px;line-height:1.2;">${a.t}</div>
-                      <div style="font-size:11px;color:var(--dash-muted);line-height:1.35;margin-bottom:${a.ok ? '10px' : '6px'};">${a.d}</div>
-                      ${a.ok && !a.claimed ? `
-                        <button class="ach-claim-btn" data-claim-achievement="${a.id}" style="width:100%;margin-top:6px;padding:8px 10px;background:linear-gradient(135deg,#f0059a,#c0027c);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:0 2px 10px rgba(240,5,154,0.4);transition:transform 0.15s;">
-                          🎁 Reivindicar +${a.xp} XP
-                        </button>
-                      ` : a.ok && a.claimed ? `
-                        <div style="font-size:11px;color:#34d399;font-weight:700;margin-top:4px;">✓ Reivindicado +${a.xp} XP</div>
-                      ` : a.hidden ? `
-                        <div style="font-size:10px;color:var(--dash-muted);font-weight:600;margin-top:4px;">🔒 Oculta</div>
-                      ` : `
-                        <div style="font-size:10px;color:var(--dash-muted);font-weight:600;margin-top:4px;">+${a.xp} XP</div>
-                      `}
-                    </div>
-                  `).join('')}
+                  ${categoryItems.map(a => this._renderAchievementCard(a)).join('')}
                 </div>
               </div>
             `}).join('')}

@@ -389,124 +389,91 @@ export class OnboardingScreen extends BaseScreen {
     });
   }
 
-  createStep4(container) {
-    // Title
-    const title = DOM.create('h2');
-    title.style.color = Colors.text;
-    title.style.fontSize = '22px';
-    title.style.fontWeight = '800';
-    title.style.marginBottom = '6px';
-    title.textContent = '🌙 Estilo de Vida';
-    
-    const subtitle = DOM.create('p');
-    subtitle.style.color = Colors.muted;
-    subtitle.style.fontSize = '15px';
-    subtitle.textContent = 'Como você se sente no dia a dia';
-    
-    container.appendChild(title);
-    container.appendChild(subtitle);
-    
-    // Sleep and Stress
-    [
-      { 
-        label: 'Qualidade do Sono', 
-        key: 'sleep', 
-        icon: '🌙',
-        options: ['Muito ruim', 'Ruim', 'Regular', 'Bom', 'Excelente']
-      },
-      { 
-        label: 'Nível de Estresse', 
-        key: 'stress', 
-        icon: '⚡',
-        options: ['Muito baixo', 'Baixo', 'Moderado', 'Alto', 'Extremo']
-      },
-    ].forEach(slider => {
-      const card = UIComponents.card();
-      card.style.borderRadius = '16px';
-      card.style.padding = '22px';
-      
-      const header = DOM.create('div');
-      header.style.display = 'flex';
-      header.style.alignItems = 'center';
-      header.style.gap = '12px';
-      header.style.marginBottom = '16px';
-      
-      const icon = DOM.create('div');
-      icon.style.width = '40px';
-      icon.style.height = '40px';
-      icon.style.borderRadius = '12px';
-      icon.style.background = 'rgba(240,5,154,0.12)';
-      icon.style.display = 'flex';
-      icon.style.alignItems = 'center';
-      icon.style.justifyContent = 'center';
-      icon.style.fontSize = '20px';
-      icon.textContent = slider.icon;
-      
-      const label = DOM.create('div');
-      label.style.color = Colors.text;
-      label.style.fontWeight = '700';
-      label.style.fontSize = '16px';
-      label.style.flex = '1';
-      label.textContent = slider.label;
-      
-      const value = DOM.create('div');
-      value.style.background = `linear-gradient(135deg, ${Colors.pink}, #c0027c)`;
-      value.style.borderRadius = '10px';
-      value.style.padding = '6px 16px';
-      value.style.color = '#fff';
-      value.style.fontWeight = '800';
-      value.style.fontSize = '20px';
+  _createSliderCard(slider) {
+    const card = UIComponents.card();
+    card.style.borderRadius = '16px';
+    card.style.padding = '22px';
+
+    const header = DOM.create('div');
+    header.style.display = 'flex';
+    header.style.alignItems = 'center';
+    header.style.gap = '12px';
+    header.style.marginBottom = '16px';
+
+    const icon = DOM.create('div');
+    icon.style.width = '40px';
+    icon.style.height = '40px';
+    icon.style.borderRadius = '12px';
+    icon.style.background = 'rgba(240,5,154,0.12)';
+    icon.style.display = 'flex';
+    icon.style.alignItems = 'center';
+    icon.style.justifyContent = 'center';
+    icon.style.fontSize = '20px';
+    icon.textContent = slider.icon;
+
+    const label = DOM.create('div');
+    label.style.color = Colors.text;
+    label.style.fontWeight = '700';
+    label.style.fontSize = '16px';
+    label.style.flex = '1';
+    label.textContent = slider.label;
+
+    const value = DOM.create('div');
+    value.style.background = `linear-gradient(135deg, ${Colors.pink}, #c0027c)`;
+    value.style.borderRadius = '10px';
+    value.style.padding = '6px 16px';
+    value.style.color = '#fff';
+    value.style.fontWeight = '800';
+    value.style.fontSize = '20px';
+    value.textContent = this.formData[slider.key];
+
+    header.appendChild(icon);
+    header.appendChild(label);
+    header.appendChild(value);
+    card.appendChild(header);
+
+    const input = DOM.create('input');
+    input.type = 'range';
+    input.min = '1';
+    input.max = '5';
+    input.value = this.formData[slider.key];
+    input.style.width = '100%';
+    input.addEventListener('input', (e) => {
+      this.formData[slider.key] = parseInt(e.target.value);
       value.textContent = this.formData[slider.key];
-      
-      header.appendChild(icon);
-      header.appendChild(label);
-      header.appendChild(value);
-      card.appendChild(header);
-      
-      const input = DOM.create('input');
-      input.type = 'range';
-      input.min = '1';
-      input.max = '5';
-      input.value = this.formData[slider.key];
-      input.style.width = '100%';
-      input.addEventListener('input', (e) => {
-        this.formData[slider.key] = parseInt(e.target.value);
-        value.textContent = this.formData[slider.key];
-      });
-      card.appendChild(input);
-      
-      const labels = DOM.create('div');
-      labels.style.display = 'flex';
-      labels.style.justifyContent = 'space-between';
-      labels.style.marginTop = '6px';
-      slider.options.forEach(label => {
-        const labelEl = DOM.create('span');
-        labelEl.style.color = Colors.muted;
-        labelEl.style.fontSize = '12px';
-        labelEl.textContent = label;
-        labels.appendChild(labelEl);
-      });
-      card.appendChild(labels);
-      
-      container.appendChild(card);
     });
-    
-    // Activity Level
+    card.appendChild(input);
+
+    const labels = DOM.create('div');
+    labels.style.display = 'flex';
+    labels.style.justifyContent = 'space-between';
+    labels.style.marginTop = '6px';
+    slider.options.forEach(opt => {
+      const labelEl = DOM.create('span');
+      labelEl.style.color = Colors.muted;
+      labelEl.style.fontSize = '12px';
+      labelEl.textContent = opt;
+      labels.appendChild(labelEl);
+    });
+    card.appendChild(labels);
+
+    return card;
+  }
+
+  _createActivitySection() {
     const actLabel = UIComponents.label('Atividade Física Atual');
-    container.appendChild(actLabel);
-    
     const actContainer = DOM.create('div');
     actContainer.style.display = 'flex';
     actContainer.style.flexDirection = 'column';
     actContainer.style.gap = '8px';
-    
+
     ACTIVITY_LEVELS.forEach(activity => {
       const btn = DOM.create('button');
       btn.style.padding = '14px 18px';
       btn.style.borderRadius = '12px';
       btn.style.cursor = 'pointer';
       btn.style.textAlign = 'left';
-      btn.style.background = this.formData.activity === activity 
+      btn.style.background = this.formData.activity === activity
         ? 'rgba(240,5,154,0.12)'
         : 'rgba(255,255,255,0.04)';
       btn.style.border = `1.5px solid ${this.formData.activity === activity ? Colors.pink : Colors.border}`;
@@ -514,17 +481,55 @@ export class OnboardingScreen extends BaseScreen {
       btn.style.fontSize = '15px';
       btn.style.fontWeight = '600';
       btn.textContent = activity;
-      
+
       btn.addEventListener('click', () => {
         this.formData.activity = activity;
         this.element.querySelector('.onboarding-content').innerHTML = '';
         this.render();
       });
-      
+
       actContainer.appendChild(btn);
     });
-    
-    container.appendChild(actContainer);
+
+    const wrap = DOM.create('div');
+    wrap.appendChild(actLabel);
+    wrap.appendChild(actContainer);
+    return wrap;
+  }
+
+  createStep4(container) {
+    const title = DOM.create('h2');
+    title.style.color = Colors.text;
+    title.style.fontSize = '22px';
+    title.style.fontWeight = '800';
+    title.style.marginBottom = '6px';
+    title.textContent = '🌙 Estilo de Vida';
+
+    const subtitle = DOM.create('p');
+    subtitle.style.color = Colors.muted;
+    subtitle.style.fontSize = '15px';
+    subtitle.textContent = 'Como você se sente no dia a dia';
+
+    container.appendChild(title);
+    container.appendChild(subtitle);
+
+    const sliders = [
+      {
+        label: 'Qualidade do Sono',
+        key: 'sleep',
+        icon: '🌙',
+        options: ['Muito ruim', 'Ruim', 'Regular', 'Bom', 'Excelente']
+      },
+      {
+        label: 'Nível de Estresse',
+        key: 'stress',
+        icon: '⚡',
+        options: ['Muito baixo', 'Baixo', 'Moderado', 'Alto', 'Extremo']
+      },
+    ];
+    sliders.forEach(slider => container.appendChild(this._createSliderCard(slider)));
+
+    container.appendChild(this._createActivitySection());
   }
 
   createLogoSmall() {
@@ -589,14 +594,35 @@ export class OnboardingScreen extends BaseScreen {
     }
   }
 
-  _validateCurrentStep() {
-    // Clear previous field-error states
-    if (this.element) {
-      this.element.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
-      this.element.querySelectorAll('.field-error-message').forEach(el => el.remove());
-    }
+  _isFieldEmpty(value) {
+    if (value === undefined || value === null || value === '') return true;
+    if (typeof value === 'string' && !value.trim()) return true;
+    if (Array.isArray(value) && value.length === 0) return true;
+    return false;
+  }
 
-    // Required fields per step index, matching actual step structure:
+  _clearFieldErrors() {
+    if (!this.element) return;
+    this.element.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+    this.element.querySelectorAll('.field-error-message').forEach(el => el.remove());
+  }
+
+  _highlightFieldError(fieldKey) {
+    const input = this.element?.querySelector(
+      `[data-field="${fieldKey}"], [name="${fieldKey}"], #${fieldKey}`
+    );
+    if (!input) return;
+    input.classList.add('field-error');
+    const msg = document.createElement('span');
+    msg.className = 'field-error-message';
+    msg.textContent = 'Campo obrigatório';
+    input.parentNode?.appendChild(msg);
+  }
+
+  _validateCurrentStep() {
+    this._clearFieldErrors();
+
+    // Required fields per step index:
     //   step 0 (createStep1): Identificação — name, birthDate, gender, weight, height
     //   step 1 (createStep2): Histórico Clínico — diagnostics (array >= 1)
     //   step 2 (createStep3): Controle Glicêmico — optional
@@ -621,27 +647,9 @@ export class OnboardingScreen extends BaseScreen {
     const errors = [];
 
     for (const fieldKey of required) {
-      const value = this.formData?.[fieldKey];
-      const isEmpty =
-        value === undefined ||
-        value === null ||
-        (typeof value === 'string' && !value.trim()) ||
-        (Array.isArray(value) && value.length === 0) ||
-        value === '';
-
-      if (isEmpty) {
+      if (this._isFieldEmpty(this.formData?.[fieldKey])) {
         errors.push(fieldKey);
-        // Attempt to highlight the field element if it carries a matching selector
-        const input = this.element?.querySelector(
-          `[data-field="${fieldKey}"], [name="${fieldKey}"], #${fieldKey}`
-        );
-        if (input) {
-          input.classList.add('field-error');
-          const msg = document.createElement('span');
-          msg.className = 'field-error-message';
-          msg.textContent = 'Campo obrigatório';
-          input.parentNode?.appendChild(msg);
-        }
+        this._highlightFieldError(fieldKey);
       }
     }
 
