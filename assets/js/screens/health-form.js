@@ -109,7 +109,11 @@ export class HealthFormScreen extends BaseScreen {
       'glucoseAfterDinner','glucoseBeforeSleep','glucoseMax','hba1c','hba1cDate',
       'fullName','birthDate','gender','weight','height','diagnostics'];
     fields.forEach(f => {
-      if (ai[f] !== undefined && ai[f] !== '' && ai[f] !== null && !(Array.isArray(ai[f]) && !ai[f].length)) {
+      const isDefined = ai[f] !== undefined;
+      const isNotEmpty = ai[f] !== '';
+      const isNotNull = ai[f] !== null;
+      const isNonEmptyArray = Array.isArray(ai[f]) ? ai[f].length > 0 : true;
+      if (isDefined && isNotEmpty && isNotNull && isNonEmptyArray) {
         filled.add(f);
       }
     });

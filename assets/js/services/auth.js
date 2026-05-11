@@ -45,22 +45,18 @@ export class AuthService {
    * @returns {Promise<Object>} User data
    */
   async login(email, password) {
+    if (!email || !password) {
+      return { success: false, error: 'Email e senha são obrigatórios' };
+    }
+    if (!this.isValidEmail(email)) {
+      return { success: false, error: 'E-mail inválido e/ou senha incorreta' };
+    }
+    if (password.length < 6) {
+      return { success: false, error: 'Senha deve ter pelo menos 6 caracteres' };
+    }
+
     try {
       const auth = getAuth();
-      
-      if (!email || !password) {
-        throw new Error('Email e senha são obrigatórios');
-      }
-
-      // Email/password validation
-      if (!this.isValidEmail(email)) {
-        throw new Error('E-mail inválido e/ou senha incorreta');
-      }
-
-      if (password.length < 6) {
-        throw new Error('Senha deve ter pelo menos 6 caracteres');
-      }
-
       const result = await signInWithEmailAndPassword(auth, email, password);
       return {
         success: true,
@@ -91,13 +87,16 @@ export class AuthService {
       return { success: true };
     } catch (error) {
       console.error('Password reset error:', error);
-      const code = error?.code || error?.message || '';
-      let friendly = 'Não foi possível enviar o email de recuperação.';
-      if (code.includes('user-not-found')) friendly = 'Email não cadastrado no sistema.';
-      else if (code.includes('invalid-email')) friendly = 'Email inválido.';
-      else if (code.includes('too-many-requests')) friendly = 'Muitas tentativas. Aguarde alguns minutos.';
-      return { success: false, error: friendly };
+      return { success: false, error: this._friendlyResetError(error) };
     }
+  }
+
+  _friendlyResetError(error) {
+    const code = error?.code || error?.message || '';
+    if (code.includes('user-not-found')) return 'Email não cadastrado no sistema.';
+    if (code.includes('invalid-email')) return 'Email inválido.';
+    if (code.includes('too-many-requests')) return 'Muitas tentativas. Aguarde alguns minutos.';
+    return 'Não foi possível enviar o email de recuperação.';
   }
 
   /**

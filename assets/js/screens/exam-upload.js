@@ -356,7 +356,8 @@ export class ExamUploadScreen extends BaseScreen {
   }
 
   async _startUpload() {
-    if (!this.selectedFile || this.isUploading || !this.uid) return;
+    const isValidUploadState = this.selectedFile && !this.isUploading && this.uid;
+    if (!isValidUploadState) return;
     this.isUploading = true;
 
     const btn = DOM.byId('upload-btn');

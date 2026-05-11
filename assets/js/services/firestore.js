@@ -447,7 +447,7 @@ export class FirestoreService {
   }
 
   async getChatHistory(uid, maxMessages = 50) {
-    try {
+    return this._run(async () => {
       const q = query(
         this.subCol(uid, 'chatHistory'),
         orderBy('timestamp', 'desc'),
@@ -455,10 +455,7 @@ export class FirestoreService {
       );
       const snap = await getDocs(q);
       return snap.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
-    } catch (error) {
-      console.error('[FirestoreService] getChatHistory error:', error);
-      return [];
-    }
+    }, 'getChatHistory', []);
   }
 
   /**
@@ -565,7 +562,7 @@ export class FirestoreService {
    */
   async createNotification(uid, data) {
     if (!uid) return null;
-    try {
+    return this._run(async () => {
       const ref = await addDoc(this.subCol(uid, 'notifications'), {
         title: data.title || 'Notificação',
         message: data.message || '',
@@ -577,10 +574,7 @@ export class FirestoreService {
         createdAt: serverTimestamp(),
       });
       return ref.id;
-    } catch (error) {
-      console.error('[FirestoreService] createNotification:', error);
-      return null;
-    }
+    }, 'createNotification');
   }
 
   /**
@@ -588,41 +582,32 @@ export class FirestoreService {
    */
   async markNotificationRead(uid, notificationId) {
     if (!uid || !notificationId) return false;
-    try {
+    return this._run(async () => {
       await updateDoc(this.subDoc(uid, 'notifications', notificationId), {
         read: true,
         readAt: serverTimestamp(),
       });
       return true;
-    } catch (error) {
-      console.error('[FirestoreService] markNotificationRead:', error);
-      return false;
-    }
+    }, 'markNotificationRead', false);
   }
 
   async markNotificationUnread(uid, notificationId) {
     if (!uid || !notificationId) return false;
-    try {
+    return this._run(async () => {
       await updateDoc(this.subDoc(uid, 'notifications', notificationId), {
         read: false,
         readAt: null,
       });
       return true;
-    } catch (e) {
-      console.error('[Firestore] markNotificationUnread:', e);
-      return false;
-    }
+    }, 'markNotificationUnread', false);
   }
 
   async deleteNotification(uid, notificationId) {
     if (!uid || !notificationId) return false;
-    try {
+    return this._run(async () => {
       await deleteDoc(this.subDoc(uid, 'notifications', notificationId));
       return true;
-    } catch (e) {
-      console.error('[Firestore] deleteNotification:', e);
-      return false;
-    }
+    }, 'deleteNotification', false);
   }
 
   /**
@@ -649,18 +634,15 @@ export class FirestoreService {
   // ─────────────────────────────────────────────
 
   async getAllRecipes(uid) {
-    try {
+    return this._run(async () => {
       const q = query(this.subCol(uid, 'recipes'), orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
       return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch (e) {
-      console.error('[Firestore] getAllRecipes:', e);
-      return [];
-    }
+    }, 'getAllRecipes', []);
   }
 
   async saveRecipe(uid, recipeData) {
-    try {
+    return this._run(async () => {
       const ref = await addDoc(this.subCol(uid, 'recipes'), {
         ...recipeData,
         createdAt: serverTimestamp(),
@@ -668,10 +650,7 @@ export class FirestoreService {
       await this.incrementCounter(uid, 'totalRecipes');
       await this.awardXp(uid, XP_EVENTS.RECIPE_GENERATED, 'recipe_generated');
       return ref.id;
-    } catch (e) {
-      console.error('[Firestore] saveRecipe:', e);
-      return null;
-    }
+    }, 'saveRecipe');
   }
 
   // ─────────────────────────────────────────────
