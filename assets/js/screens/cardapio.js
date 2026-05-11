@@ -184,101 +184,108 @@ export class CardapioScreen extends BaseScreen {
     card.appendChild(section);
   }
 
+  _createMealToggle(meal, index) {
+    const toggle = DOM.create('div');
+    toggle.style.width = '44px';
+    toggle.style.height = '24px';
+    toggle.style.borderRadius = '12px';
+    toggle.style.cursor = 'pointer';
+    toggle.style.position = 'relative';
+    toggle.style.background = meal.enabled
+      ? `linear-gradient(135deg, ${Colors.pink}, #c0027c)`
+      : 'rgba(255,255,255,0.12)';
+    toggle.style.flexShrink = '0';
+    toggle.style.transition = 'background 0.3s';
+
+    const toggleDot = DOM.create('div');
+    toggleDot.style.position = 'absolute';
+    toggleDot.style.width = '18px';
+    toggleDot.style.height = '18px';
+    toggleDot.style.borderRadius = '50%';
+    toggleDot.style.background = '#fff';
+    toggleDot.style.top = '3px';
+    toggleDot.style.left = meal.enabled ? '23px' : '3px';
+    toggleDot.style.transition = 'left 0.3s';
+
+    toggle.addEventListener('click', () => {
+      this.mealTimes[index].enabled = !this.mealTimes[index].enabled;
+      this.element.innerHTML = '';
+      this.mount();
+    });
+
+    toggle.appendChild(toggleDot);
+    return toggle;
+  }
+
+  _createMealRow(meal, index) {
+    const mealEl = DOM.create('div');
+    mealEl.style.background = Colors.glass;
+    mealEl.style.border = `1px solid ${Colors.border}`;
+    mealEl.style.borderRadius = '14px';
+    mealEl.style.padding = '14px 18px';
+    mealEl.style.display = 'flex';
+    mealEl.style.alignItems = 'center';
+    mealEl.style.gap = '14px';
+
+    const icon = DOM.create('span');
+    icon.style.fontSize = '22px';
+    icon.textContent = meal.icon;
+
+    const label = DOM.create('span');
+    label.style.color = Colors.text;
+    label.style.fontWeight = '600';
+    label.style.fontSize = '15px';
+    label.style.flex = '1';
+    label.textContent = meal.label;
+
+    const time = DOM.create('input');
+    time.type = 'time';
+    time.value = meal.time;
+    time.style.background = Colors.glass;
+    time.style.border = `1.5px solid ${Colors.border}`;
+    time.style.borderRadius = '12px';
+    time.style.padding = '8px 12px';
+    time.style.fontSize = '14px';
+    time.style.color = Colors.pink;
+    time.style.fontWeight = '700';
+    time.style.width = 'auto';
+    time.disabled = !meal.enabled;
+    time.addEventListener('input', (event) => {
+      this.mealTimes[index].time = event.target.value;
+    });
+
+    mealEl.appendChild(icon);
+    mealEl.appendChild(label);
+    mealEl.appendChild(time);
+    mealEl.appendChild(this._createMealToggle(meal, index));
+    return mealEl;
+  }
+
   createMealTimesSection(card) {
     const section = DOM.create('div');
-    
+
     const title = DOM.create('h3');
     title.style.color = Colors.text;
     title.style.fontSize = '19px';
     title.style.fontWeight = '800';
     title.style.marginBottom = '4px';
     title.textContent = '🕐 Suas refeições';
-    
+
     const subtitle = DOM.create('p');
     subtitle.style.color = Colors.muted;
     subtitle.style.fontSize = '14px';
     subtitle.style.marginBottom = '16px';
     subtitle.textContent = 'Ative e ajuste os horários da sua rotina';
-    
+
     const mealsContainer = DOM.create('div');
     mealsContainer.style.display = 'flex';
     mealsContainer.style.flexDirection = 'column';
     mealsContainer.style.gap = '10px';
-    
-    this.mealTimes.forEach((meal, index) => {
-      const mealEl = DOM.create('div');
-      mealEl.style.background = Colors.glass;
-      mealEl.style.border = `1px solid ${Colors.border}`;
-      mealEl.style.borderRadius = '14px';
-      mealEl.style.padding = '14px 18px';
-      mealEl.style.display = 'flex';
-      mealEl.style.alignItems = 'center';
-      mealEl.style.gap = '14px';
-      
-      const icon = DOM.create('span');
-      icon.style.fontSize = '22px';
-      icon.textContent = meal.icon;
-      
-      const label = DOM.create('span');
-      label.style.color = Colors.text;
-      label.style.fontWeight = '600';
-      label.style.fontSize = '15px';
-      label.style.flex = '1';
-      label.textContent = meal.label;
-      
-      const time = DOM.create('input');
-      time.type = 'time';
-      time.value = meal.time;
-      time.style.background = Colors.glass;
-      time.style.border = `1.5px solid ${Colors.border}`;
-      time.style.borderRadius = '12px';
-      time.style.padding = '8px 12px';
-      time.style.fontSize = '14px';
-      time.style.color = Colors.pink;
-      time.style.fontWeight = '700';
-      time.style.width = 'auto';
-      time.disabled = !meal.enabled;
-      time.addEventListener('input', (event) => {
-        this.mealTimes[index].time = event.target.value;
-      });
-      
-      const toggle = DOM.create('div');
-      toggle.style.width = '44px';
-      toggle.style.height = '24px';
-      toggle.style.borderRadius = '12px';
-      toggle.style.cursor = 'pointer';
-      toggle.style.position = 'relative';
-      toggle.style.background = meal.enabled
-        ? `linear-gradient(135deg, ${Colors.pink}, #c0027c)`
-        : 'rgba(255,255,255,0.12)';
-      toggle.style.flexShrink = '0';
-      toggle.style.transition = 'background 0.3s';
-      
-      const toggleDot = DOM.create('div');
-      toggleDot.style.position = 'absolute';
-      toggleDot.style.width = '18px';
-      toggleDot.style.height = '18px';
-      toggleDot.style.borderRadius = '50%';
-      toggleDot.style.background = '#fff';
-      toggleDot.style.top = '3px';
-      toggleDot.style.left = meal.enabled ? '23px' : '3px';
-      toggleDot.style.transition = 'left 0.3s';
 
-      toggle.addEventListener('click', () => {
-        this.mealTimes[index].enabled = !this.mealTimes[index].enabled;
-        this.element.innerHTML = '';
-        this.mount();
-      });
-      
-      toggle.appendChild(toggleDot);
-      
-      mealEl.appendChild(icon);
-      mealEl.appendChild(label);
-      mealEl.appendChild(time);
-      mealEl.appendChild(toggle);
-      mealsContainer.appendChild(mealEl);
+    this.mealTimes.forEach((meal, index) => {
+      mealsContainer.appendChild(this._createMealRow(meal, index));
     });
-    
+
     section.appendChild(title);
     section.appendChild(subtitle);
     section.appendChild(mealsContainer);
