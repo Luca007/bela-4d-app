@@ -31,8 +31,8 @@ export const ChartUtils = {
     svg.appendChild(this.createGradient(color, h));
 
     // Add paths and data points
-    this.addAreaAndLine(svg, data, px, py, color);
-    this.addDataPoints(svg, data, px, py, xKey);
+    this.addAreaAndLine({ svg, data, px, py, color });
+    this.addDataPoints({ svg, data, px, py, xKey });
 
     return svg;
   },
@@ -63,7 +63,7 @@ export const ChartUtils = {
     return defs;
   },
 
-  addAreaAndLine(svg, data, px, py, color) {
+  addAreaAndLine({ svg, data, px, py, color }) {
     const path = data
       .map((d, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(d.v)}`)
       .join(' ');
@@ -91,7 +91,7 @@ export const ChartUtils = {
     svg.appendChild(linePath);
   },
 
-  addDataPoints(svg, data, px, py, xKey) {
+  addDataPoints({ svg, data, px, py, xKey }) {
     data.forEach((d, i) => {
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 

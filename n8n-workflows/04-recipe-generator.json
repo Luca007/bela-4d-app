@@ -1,0 +1,175 @@
+{
+  "name": "4D Recipe Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4d-generate-recipe",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-recipe",
+      "name": "Webhook: Recebe Requisição",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "4d-generate-recipe"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $request.headers['x-webhook-secret'] }}",
+              "value2": "={{ $env.WEBHOOK_SECRET }}",
+              "operation": "equals"
+            }
+          ]
+        }
+      },
+      "id": "validate-secret-4",
+      "name": "Valida Webhook Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "unauthorized-response-4",
+      "name": "Resposta: Não Autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 460]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "Gere receitas personalizadas em JSON com os campos obrigatórios: {id: 'uuid', nm: 'nome-receita', e: '👨‍🍳', desc: 'descrição', ingredients: [{name, quantity, unit}], steps: [{number, instruction}], macros: {calories, protein, carbs, fat}, prepTime: 'XX min', difficulty: 'fácil|médio|difícil', tags: ['tag1', 'tag2']}. Responda APENAS com JSON válido.",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.body.request }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "openai-recipe-4",
+      "name": "OpenAI: Gera Receita",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst response = $json.choices?.[0]?.message?.content || '{}';\nlet recipe;\ntry {\n  recipe = JSON.parse(response);\n} catch (e) {\n  throw new Error('Invalid JSON response from OpenAI');\n}\n\nrecipe.id = recipe.id || crypto.randomUUID();\nrecipe.uid = $json.body.uid || null;\nrecipe.createdAt = new Date().toISOString();\n\nreturn [{ json: recipe }];"
+      },
+      "id": "code-recipe-4",
+      "name": "Code: Parse & Enhance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FIREBASE_FUNCTIONS_URL }}/saveRecipe",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "recipe",
+              "value": "={{ $json }}"
+            }
+          ]
+        }
+      },
+      "id": "http-firebase-4",
+      "name": "HTTP Request: Save Recipe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, recipe: $json, timestamp: $now.toISO() } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success-response-4",
+      "name": "Resposta: Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1320, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Recebe Requisição": {
+      "main": [
+        [{ "node": "Valida Webhook Secret", "type": "main", "index": 0 }]
+      ]
+    },
+    "Valida Webhook Secret": {
+      "main": [
+        [{ "node": "OpenAI: Gera Receita", "type": "main", "index": 0 }],
+        [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "OpenAI: Gera Receita": {
+      "main": [
+        [{ "node": "Code: Parse & Enhance", "type": "main", "index": 0 }]
+      ]
+    },
+    "Code: Parse & Enhance": {
+      "main": [
+        [{ "node": "HTTP Request: Save Recipe", "type": "main", "index": 0 }]
+      ]
+    },
+    "HTTP Request: Save Recipe": {
+      "main": [
+        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": ["programa-4d", "recipes", "gerador"],
+  "pinData": {},
+  "versionId": "d4e5f6a7-b8c9-d0e1-f2a3-b4c5d6e7f8a9",
+  "id": "recipe-generator-004",
+  "_meta": {
+    "description": "Gerador de receitas personalizadas para dieta diabética. Utiliza OpenAI para gerar receitas em formato JSON estruturado com ingredientes, modo de preparo, macronutrientes e dificuldade. Salva receita no Firebase e retorna para o usuário.",
+    "envVars": {
+      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions",
+      "FIREBASE_FUNCTIONS_URL": "URL base das Cloud Functions do Firebase"
+    },
+    "credentials": {
+      "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
+    },
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+  }
+}

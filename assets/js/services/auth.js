@@ -4,6 +4,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
+  sendPasswordResetEmail,
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 
 export class AuthService {
@@ -44,22 +45,18 @@ export class AuthService {
    * @returns {Promise<Object>} User data
    */
   async login(email, password) {
+    if (!email || !password) {
+      return { success: false, error: 'Email e senha são obrigatórios' };
+    }
+    if (!this.isValidEmail(email)) {
+      return { success: false, error: 'E-mail inválido e/ou senha incorreta' };
+    }
+    if (password.length < 6) {
+      return { success: false, error: 'Senha deve ter pelo menos 6 caracteres' };
+    }
+
     try {
       const auth = getAuth();
-      
-      if (!email || !password) {
-        throw new Error('Email e senha são obrigatórios');
-      }
-
-      // Email/password validation
-      if (!this.isValidEmail(email)) {
-        throw new Error('E-mail inválido e/ou senha incorreta');
-      }
-
-      if (password.length < 6) {
-        throw new Error('Senha deve ter pelo menos 6 caracteres');
-      }
-
       const result = await signInWithEmailAndPassword(auth, email, password);
       return {
         success: true,
@@ -73,6 +70,33 @@ export class AuthService {
         error: this.getErrorMessage(error)
       };
     }
+  }
+
+  /**
+   * Send password reset email via Firebase Auth.
+   * @param {string} email
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async sendPasswordReset(email) {
+    if (!email || !email.trim()) {
+      return { success: false, error: 'Email não informado' };
+    }
+    try {
+      const auth = getAuth();
+      await sendPasswordResetEmail(auth, email.trim());
+      return { success: true };
+    } catch (error) {
+      console.error('Password reset error:', error);
+      return { success: false, error: this._friendlyResetError(error) };
+    }
+  }
+
+  _friendlyResetError(error) {
+    const code = error?.code || error?.message || '';
+    if (code.includes('user-not-found')) return 'Email não cadastrado no sistema.';
+    if (code.includes('invalid-email')) return 'Email inválido.';
+    if (code.includes('too-many-requests')) return 'Muitas tentativas. Aguarde alguns minutos.';
+    return 'Não foi possível enviar o email de recuperação.';
   }
 
   /**

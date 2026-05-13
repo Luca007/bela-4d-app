@@ -15,17 +15,18 @@
  * Campos pré-preenchidos são destacados com badge "IA" e podem ser editados.
  */
 
-import { DOM, State } from '../utils/helpers.js';
+import { DOM, State, Session } from '../utils/helpers.js';
 import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
 import { firestoreService } from '../services/firestore.js';
+import { notificationService } from '../modules/notifications.js';
 import { HEALTH_FORM_SECTIONS, DIAGNOSTIC_OPTIONS } from '../config/constants.js';
 
 export class HealthFormScreen extends BaseScreen {
   constructor(params) {
     super(params);
-    this.uid = State.get('currentUser')?.uid;
+    this.uid = State.get('currentUser')?.uid || Session.get('userId');
     this.currentSection = 0;
     this.totalSections = HEALTH_FORM_SECTIONS.length;
     this.aiPrefillData = params.aiPrefillData || null; // dados pré-preenchidos pela IA
@@ -108,7 +109,11 @@ export class HealthFormScreen extends BaseScreen {
       'glucoseAfterDinner','glucoseBeforeSleep','glucoseMax','hba1c','hba1cDate',
       'fullName','birthDate','gender','weight','height','diagnostics'];
     fields.forEach(f => {
-      if (ai[f] !== undefined && ai[f] !== '' && ai[f] !== null && !(Array.isArray(ai[f]) && !ai[f].length)) {
+      const isDefined = ai[f] !== undefined;
+      const isNotEmpty = ai[f] !== '';
+      const isNotNull = ai[f] !== null;
+      const isNonEmptyArray = Array.isArray(ai[f]) ? ai[f].length > 0 : true;
+      if (isDefined && isNotEmpty && isNotNull && isNonEmptyArray) {
         filled.add(f);
       }
     });
@@ -176,22 +181,24 @@ export class HealthFormScreen extends BaseScreen {
     left.appendChild(titleWrap);
     row.appendChild(left);
 
-    // Progresso geral
-    const pct = Math.round(((this.currentSection) / this.totalSections) * 100);
-    const pctLabel = DOM.create('span');
-    pctLabel.style.cssText = 'font-size: 12px; color: var(--color-muted); font-weight: 600;';
-    pctLabel.textContent = `${pct}%`;
-    row.appendChild(pctLabel);
+    inner.appendChild(row);
 
-    // Barra de progresso
-    const barWrap = DOM.create('div');
-    barWrap.style.cssText = 'height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px;';
-    const fill = DOM.create('div');
-    fill.style.cssText = `height: 100%; width: ${pct}%; background: var(--gradient-primary); border-radius: 2px; transition: width 0.4s ease;`;
+    // Progresso geral — canonical CSS class progress bar
+    const pct = Math.round(((this.currentSection) / this.totalSections) * 100);
+
+    const progressWrapper = DOM.create('div', 'form-progress-wrapper');
+
+    const progressLabel = DOM.create('div', 'form-progress-label');
+    progressLabel.innerHTML = `<span>Seção ${this.currentSection + 1} de ${this.totalSections}</span><span>${pct}%</span>`;
+
+    const barWrap = DOM.create('div', 'form-progress-bar');
+    const fill = DOM.create('div', 'form-progress-bar-fill');
+    fill.style.width = `${pct}%`;
     barWrap.appendChild(fill);
 
-    inner.appendChild(row);
-    inner.appendChild(barWrap);
+    progressWrapper.appendChild(progressLabel);
+    progressWrapper.appendChild(barWrap);
+    inner.appendChild(progressWrapper);
     bar.appendChild(inner);
     return bar;
   }
@@ -283,6 +290,7 @@ export class HealthFormScreen extends BaseScreen {
     const isLast = this.currentSection === this.totalSections - 1;
     const next = UIComponents.primaryButton(isLast ? '✅ Concluir Formulário' : 'Próximo →');
     next.style.flex = '2';
+    if (isLast) this._submitBtn = next;
     next.addEventListener('click', () => isLast ? this._submitForm() : this._goToSection(this.currentSection + 1));
     navBtns.appendChild(next);
 
@@ -637,11 +645,6 @@ export class HealthFormScreen extends BaseScreen {
   }
 
   _yesNoField(key, label) {
-    return this._radioGroup(key, label, [true, false], false, (opt) => opt === true ? 'Sim' : 'Não',
-      (checked, opt) => this.formData[key] === opt);
-  }
-
-  _yesNoField(key, label) {
     const wrap = DOM.create('div');
     wrap.style.marginBottom = '20px';
     wrap.appendChild(this._fieldLabel(label));
@@ -778,9 +781,37 @@ export class HealthFormScreen extends BaseScreen {
     this.container.appendChild(this.render());
   }
 
+  _validateRequiredFields() {
+    const requiredMap = [
+      { key: 'fullName', label: 'Nome completo' },
+      { key: 'birthDate', label: 'Data de nascimento' },
+      { key: 'weight', label: 'Peso' },
+      { key: 'height', label: 'Altura' },
+    ];
+
+    for (const field of requiredMap) {
+      const value = String(this.formData[field.key] || '').trim();
+      if (!value) {
+        this._showErrorToast(`Por favor, preencha: ${field.label}`);
+        return false;
+      }
+    }
+
+    if (!Array.isArray(this.formData.diagnostics) || this.formData.diagnostics.length === 0) {
+      this._showErrorToast('Selecione ao menos 1 diagnóstico.');
+      return false;
+    }
+
+    return true;
+  }
+
   async _submitForm() {
+    if (!this._validateRequiredFields()) return;
     if (this.isSaving) return;
     this.isSaving = true;
+
+    const submitBtn = this._submitBtn;
+    const restoreBtn = submitBtn ? UIComponents.setButtonLoading(submitBtn, 'Salvando...') : null;
 
     try {
       const saved = await firestoreService.saveHealthForm(
@@ -790,6 +821,12 @@ export class HealthFormScreen extends BaseScreen {
       );
 
       if (saved) {
+        notificationService.notify({
+          uid: this.uid,
+          title: 'Formulário concluído',
+          message: 'Seu formulário de saúde foi salvo!',
+          type: 'success',
+        });
         this._showSuccessToast();
         setTimeout(() => {
           this.params.onNavigate?.('dashboard');
@@ -797,9 +834,14 @@ export class HealthFormScreen extends BaseScreen {
       }
     } catch (e) {
       console.error('[HealthForm] submit error:', e);
-      this._showErrorToast('Erro ao salvar. Tente novamente.');
+      if (!navigator.onLine) {
+        this._showErrorToast('Sem conexão. Verifique sua internet e tente novamente.');
+      } else {
+        this._showErrorToast('Erro ao salvar o formulário. Tente novamente.');
+      }
     } finally {
       this.isSaving = false;
+      if (restoreBtn) restoreBtn();
     }
   }
 

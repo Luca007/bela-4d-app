@@ -20,17 +20,25 @@ import { SCREENS, USER_STATUS } from './config/constants.js';
 import { initializeFirebase } from './config/firebase.js';
 import { authService } from './services/auth.js';
 import { firestoreService } from './services/firestore.js';
+import { notificationService } from './modules/notifications.js';
+import { offlineQueue } from './modules/offline-queue.js';
 
-// Telas
-import { LoginScreen }      from './screens/login.js';
-import { AwaitingScreen }   from './screens/awaiting.js';
-import { ExamUploadScreen } from './screens/exam-upload.js';
-import { HealthFormScreen } from './screens/health-form.js';
-import { OnboardingScreen } from './screens/onboarding.js';
-import { CardapioScreen }   from './screens/cardapio.js';
-import { DashboardScreen }  from './screens/dashboard.js';
-import { ChatScreen }       from './screens/chat.js';
-import { FormsScreen }      from './screens/forms.js';
+// Telas críticas (carregadas imediatamente)
+import { LoginScreen }    from './screens/login.js';
+import { AwaitingScreen } from './screens/awaiting.js';
+
+// Telas secundárias (lazy-loaded na primeira navegação)
+const lazyScreens = {
+  'exam-upload':  () => import('./screens/exam-upload.js').then(m => m.ExamUploadScreen),
+  'health-form':  () => import('./screens/health-form.js').then(m => m.HealthFormScreen),
+  'onboarding':   () => import('./screens/onboarding.js').then(m => m.OnboardingScreen),
+  'cardapio':     () => import('./screens/cardapio.js').then(m => m.CardapioScreen),
+  'dashboard':    () => import('./screens/dashboard-v2.js').then(m => m.DashboardScreen),
+  'chat':         () => import('./screens/chat.js').then(m => m.ChatScreen),
+  'recipes':      () => import('./screens/recipes.js').then(m => m.RecipesScreen),
+  'food-search':  () => import('./screens/food-search.js').then(m => m.FoodSearchScreen),
+  'forms':        () => import('./screens/forms.js').then(m => m.FormsScreen),
+};
 
 class App {
   constructor() {
@@ -39,45 +47,86 @@ class App {
     this.isInitialized = false;
     this.dataUnsubscribers = [];
 
-    // Mapa tela-id → classe
+    // Mapa tela-id → classe (pré-carregadas)
     this.screens = new Map([
-      [SCREENS.LOGIN,      LoginScreen],
-      [SCREENS.AWAITING,   AwaitingScreen],
-      [SCREENS.EXAM_UPLOAD, ExamUploadScreen],
-      [SCREENS.HEALTH_FORM, HealthFormScreen],
-      [SCREENS.ONBOARDING,  OnboardingScreen],
-      [SCREENS.CARDAPIO,    CardapioScreen],
-      [SCREENS.DASHBOARD,   DashboardScreen],
-      [SCREENS.CHAT,        ChatScreen],
-      [SCREENS.FORMS,       FormsScreen],
+      [SCREENS.LOGIN,    LoginScreen],
+      [SCREENS.AWAITING, AwaitingScreen],
     ]);
+
+    this.statusRoutes = {
+      [USER_STATUS.AWAITING_ONBOARDING]: async () => {
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_ONBOARDING });
+      },
+      [USER_STATUS.PENDING_BLOOD_TEST]: async () => {
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.PENDING_BLOOD_TEST });
+      },
+      [USER_STATUS.PROCESSING_BLOOD_TEST]: async (uid) => {
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.PROCESSING_BLOOD_TEST });
+        this._watchUserStatus(uid);
+      },
+      [USER_STATUS.EXAM_REQUEST_SENT]: async (uid) => {
+        const examRequest = await firestoreService.getLatestExamRequest(uid);
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.EXAM_REQUEST_SENT, examRequest });
+      },
+      [USER_STATUS.FILLING_HEALTH_FORM]: async (uid) => {
+        const bloodTest = await firestoreService.getLatestBloodTest(uid);
+        const aiPrefillData = bloodTest?.extractedData || null;
+        this.navigate(SCREENS.HEALTH_FORM, { aiPrefillData });
+      },
+      [USER_STATUS.AWAITING_MENU_FORM]: async () => {
+        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_MENU_FORM });
+      },
+      [USER_STATUS.FILLING_MENU_FORM]: async () => {
+        this.navigate(SCREENS.CARDAPIO);
+      },
+      [USER_STATUS.ACTIVE]: async () => {
+        this.navigate(SCREENS.DASHBOARD);
+      },
+      default: async () => {
+        this.navigate(SCREENS.DASHBOARD);
+      },
+    };
   }
 
   // ────────────────────────────────────────────────
   // Navegação
   // ────────────────────────────────────────────────
 
-  navigate(screenId, params = {}) {
+  async _loadScreen(screenId) {
+    let ScreenClass = this.screens.get(screenId);
+    if (!ScreenClass && lazyScreens[screenId]) {
+      try {
+        ScreenClass = await lazyScreens[screenId]();
+        this.screens.set(screenId, ScreenClass);
+      } catch (err) {
+        console.error(`[App] Failed to load screen: ${screenId}`, err);
+        return null;
+      }
+    }
+    return ScreenClass || null;
+  }
+
+  _activateScreen(ScreenClass, screenId, params) {
     if (this.currentScreen) {
       try { this.currentScreen.destroy?.(); } catch (_) {}
     }
-
-    const ScreenClass = this.screens.get(screenId);
-    if (!ScreenClass) {
-      console.error(`[App] Screen not found: ${screenId}`);
-      return;
-    }
-
     const screenParams = {
       ...params,
       onNavigate: (nextId, nextParams) => this.navigate(nextId, nextParams),
     };
-
     this.currentScreen = new ScreenClass(screenParams);
     this.currentScreen.mount?.();
-
     document.title = this._pageTitle(screenId);
     console.log(`[App] → ${screenId}`, params.status || '');
+  }
+
+  async navigate(screenId, params = {}) {
+    const ScreenClass = await this._loadScreen(screenId);
+    if (!ScreenClass) {
+      console.error(`[App] Screen not found: ${screenId}`);
+      return;
+    }
+    this._activateScreen(ScreenClass, screenId, params);
   }
 
   _pageTitle(screenId) {
@@ -98,58 +147,10 @@ class App {
   async routeByStatus(uid) {
     const profile = State.get('userProfile');
     const status = profile?.status || USER_STATUS.AWAITING_ONBOARDING;
+    const handler = this.statusRoutes[status] || this.statusRoutes.default;
 
     console.log(`[App] Status do usuário: ${status}`);
-
-    switch (status) {
-      // ── Aguardando reunião ──
-      case USER_STATUS.AWAITING_ONBOARDING:
-        this.navigate(SCREENS.AWAITING, { status });
-        break;
-
-      // ── Tem exame, precisa enviar ──
-      case USER_STATUS.PENDING_BLOOD_TEST:
-        this.navigate(SCREENS.AWAITING, { status });
-        break;
-
-      // ── Exame sendo processado pela IA ──
-      case USER_STATUS.PROCESSING_BLOOD_TEST:
-        this.navigate(SCREENS.AWAITING, { status });
-        // Fica escutando mudança de status em tempo real
-        this._watchUserStatus(uid);
-        break;
-
-      // ── Pedido de exame enviado ao médico ──
-      case USER_STATUS.EXAM_REQUEST_SENT: {
-        const examRequest = await firestoreService.getLatestExamRequest(uid);
-        this.navigate(SCREENS.AWAITING, { status, examRequest });
-        break;
-      }
-
-      // ── Pronto para preencher/confirmar Form 1 ──
-      case USER_STATUS.FILLING_HEALTH_FORM: {
-        const bloodTest = await firestoreService.getLatestBloodTest(uid);
-        const aiPrefillData = bloodTest?.extractedData || null;
-        this.navigate(SCREENS.HEALTH_FORM, { aiPrefillData });
-        break;
-      }
-
-      // ── Form 1 pronto, aguardando semana 3 ──
-      case USER_STATUS.AWAITING_MENU_FORM:
-        this.navigate(SCREENS.AWAITING, { status });
-        break;
-
-      // ── Semana 3: preencher Form Pré-Cardápio ──
-      case USER_STATUS.FILLING_MENU_FORM:
-        this.navigate(SCREENS.CARDAPIO);
-        break;
-
-      // ── Tudo completo: dashboard ──
-      case USER_STATUS.ACTIVE:
-      default:
-        this.navigate(SCREENS.DASHBOARD);
-        break;
-    }
+    await handler(uid, status);
   }
 
   /** Escuta mudanças de status no Firestore (para detectar fim do processamento do exame) */
@@ -171,8 +172,15 @@ class App {
 
   async initialize() {
     try {
+      const debugLoginOnly = new URLSearchParams(window.location.search).has('loginOnly');
+
       const firebaseReady = await initializeFirebase();
       if (!firebaseReady) { this._showFatalError('Erro ao conectar com o servidor'); return false; }
+
+      if (debugLoginOnly) {
+        this.isInitialized = true;
+        return true;
+      }
 
       await firestoreService.initialize();
       const authReady = await authService.initialize();
@@ -187,33 +195,159 @@ class App {
     }
   }
 
-  start() {
-    authService.onAuthStateChanged(async (user) => {
-      if (user) {
-        console.log('[App] Usuário logado:', user.uid);
-        Session.set('userId', user.uid);
-        const profile = await firestoreService.getUserProfile(user.uid);
-        State.set('userProfile', profile);
-        this._watchPendingActions(user.uid);
-        await this.routeByStatus(user.uid);
-      } else {
-        console.log('[App] Usuário desconectado');
-        Session.clear();
-        State.clear();
-        this.navigate(SCREENS.LOGIN);
+  isLoginOnlyMode() {
+    return new URLSearchParams(window.location.search).has('loginOnly');
+  }
+
+  ensureSessionStateShims() {
+    const attachObjectShim = (targetName, fallbackValue) => {
+      if (typeof window[targetName] !== 'object' || window[targetName] === null) {
+        console.debug(`[App] Creating global shim for ${targetName}.`);
+        window[targetName] = fallbackValue;
       }
+    };
+
+    const attachMethod = (objectName, methodName, implementation) => {
+      if (typeof window[objectName][methodName] !== 'function') {
+        window[objectName][methodName] = implementation;
+      }
+    };
+
+    try {
+      attachObjectShim('Session', { data: {} });
+      attachMethod('Session', 'set', (key, value) => {
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+        window.Session[key] = value;
+      });
+      attachMethod('Session', 'get', (key) => {
+        try {
+          const stored = localStorage.getItem(key);
+          return stored ? JSON.parse(stored) : window.Session[key];
+        } catch {
+          return window.Session[key];
+        }
+      });
+      attachMethod('Session', 'clear', () => {
+        try { localStorage.clear(); } catch {}
+        this.resetPlainObject(window.Session, ['set', 'get', 'clear']);
+      });
+
+      attachObjectShim('State', { data: {}, listeners: [] });
+      attachMethod('State', 'set', (key, value) => {
+        window.State.data[key] = value;
+        window.State.notify?.();
+      });
+      attachMethod('State', 'get', (key) => window.State.data[key]);
+      attachMethod('State', 'clear', () => {
+        window.State.data = {};
+        window.State.notify?.();
+      });
+    } catch (error) {
+      console.error('[App] Error ensuring Session/State shims:', error);
+    }
+  }
+
+  resetPlainObject(objectValue, protectedKeys = []) {
+    Object.keys(objectValue).forEach((key) => {
+      if (!protectedKeys.includes(key)) delete objectValue[key];
     });
+  }
+
+  async handleAuthStateChange(user) {
+    if (user) {
+      console.log('[App] Usuário logado:', user.uid);
+      try { Session.set('userId', user.uid); } catch (error) { console.warn('[App] Session.set failed', error); }
+      // Garante que o documento do usuário existe ANTES de qualquer operação
+      const profile = await firestoreService.ensureUserDocument(user.uid, user.email);
+      try { State.set('userProfile', profile); } catch (error) { console.warn('[App] State.set failed', error); }
+      this._registerOfflineHandlers(user.uid);
+      this._setupConnectionListeners();
+      await firestoreService.awardDailyLoginXp(user.uid);
+      this._watchPendingActions(user.uid);
+      this._watchNotifications(user.uid);
+      await this.routeByStatus(user.uid);
+      return;
+    }
+
+    console.log('[App] Usuário desconectado');
+    console.log('[App][DEBUG] Session snapshot before clear:', Session);
+    console.log('[App][DEBUG] State snapshot before clear:', State);
+    try { Session.clear(); } catch (error) { console.warn('[App] Session.clear failed', error); }
+    try { State.clear(); } catch (error) { console.warn('[App] State.clear failed', error); }
+    this.navigate(SCREENS.LOGIN);
+  }
+
+  start() {
+    if (this.isLoginOnlyMode()) {
+      console.log('[App] loginOnly debug mode active');
+      this.navigate(SCREENS.LOGIN);
+      return;
+    }
+
+    this.ensureSessionStateShims();
+    authService.onAuthStateChanged((user) => this.handleAuthStateChange(user));
+  }
+
+  async _handlePendingAction(action, uid) {
+    switch (action.type) {
+      case 'blood_test_processed':
+        notificationService.notify({
+          uid: this.currentUser?.uid,
+          title: 'Exame processado',
+          message: 'Seu exame foi analisado! Preencha o formulário de saúde.',
+          type: 'success',
+        });
+        await this.routeByStatus(uid);
+        break;
+      case 'meeting_analyzed':
+        notificationService.notify({
+          uid: this.currentUser?.uid,
+          title: 'Reunião analisada',
+          message: 'Seus dados foram pré-preenchidos com base na reunião.',
+          type: 'success',
+        });
+        break;
+      case 'recipe_ready':
+        notificationService.notify({
+          uid: this.currentUser?.uid,
+          title: 'Nova receita disponível',
+          message: 'A Guardiã preparou uma nova receita para você no chat!',
+          type: 'status',
+        });
+        break;
+      default:
+        notificationService.toast(action.message || 'Você tem uma nova atualização do programa.', { type: 'status' });
+        break;
+    }
+
+    if (action.id) {
+      await firestoreService.markActionSeen(uid, action.id);
+    }
   }
 
   /** Escuta pendingActions para notificações em tempo real */
   _watchPendingActions(uid) {
     const unsubscribe = firestoreService.onPendingActionsChange?.(uid, async (actions) => {
-      if (actions && actions.length > 0) {
-        const latestAction = actions[0];
-        console.log('[App] Nova ação pendente:', latestAction.type);
-        // Aqui você pode disparar notificações ou redirecionar o usuário
-        // this.showNotification(latestAction);
+      if (!actions?.length) return;
+      for (const action of actions) {
+        if (action.seen) continue;
+        await this._handlePendingAction(action, uid);
       }
+    });
+    if (unsubscribe) this.dataUnsubscribers.push(unsubscribe);
+  }
+
+  _onNotificationsUpdate(notifications) {
+    State.set('notifications', notifications || []);
+    if (notifications?.length) {
+      console.log('[App] Notificações atualizadas:', notifications.length);
+    }
+  }
+
+  /** Escuta notificações do usuário para exibição futura na UI */
+  _watchNotifications(uid) {
+    const unsubscribe = firestoreService.onNotificationsChange?.(uid, (notifications) => {
+      this._onNotificationsUpdate(notifications);
     });
     if (unsubscribe) this.dataUnsubscribers.push(unsubscribe);
   }
@@ -236,6 +370,79 @@ class App {
   destroy() {
     this.dataUnsubscribers.forEach(unsub => unsub?.());
     this.dataUnsubscribers = [];
+  }
+
+  async debugSignOut() {
+    try {
+      await authService.logout();
+      console.log('[App] debugSignOut completed');
+      return true;
+    } catch (error) {
+      console.error('[App] debugSignOut failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Registra handlers da fila offline para ações comuns.
+   * Chamado uma vez por sessão de usuário autenticado.
+   */
+  _registerOfflineHandlers(uid) {
+    if (this._offlineHandlersRegistered) return;
+    this._offlineHandlersRegistered = true;
+
+    offlineQueue.registerHandler('mark_notification_read', async ({ uid: u, notificationId }) => {
+      await firestoreService.markNotificationRead(u || uid, notificationId);
+    });
+    offlineQueue.registerHandler('mark_notification_unread', async ({ uid: u, notificationId }) => {
+      await firestoreService.markNotificationUnread?.(u || uid, notificationId);
+    });
+    offlineQueue.registerHandler('delete_notification', async ({ uid: u, notificationId }) => {
+      await firestoreService.deleteNotification?.(u || uid, notificationId);
+    });
+    offlineQueue.registerHandler('chat_send', async ({ uid: u, message, sessionId }) => {
+      await firestoreService.saveChatMessage(u || uid, { role: 'user', content: message, type: 'text', conversationId: sessionId });
+    });
+    offlineQueue.registerHandler('community_like', async ({ uid: u, postId, liked }) => {
+      await firestoreService.toggleCommunityLike?.(u || uid, postId, liked);
+    });
+  }
+
+  /**
+   * Configura listeners de online/offline e exibe banners discretos.
+   */
+  _setupConnectionListeners() {
+    if (this._connectionListenersSetup) return;
+    this._connectionListenersSetup = true;
+
+    window.addEventListener('online', () => {
+      this._showConnectionBanner('online', '✓ Você está online novamente');
+      offlineQueue.flush().catch(() => {});
+    });
+    window.addEventListener('offline', () => {
+      this._showConnectionBanner('offline', '⚠ Você está offline — suas ações serão sincronizadas quando reconectar', { sticky: true });
+    });
+
+    // Estado inicial: se já estiver offline ao carregar, mostra
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this._showConnectionBanner('offline', '⚠ Você está offline — suas ações serão sincronizadas quando reconectar', { sticky: true });
+    }
+  }
+
+  _showConnectionBanner(kind, text, { sticky = false } = {}) {
+    // Remove banner existente
+    document.querySelectorAll('.connection-banner').forEach(b => b.remove());
+
+    const banner = DOM.create('div', `connection-banner ${kind}`);
+    banner.textContent = text;
+    document.body.appendChild(banner);
+
+    if (!sticky) {
+      setTimeout(() => {
+        banner.classList.add('fade-out');
+        setTimeout(() => banner.remove(), 320);
+      }, 2400);
+    }
   }
 }
 

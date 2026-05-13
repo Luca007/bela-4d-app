@@ -1,0 +1,147 @@
+{
+  "name": "4D Exam Request Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4d-generate-exam-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-exam-request",
+      "name": "Webhook: Recebe Contexto",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "4d-generate-exam-request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $request.headers['x-webhook-secret'] }}",
+              "value2": "={{ $env.WEBHOOK_SECRET }}",
+              "operation": "equals"
+            }
+          ]
+        }
+      },
+      "id": "validate-secret-6",
+      "name": "Valida Webhook Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "unauthorized-response-6",
+      "name": "Resposta: Não Autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 460]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "Você é médico especialista em endocrinologia e diabetes. Gere uma lista de exames para paciente diabético baseado nos dados de saúde fornecidos. Retorne JSON com a estrutura: {exams: [{name: 'nome do exame', code: 'código TUSS', justification: 'motivo clínico'}], priority: 'routine'|'urgent', notes: 'observações'}. Responda APENAS com JSON válido.",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.body.healthContext }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "openai-exam-6",
+      "name": "OpenAI: Gera Lista de Exames",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json.choices?.[0]?.message?.content || '{}';\nlet examRequest;\ntry {\n  examRequest = JSON.parse(response);\n} catch (e) {\n  throw new Error('Invalid JSON response from OpenAI');\n}\n\nif (!Array.isArray(examRequest.exams) || !examRequest.priority) {\n  throw new Error('Missing required fields in exam request');\n}\n\nexamRequest.generatedAt = new Date().toISOString();\nexamRequest.patientId = $json.body.patientId || null;\n\nreturn [{ json: examRequest }];"
+      },
+      "id": "code-exam-6",
+      "name": "Code: Format & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, exams: $json.exams, priority: $json.priority, notes: $json.notes, driveFileUrl: null, fileName: 'exam-request.json', timestamp: $now.toISO() } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success-response-6",
+      "name": "Resposta: Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Recebe Contexto": {
+      "main": [
+        [{ "node": "Valida Webhook Secret", "type": "main", "index": 0 }]
+      ]
+    },
+    "Valida Webhook Secret": {
+      "main": [
+        [{ "node": "OpenAI: Gera Lista de Exames", "type": "main", "index": 0 }],
+        [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "OpenAI: Gera Lista de Exames": {
+      "main": [
+        [{ "node": "Code: Format & Validate", "type": "main", "index": 0 }]
+      ]
+    },
+    "Code: Format & Validate": {
+      "main": [
+        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": ["programa-4d", "exames", "gerador"],
+  "pinData": {},
+  "versionId": "f6a7b8c9-d0e1-f2a3-b4c5-d6e7f8a9b0c1",
+  "id": "exam-request-generator-006",
+  "_meta": {
+    "description": "Gerador de solicitações de exames para pacientes diabéticos. Baseado em contexto de saúde do paciente, gera lista estruturada de exames com códigos TUSS, justificativas clínicas e prioridade (rotina ou urgente).",
+    "envVars": {
+      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions"
+    },
+    "credentials": {
+      "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
+    },
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+  }
+}

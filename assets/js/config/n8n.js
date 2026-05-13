@@ -22,6 +22,9 @@ export const N8N_ENDPOINTS = {
   
   // Update Ranking (cron job)
   UPDATE_RANKING: '/webhook/4d-update-ranking',
+
+  // WhatsApp Notifications
+  SEND_WHATSAPP_NOTIFICATION: '/webhook/4d-send-whatsapp-notification',
 };
 
 /**
@@ -137,6 +140,35 @@ export function buildFoodClassifyPayload(uid, foodName, quantity = '100g', userD
 export function buildRankingPayload() {
   return {
     action: 'update_ranking',
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Send WhatsApp Notification Payload
+ * Enviado quando o status do paciente muda ou existe ação pendente
+ * Retorna: delivery status / provider response
+ */
+export function buildWhatsAppNotificationPayload(uid, profile, notification) {
+  return {
+    uid,
+    patient: {
+      uid,
+      name: profile?.name || null,
+      phone: profile?.phone || profile?.whatsapp || null,
+      email: profile?.email || null,
+      status: profile?.status || null,
+    },
+    notification: {
+      title: notification?.title || 'Atualização do Programa 4D',
+      message: notification?.message || '',
+      type: notification?.type || 'status_update',
+      priority: notification?.priority || 'normal',
+      statusFrom: notification?.statusFrom || null,
+      statusTo: notification?.statusTo || null,
+      actionUrl: notification?.actionUrl || null,
+      metadata: notification?.metadata || {},
+    },
     timestamp: new Date().toISOString(),
   };
 }

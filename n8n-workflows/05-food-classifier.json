@@ -1,0 +1,147 @@
+{
+  "name": "4D Food Classifier",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4d-evaluate-food",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-food",
+      "name": "Webhook: Recebe Alimento",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "4d-evaluate-food"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $request.headers['x-webhook-secret'] }}",
+              "value2": "={{ $env.WEBHOOK_SECRET }}",
+              "operation": "equals"
+            }
+          ]
+        }
+      },
+      "id": "validate-secret-5",
+      "name": "Valida Webhook Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'unauthorized' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "unauthorized-response-5",
+      "name": "Resposta: Não Autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 460]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "Classifique alimentos para dieta de diabético. Retorne JSON com a estrutura exata: {score: 0-100, verdict: 'verde'|'amarelo'|'vermelho', glycemicImpact: 'baixo'|'moderado'|'alto', alternatives: ['alimento1', 'alimento2'], whenOk: 'descrição de quando consumir', explanation: 'explicação detalhada'}. Responda APENAS com JSON válido.",
+              "role": "system"
+            },
+            {
+              "content": "={{ $json.body.foodName }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "openai-classify-5",
+      "name": "OpenAI: Classifica Alimento",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json.choices?.[0]?.message?.content || '{}';\nlet classification;\ntry {\n  classification = JSON.parse(response);\n} catch (e) {\n  throw new Error('Invalid JSON response from OpenAI');\n}\n\nif (!classification.score || !classification.verdict || !classification.glycemicImpact) {\n  throw new Error('Missing required fields in classification');\n}\n\nreturn [{ json: classification }];"
+      },
+      "id": "code-validate-5",
+      "name": "Code: Validate & Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, classification: $json, timestamp: $now.toISO() } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success-response-5",
+      "name": "Resposta: Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Recebe Alimento": {
+      "main": [
+        [{ "node": "Valida Webhook Secret", "type": "main", "index": 0 }]
+      ]
+    },
+    "Valida Webhook Secret": {
+      "main": [
+        [{ "node": "OpenAI: Classifica Alimento", "type": "main", "index": 0 }],
+        [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "OpenAI: Classifica Alimento": {
+      "main": [
+        [{ "node": "Code: Validate & Parse", "type": "main", "index": 0 }]
+      ]
+    },
+    "Code: Validate & Parse": {
+      "main": [
+        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": ["programa-4d", "food", "classificação"],
+  "pinData": {},
+  "versionId": "e5f6a7b8-c9d0-e1f2-a3b4-c5d6e7f8a9b0",
+  "id": "food-classifier-005",
+  "_meta": {
+    "description": "Classificador de alimentos para compatibilidade com dieta diabética. Avalia cada alimento com score (0-100), verdict (verde/amarelo/vermelho), impacto glicêmico, alternativas e quando consumir.",
+    "envVars": {
+      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions"
+    },
+    "credentials": {
+      "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
+    },
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+  }
+}

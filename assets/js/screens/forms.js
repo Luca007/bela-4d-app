@@ -133,28 +133,86 @@ export class FormsScreen extends BaseScreen {
     container.appendChild(card);
   }
 
+  _renderFoodCategoryGrid(category, formKey, checkedColor) {
+    const categoryDiv = DOM.create('div');
+    categoryDiv.style.marginBottom = '24px';
+    const categoryTitle = DOM.create('h4');
+    categoryTitle.style.color = Colors.text;
+    categoryTitle.style.fontSize = '14px';
+    categoryTitle.style.fontWeight = '700';
+    categoryTitle.style.marginBottom = '12px';
+    categoryTitle.textContent = category.name;
+    categoryDiv.appendChild(categoryTitle);
+
+    const foodsGrid = DOM.create('div');
+    foodsGrid.style.display = 'grid';
+    foodsGrid.style.gridTemplateColumns = '1fr 1fr';
+    foodsGrid.style.gap = '12px';
+
+    category.foods.forEach(food => {
+      const label = DOM.create('label');
+      label.style.display = 'flex';
+      label.style.alignItems = 'center';
+      label.style.gap = '8px';
+      label.style.cursor = 'pointer';
+      label.style.padding = '8px';
+      label.style.borderRadius = '8px';
+      label.style.transition = 'background 0.2s';
+      const checkbox = DOM.create('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = food;
+      const key = `${category.name}-${food}`;
+      checkbox.checked = this.formData[formKey][key] || false;
+      const checkedBg = checkedColor;
+      const uncheckedBg = 'transparent';
+      label.style.background = checkbox.checked ? checkedBg : uncheckedBg;
+      checkbox.addEventListener('change', (e) => {
+        this.formData[formKey][key] = e.target.checked;
+        this.saveTempData();
+        label.style.background = e.target.checked ? checkedBg : uncheckedBg;
+      });
+      label.appendChild(checkbox);
+      const span = DOM.create('span');
+      span.textContent = food;
+      label.appendChild(span);
+      foodsGrid.appendChild(label);
+    });
+
+    categoryDiv.appendChild(foodsGrid);
+    return categoryDiv;
+  }
+
   renderForm2(container) {
-    const card = UIComponents.card(); card.style.padding = '28px'; const title = DOM.create('h3'); title.style.color = Colors.text; title.style.fontSize = '18px'; title.style.fontWeight = '700'; title.style.marginBottom = '16px'; title.textContent = '🟢 Lista Verde - Alimentos Liberados'; card.appendChild(title);
+    const card = UIComponents.card(); card.style.padding = '28px';
+    const title = DOM.create('h3'); title.style.color = Colors.text; title.style.fontSize = '18px'; title.style.fontWeight = '700'; title.style.marginBottom = '16px'; title.textContent = '🟢 Lista Verde - Alimentos Liberados'; card.appendChild(title);
     const subtitle = DOM.create('p'); subtitle.style.color = Colors.muted; subtitle.style.fontSize = '14px'; subtitle.style.marginBottom = '20px'; subtitle.textContent = 'Marque os alimentos que você GOSTA e come com frequência. Eles terão prioridade no seu cardápio.'; card.appendChild(subtitle);
 
-    const categories = [ { name: '🥩 Carnes e Proteínas', foods: ['Frango','Peixe','Carne bovina','Ovos','Camarão','Atum'] }, { name: '🥬 Vegetais Folhosos', foods: ['Alface','Espinafre','Rúcula','Couve','Agrião','Almeirão'] }, { name: '🥦 Outros Vegetais', foods: ['Brócolis','Couve-flor','Abobrinha','Pimentão','Tomate','Cenoura'] }, { name: '🫐 Frutas', foods: ['Abacate','Morango','Mirtilo','Maracujá','Limão','Acerola'] }, { name: '🥜 Nozes e Sementes', foods: ['Amêndoa','Castanha do Brasil','Noz','Semente de girassol','Pasta de amendoim'] }, { name: '🧈 Gorduras', foods: ['Azeite de oliva','Manteiga','Óleo de coco','Banha de porco'] } ];
-
-    categories.forEach(category => {
-      const categoryDiv = DOM.create('div'); categoryDiv.style.marginBottom = '24px'; const categoryTitle = DOM.create('h4'); categoryTitle.style.color = Colors.text; categoryTitle.style.fontSize = '14px'; categoryTitle.style.fontWeight = '700'; categoryTitle.style.marginBottom = '12px'; categoryTitle.textContent = category.name; categoryDiv.appendChild(categoryTitle);
-      const foodsGrid = DOM.create('div'); foodsGrid.style.display = 'grid'; foodsGrid.style.gridTemplateColumns = '1fr 1fr'; foodsGrid.style.gap = '12px';
-      category.foods.forEach(food => { const label = DOM.create('label'); label.style.display = 'flex'; label.style.alignItems = 'center'; label.style.gap = '8px'; label.style.cursor = 'pointer'; label.style.padding = '8px'; label.style.borderRadius = '8px'; label.style.transition = 'background 0.2s'; const checkbox = DOM.create('input'); checkbox.type = 'checkbox'; checkbox.value = food; const key = `${category.name}-${food}`; checkbox.checked = this.formData.form2[key] || false; checkbox.addEventListener('change', (e) => { this.formData.form2[key] = e.target.checked; this.saveTempData(); label.style.background = e.target.checked ? `rgba(${parseInt(Colors.pink.slice(1,3),16)}, ${parseInt(Colors.pink.slice(3,5),16)}, ${parseInt(Colors.pink.slice(5,7),16)}, 0.1)` : 'transparent'; }); label.appendChild(checkbox); const span = DOM.create('span'); span.textContent = food; label.appendChild(span); label.style.background = checkbox.checked ? `rgba(${parseInt(Colors.pink.slice(1,3),16)}, ${parseInt(Colors.pink.slice(3,5),16)}, ${parseInt(Colors.pink.slice(5,7),16)}, 0.1)` : 'transparent'; foodsGrid.appendChild(label); });
-      categoryDiv.appendChild(foodsGrid); card.appendChild(categoryDiv);
-    });
+    const pinkRgb = `rgba(${parseInt(Colors.pink.slice(1,3),16)}, ${parseInt(Colors.pink.slice(3,5),16)}, ${parseInt(Colors.pink.slice(5,7),16)}, 0.1)`;
+    const categories = [
+      { name: '🥩 Carnes e Proteínas', foods: ['Frango','Peixe','Carne bovina','Ovos','Camarão','Atum'] },
+      { name: '🥬 Vegetais Folhosos', foods: ['Alface','Espinafre','Rúcula','Couve','Agrião','Almeirão'] },
+      { name: '🥦 Outros Vegetais', foods: ['Brócolis','Couve-flor','Abobrinha','Pimentão','Tomate','Cenoura'] },
+      { name: '🫐 Frutas', foods: ['Abacate','Morango','Mirtilo','Maracujá','Limão','Acerola'] },
+      { name: '🥜 Nozes e Sementes', foods: ['Amêndoa','Castanha do Brasil','Noz','Semente de girassol','Pasta de amendoim'] },
+      { name: '🧈 Gorduras', foods: ['Azeite de oliva','Manteiga','Óleo de coco','Banha de porco'] }
+    ];
+    categories.forEach(category => card.appendChild(this._renderFoodCategoryGrid(category, 'form2', pinkRgb)));
     container.appendChild(card);
   }
 
   renderForm3(container) {
-    const card = UIComponents.card(); card.style.padding = '28px'; const title = DOM.create('h3'); title.style.color = Colors.text; title.style.fontSize = '18px'; title.style.fontWeight = '700'; title.style.marginBottom = '16px'; title.textContent = '🟡 Lista Amarela - Consumo com Moderação'; card.appendChild(title);
+    const card = UIComponents.card(); card.style.padding = '28px';
+    const title = DOM.create('h3'); title.style.color = Colors.text; title.style.fontSize = '18px'; title.style.fontWeight = '700'; title.style.marginBottom = '16px'; title.textContent = '🟡 Lista Amarela - Consumo com Moderação'; card.appendChild(title);
     const subtitle = DOM.create('p'); subtitle.style.color = Colors.muted; subtitle.style.fontSize = '14px'; subtitle.style.marginBottom = '20px'; subtitle.textContent = 'Marque os alimentos que você gostaria de incluir em PEQUENAS QUANTIDADES no cardápio.'; card.appendChild(subtitle);
 
-    const categories = [ { name: '🧀 Laticínios', foods: ['Iogurte grego','Queijo minas frescal','Queijo muçarela','Queijo parmesão','Creme de ricota'] },{ name: '🍊 Frutas', foods: ['Laranja','Maçã','Pera','Melancia','Cereja','Kiwi','Tangerina'] },{ name: '🫘 Leguminosas', foods: ['Feijão preto','Feijão carioca','Lentilha','Grão de bico','Ervilha'] },{ name: '🌾 Cereais e Tubérculos', foods: ['Batata doce','Arroz integral','Quinoa','Batata comum','Mandioca'] } ];
-
-    categories.forEach(category => { const categoryDiv = DOM.create('div'); categoryDiv.style.marginBottom = '24px'; const categoryTitle = DOM.create('h4'); categoryTitle.style.color = Colors.text; categoryTitle.style.fontSize = '14px'; categoryTitle.style.fontWeight = '700'; categoryTitle.style.marginBottom = '12px'; categoryTitle.textContent = category.name; categoryDiv.appendChild(categoryTitle); const foodsGrid = DOM.create('div'); foodsGrid.style.display = 'grid'; foodsGrid.style.gridTemplateColumns = '1fr 1fr'; foodsGrid.style.gap = '12px'; category.foods.forEach(food => { const label = DOM.create('label'); label.style.display = 'flex'; label.style.alignItems = 'center'; label.style.gap = '8px'; label.style.cursor = 'pointer'; label.style.padding = '8px'; label.style.borderRadius = '8px'; label.style.transition = 'background 0.2s'; const checkbox = DOM.create('input'); checkbox.type = 'checkbox'; checkbox.value = food; const key = `${category.name}-${food}`; checkbox.checked = this.formData.form3[key] || false; checkbox.addEventListener('change', (e) => { this.formData.form3[key] = e.target.checked; this.saveTempData(); label.style.background = e.target.checked ? `rgba(255, 193, 7, 0.1)` : 'transparent'; }); label.appendChild(checkbox); const span = DOM.create('span'); span.textContent = food; label.appendChild(span); label.style.background = checkbox.checked ? `rgba(255, 193, 7, 0.1)` : 'transparent'; foodsGrid.appendChild(label); }); categoryDiv.appendChild(foodsGrid); card.appendChild(categoryDiv); });
+    const yellowBg = 'rgba(255, 193, 7, 0.1)';
+    const categories = [
+      { name: '🧀 Laticínios', foods: ['Iogurte grego','Queijo minas frescal','Queijo muçarela','Queijo parmesão','Creme de ricota'] },
+      { name: '🍊 Frutas', foods: ['Laranja','Maçã','Pera','Melancia','Cereja','Kiwi','Tangerina'] },
+      { name: '🫘 Leguminosas', foods: ['Feijão preto','Feijão carioca','Lentilha','Grão de bico','Ervilha'] },
+      { name: '🌾 Cereais e Tubérculos', foods: ['Batata doce','Arroz integral','Quinoa','Batata comum','Mandioca'] }
+    ];
+    categories.forEach(category => card.appendChild(this._renderFoodCategoryGrid(category, 'form3', yellowBg)));
     container.appendChild(card);
   }
 
