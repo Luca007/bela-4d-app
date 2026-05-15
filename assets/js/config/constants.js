@@ -69,17 +69,22 @@ export const XP_EVENTS = {
   SHARE_ACHIEVEMENT: 20,
 };
 
-// Níveis de progressão
+// Níveis de progressão — 8 tiers unificados
+// Fonte canônica: usada por gamification.js, firestore.js, dashboard-v2.js
+// Campos: level, title, name (alias), shortName, minXp, maxXp, color, emoji, icon (alias), rarity
 export const LEVELS = [
-  { level: 1, title: "Iniciante",          minXp: 0,     maxXp: 499,   color: "#6b7280", emoji: "🌱" },
-  { level: 2, title: "Aprendiz",           minXp: 500,   maxXp: 1499,  color: "#10b981", emoji: "🌿" },
-  { level: 3, title: "Comprometido",       minXp: 1500,  maxXp: 2999,  color: "#3b82f6", emoji: "💪" },
-  { level: 4, title: "Disciplinado",       minXp: 3000,  maxXp: 4999,  color: "#8b5cf6", emoji: "🔥" },
-  { level: 5, title: "Mestre do Programa", minXp: 5000,  maxXp: 99999, color: "#f59e0b", emoji: "⭐" },
+  { level: 1, title: "Iniciante",    name: "Iniciante",    shortName: "Inic.",     minXp: 0,    maxXp: 499,   color: "#8a8aa0", emoji: "🌱", icon: "🌱", rarity: "common" },
+  { level: 2, title: "Aprendiz",     name: "Aprendiz",     shortName: "Apr.",      minXp: 500,  maxXp: 1199,  color: "#10b981", emoji: "🌿", icon: "🌿", rarity: "common" },
+  { level: 3, title: "Comprometida", name: "Comprometida", shortName: "Comp.",     minXp: 1200, maxXp: 2199,  color: "#38bdf8", emoji: "💪", icon: "💪", rarity: "uncommon" },
+  { level: 4, title: "Disciplinada", name: "Disciplinada", shortName: "Disc.",     minXp: 2200, maxXp: 3399,  color: "#a78bfa", emoji: "🔥", icon: "🔥", rarity: "uncommon" },
+  { level: 5, title: "Consistente",  name: "Consistente",  shortName: "Consis.",   minXp: 3400, maxXp: 4799,  color: "#f59e0b", emoji: "⭐", icon: "⭐", rarity: "rare" },
+  { level: 6, title: "Referência",   name: "Referência",   shortName: "Ref.",      minXp: 4800, maxXp: 6499,  color: "#f43f5e", emoji: "🏆", icon: "🏆", rarity: "rare" },
+  { level: 7, title: "Elite 4D",     name: "Elite 4D",     shortName: "Elite",     minXp: 6500, maxXp: 8499,  color: "#14b8a6", emoji: "💎", icon: "💎", rarity: "epic" },
+  { level: 8, title: "Mestra 4D",    name: "Mestra 4D",    shortName: "Mestra",    minXp: 8500, maxXp: 99999, color: "#eab308", emoji: "👑", icon: "👑", rarity: "legendary" },
 ];
 
 // ============================================================
-// CONQUISTAS — 12 achievements com XP e descrições
+// CONQUISTAS — 22 achievements (12 visíveis + 10 hidden) com XP, condições e descrições
 // ============================================================
 export const ACHIEVEMENTS_CATALOG = [
   {
@@ -173,10 +178,10 @@ export const ACHIEVEMENTS_CATALOG = [
   {
     id: "gmp_master",
     title: "Mestre GMP",
-    description: "Atingir nível 5",
+    description: "Atingir nível 8 (Mestra 4D)",
     xp: 1000,
     icon: "👑",
-    condition: { event: "LEVEL_REACHED", level: 5 },
+    condition: { event: "LEVEL_REACHED", level: 8 },
   },
   // Hidden achievements — only revealed after unlock
   {

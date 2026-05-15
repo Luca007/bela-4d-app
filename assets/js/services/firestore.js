@@ -1036,6 +1036,49 @@ export class FirestoreService {
       return () => {};
     }
   }
+
+  // ─────────────────────────────────────────────
+  // APP CONFIG (dados de referência)
+  // ─────────────────────────────────────────────
+
+  /**
+   * Busca configuração do app no Firestore.
+   * Ex: getAppConfig('levels') → retorna array de níveis.
+   * Ex: getAppConfig('achievementsCatalog') → retorna array de conquistas.
+   * Cache em memória (só busca uma vez por sessão).
+   * @param {string} docId — 'levels', 'achievementsCatalog', 'navItems', 'recipes', 'ranking', 'dicas', 'refeicoes'
+   * @returns {Promise<Array|null>}
+   */
+  async getAppConfig(docId) {
+    const cacheKey = `appConfig_${docId}`;
+    const cached = this._cacheGet(cacheKey);
+    if (cached !== undefined) return cached;
+
+    return this._run(async () => {
+      const snap = await getDoc(doc(this.getDb(), 'appConfig', docId));
+      if (!snap.exists()) {
+        console.warn(`[Firestore] appConfig/${docId} não encontrado`);
+        return null;
+      }
+      const value = snap.data().data || null;
+      this._cacheSet(cacheKey, value);
+      return value;
+    }, `getAppConfig(${docId})`);
+  }
+
+  /**
+   * Pré-carrega todos os appConfigs e coloca no State.
+   * Chamado uma vez após login.
+   */
+  async preloadAppConfig() {
+    const configs = ['levels', 'achievementsCatalog', 'xpEvents', 'navItems', 'recipes', 'ranking', 'dicas', 'refeicoes'];
+    const results = {};
+    await Promise.all(configs.map(async (docId) => {
+      const data = await this.getAppConfig(docId);
+      if (data) results[docId] = data;
+    }));
+    return results;
+  }
 }
 
 // Export singleton instance

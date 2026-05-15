@@ -152,8 +152,18 @@ const REC=[
   {id:"r5",e:"🥑",nm:"Mousse de Abacate",tm:"10 min",kc:200,ct:"Lanche",df:"Fácil",ig:["1 abacate","Cacau em pó","Stevia"],st:["Amasse o abacate.","Adicione cacau e stevia.","Misture bem.","Sirva gelado."]},
   {id:"r6",e:"🍲",nm:"Caldo de Frango",tm:"40 min",kc:180,ct:"Ceia",df:"Médio",ig:["Frango","Chuchu","Cenoura","Ervas"],st:["Cozinhe frango 30 min.","Adicione legumes.","Tempere.","Coe e sirva."]}
 ];
-const CHAT_RESP=["Com frango, abobrinha e ovos você pode fazer uma fritata proteica! Refogue a abobrinha, cubra com os ovos batidos e tampe. Pronto em 15 min e mantém a glicemia estável 🍳","Sua glicemia está em queda consistente — parabéns! Continue focada no cardápio 📊✨","Esse alimento está liberado para você! Quer sugestão de preparo? 🥗","Para o seu lanche: 10 amêndoas + queijo minas + água com limão 💪","Sua HbA1c caiu de 8,1% para 6,1% — resultado extraordinário! Continue assim 💕","Ótima pergunta! Para controle glicêmico, sempre combine proteína com fibras. Isso retarda a absorção do açúcar e reduz os picos 🌿"];
-let chatIdx=0;
+// CHAT_RESP mock removido — chat agora usa n8nService real
+// Função auxiliar para chamar o n8n via Firebase Functions
+const _callN8nChat = (() => {
+  let _svc = null;
+  return async (uid, msg, sid) => {
+    if (!_svc) {
+      const mod = await import('./assets/js/services/n8n.js');
+      _svc = mod.n8nService;
+    }
+    return _svc.sendChatMessage(uid || 'anon', msg, sid || `web_${Date.now()}`);
+  };
+})();
 const getReceitaHora=()=>{
   const h=new Date().getHours();
   if(h<10) return REC[0];
@@ -599,7 +609,7 @@ function SecInicio({userName=""}){
   const[checked,setChecked]=useState([]);
   const endRef=useRef(null);
   const receitaHora=getReceitaHora();
-  const send=()=>{if(!chatInput.trim())return;const t=chatInput;setChatMsgs(m=>[...m,{r:"user",t}]);setChatInput("");setChatLoad(true);setTimeout(()=>{setChatMsgs(m=>[...m,{r:"ai",t:CHAT_RESP[chatIdx++%CHAT_RESP.length]}]);setChatLoad(false);},1200);};
+  const send=async()=>{if(!chatInput.trim())return;const t=chatInput.trim();setChatMsgs(m=>[...m,{r:"user",t}]);setChatInput("");setChatLoad(true);try{const res=await _callN8nChat(null,t,`web_${Date.now()}`);setChatMsgs(m=>[...m,{r:"ai",t:res?.reply||res?.content||'Sem resposta.'}]);}catch(e){setChatMsgs(m=>[...m,{r:"ai",t:`❌ ${e.message||'Erro ao comunicar com a IA.'}`}]);}finally{setChatLoad(false);}};
   useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"})},[chatMsgs]);
   const togChk=id=>setChecked(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);
   const now=new Date(),hAtual=now.getHours()*60+now.getMinutes();
@@ -863,7 +873,7 @@ function SecChat(){
   const[msgs,setMsgs]=useState([{r:"ai",t:"Olá! 👋 Sou a IA da Mentoria 4D. Posso te ajudar com dúvidas sobre alimentação, receitas, glicemia e muito mais. Como posso ajudar você hoje?"}]);
   const[input,setInput]=useState(""),[load,setLoad]=useState(false);
   const endR=useRef(null);
-  const send=()=>{if(!input.trim())return;const t=input;setMsgs(m=>[...m,{r:"user",t}]);setInput("");setLoad(true);setTimeout(()=>{setMsgs(m=>[...m,{r:"ai",t:CHAT_RESP[chatIdx++%CHAT_RESP.length]}]);setLoad(false);},1200);};
+  const send=async()=>{if(!input.trim())return;const t=input.trim();setMsgs(m=>[...m,{r:"user",t}]);setInput("");setLoad(true);try{const res=await _callN8nChat(null,t,`web_${Date.now()}`);setMsgs(m=>[...m,{r:"ai",t:res?.reply||res?.content||'Sem resposta.'}]);}catch(e){setMsgs(m=>[...m,{r:"ai",t:`❌ ${e.message||'Erro ao comunicar com a IA.'}`}]);}finally{setLoad(false);}};
   useEffect(()=>{endR.current?.scrollIntoView({behavior:"smooth"})},[msgs]);
   const sugs=["O que posso comer agora?","Como está minha glicemia?","Sugestão para o jantar","Tenho fome fora do horário","Me ensine uma receita fácil"];
   return(<div style={{display:"flex",flexDirection:"column",height:"100%"}}>

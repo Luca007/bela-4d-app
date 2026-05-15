@@ -7,6 +7,7 @@ import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
 import { ACHIEVEMENTS_CATALOG, LEVELS } from '../config/constants.js';
 import { offlineQueue } from '../modules/offline-queue.js';
+import { REFEICOES_DIA, DICAS, RECIPES, RANKING, EXAM_RESULTS, EXAM_ORDERS, PROFILE_AVATARS, PROFILE_COLORS } from '../config/data.js';
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Início', icon: '🏠', sub: 'Chat · Receita · Cardápio' },
@@ -16,101 +17,6 @@ const NAV_ITEMS = [
   { id: 'conquistas', label: 'Conquistas', icon: '🏆', sub: 'Ranking · Comunidade' },
   { id: 'chat', label: 'Chat IA', icon: '💬', sub: 'Dúvidas alimentares' },
   { id: 'perfil', label: 'Meu Perfil', icon: '👤', sub: 'Avatar · Configurações' },
-];
-
-const REFEICOES_DIA = [
-  { id: 'r1', icon: '☀️', nome: 'Café da manhã', hora: '07:00', desc: 'Omelete de espinafre + café sem açúcar' },
-  { id: 'r2', icon: '🍎', nome: 'Lanche da manhã', hora: '10:00', desc: '10 amêndoas + queijo minas' },
-  { id: 'r3', icon: '🍽️', nome: 'Almoço', hora: '12:30', desc: 'Frango grelhado + brócolis + salada' },
-  { id: 'r4', icon: '🌤️', nome: 'Lanche da tarde', hora: '15:30', desc: 'Iogurte natural + morangos' },
-  { id: 'r5', icon: '🌙', nome: 'Jantar', hora: '19:00', desc: 'Filé de peixe + abobrinha + tomate' },
-  { id: 'r6', icon: '🌛', nome: 'Ceia', hora: '21:30', desc: 'Chá de camomila + castanhas' },
-];
-
-const DICAS = [
-  { e: '🧠', ti: 'Mastigue devagar', tx: 'Mastigar lentamente reduz picos glicêmicos e melhora a saciedade.' },
-  { e: '💧', ti: 'Beba água antes de comer', tx: 'Um copo de água 15 min antes das refeições ajuda a controlar o apetite.' },
-  { e: '🌿', ti: 'Comece pelos vegetais', tx: 'Iniciar pelo prato verde reduz a absorção rápida de açúcar.' },
-  { e: '⏰', ti: 'Respeite os horários', tx: 'Comer nos mesmos horários todos os dias estabiliza a rotina metabólica.' },
-];
-
-const RECIPES = [
-  { id: 'r1', e: '🥚', nm: 'Omelete de Legumes', tm: '15 min', kc: 280, ct: 'Café da manhã', df: 'Fácil', ig: ['3 ovos', 'Abobrinha', 'Tomate', 'Sal e ervas'], st: ['Bata os ovos com sal.', 'Refogue legumes no azeite.', 'Despeje e tampe 3 min.', 'Sirva com folhas verdes.'] },
-  { id: 'r2', e: '🐟', nm: 'Salmão com Aspargos', tm: '20 min', kc: 380, ct: 'Almoço', df: 'Médio', ig: ['200g salmão', 'Aspargos', 'Azeite', 'Limão'], st: ['Tempere o salmão.', 'Grelhe 4 min/lado.', 'Refogue aspargos.', 'Sirva com limão.'] },
-  { id: 'r3', e: '🥗', nm: 'Bowl Low-Carb Frango', tm: '25 min', kc: 320, ct: 'Almoço', df: 'Fácil', ig: ['150g frango', 'Rúcula', 'Abacate', 'Azeite'], st: ['Grelhe o frango.', 'Monte bowl com rúcula.', 'Adicione abacate.', 'Regue com azeite.'] },
-  { id: 'r4', e: '🍳', nm: 'Frittata de Espinafre', tm: '20 min', kc: 260, ct: 'Jantar', df: 'Fácil', ig: ['4 ovos', 'Espinafre', 'Queijo minas', 'Alho'], st: ['Refogue espinafre.', 'Bata ovos com queijo.', 'Combine na frigideira.', 'Forno 10 min 180°C.'] },
-  { id: 'r5', e: '🥑', nm: 'Mousse de Abacate', tm: '10 min', kc: 200, ct: 'Lanche', df: 'Fácil', ig: ['1 abacate', 'Cacau em pó', 'Stevia'], st: ['Amasse o abacate.', 'Adicione cacau e stevia.', 'Misture bem.', 'Sirva gelado.'] },
-  { id: 'r6', e: '🍲', nm: 'Caldo de Frango', tm: '40 min', kc: 180, ct: 'Ceia', df: 'Médio', ig: ['Frango', 'Chuchu', 'Cenoura', 'Ervas'], st: ['Cozinhe frango 30 min.', 'Adicione legumes.', 'Tempere.', 'Coe e sirva.'] },
-];
-
-const BADGES = [
-  { id: 'b1', e: '🌟', nm: 'Primeiro Passo', ds: 'Completou o cadastro inicial', xp: 50, ct: 'Sistema', ok: true },
-  { id: 'b2', e: '📅', nm: '7 Dias no Ritmo', ds: 'Seguiu o cardápio por 7 dias', xp: 150, ct: 'Alimentação', ok: true },
-  { id: 'b3', e: '📉', nm: 'Glicemia em Queda', ds: 'Reduziu a glicemia em 20%', xp: 200, ct: 'Saúde', ok: true },
-  { id: 'b4', e: '💬', nm: 'Curiosa', ds: 'Fez 10 perguntas ao Chat IA', xp: 80, ct: 'Sistema', ok: true },
-  { id: 'b5', e: '🔥', nm: '30 Dias Ativa', ds: 'Usou o sistema por 30 dias', xp: 300, ct: 'Sistema', ok: false },
-  { id: 'b6', e: '🏆', nm: 'Top 10', ds: 'Entrou no top 10 do ranking', xp: 250, ct: 'Ranking', ok: false },
-  { id: 'b7', e: '💪', nm: 'Semana Vencida', ds: 'Completou a primeira semana', xp: 100, ct: 'Alimentação', ok: true },
-  { id: 'b8', e: '📊', nm: 'Monitor Assídua', ds: 'Registrou glicemia por 30 dias', xp: 280, ct: 'Saúde', ok: false },
-  { id: 'b9', e: '🌙', nm: 'Sono de Qualidade', ds: 'Registrou sono 5+ por 7 noites', xp: 130, ct: 'Saúde', ok: true },
-  { id: 'b10', e: '🤝', nm: 'Comunidade', ds: 'Reagiu a 10 conquistas', xp: 90, ct: 'Social', ok: true },
-  { id: 'b11', e: '⚡', nm: 'Velocista', ds: 'Iniciou rapidamente no sistema', xp: 60, ct: 'Sistema', ok: true },
-  { id: 'b12', e: '🎯', nm: 'Meta Batida', ds: 'Atingiu primeira meta de peso', xp: 220, ct: 'Saúde', ok: false },
-  { id: 'b13', e: '🥕', nm: 'Colorida', ds: 'Completou 5 pratos com vegetais', xp: 90, ct: 'Alimentação', ok: false },
-  { id: 'b14', e: '🧊', nm: 'Hidratação em Dia', ds: 'Registrou água por 14 dias', xp: 110, ct: 'Saúde', ok: false },
-  { id: 'b15', e: '🚶', nm: 'Passos Firmes', ds: 'Manteve rotina ativa por 10 dias', xp: 130, ct: 'Saúde', ok: false },
-  { id: 'b16', e: '🍽️', nm: 'Prato Completo', ds: 'Seguiu o plano completo por 3 dias', xp: 120, ct: 'Alimentação', ok: false },
-  { id: 'b17', e: '💤', nm: 'Ritmo do Sono', ds: 'Dormiu 7h+ por 7 noites', xp: 140, ct: 'Saúde', ok: false },
-  { id: 'b18', e: '💬', nm: 'Parceira da IA', ds: 'Interagiu 50 vezes com o chat', xp: 180, ct: 'Sistema', ok: false },
-  { id: 'b19', e: '🎉', nm: 'Comunidade Ativa', ds: 'Recebeu 25 curtidas em conquistas', xp: 170, ct: 'Social', ok: false },
-  { id: 'b20', e: '🚀', nm: 'Virada 4D', ds: 'Ultrapassou 5000 XP', xp: 300, ct: 'Ranking', ok: false },
-];
-
-const RANKING = [
-  { p: 1, nm: 'Ana Beatriz', nk: '@anabea', e: '👑', col: '#eab308', xp: 1420, st: 45 },
-  { p: 2, nm: 'Carla Mendes', nk: '@carlinha', e: '🔥', col: '#f0059a', xp: 1180, st: 38 },
-  { p: 3, nm: 'Priscila S.', nk: '@prisilva', e: '💎', col: '#a78bfa', xp: 980, st: 31 },
-  { p: 4, nm: 'Fernanda L.', nk: '@ferlima', e: '🌺', col: '#1fcc74', xp: 820, st: 28 },
-  { p: 5, nm: 'Juliana C.', nk: '@juju', e: '⭐', col: '#38bdf8', xp: 710, st: 22 },
-  { p: 6, nm: 'Mariana A.', nk: '@mari', e: '🌸', col: '#fb7185', xp: 640, st: 19 },
-  { p: 7, nm: 'Tatiane R.', nk: '@tati', e: '🦋', col: '#34d399', xp: 580, st: 17 },
-  { p: 8, nm: 'Você', nk: '@voce', e: '🌙', col: '#f0059a', xp: 520, st: 14, me: true },
-  { p: 9, nm: 'Roberta D.', nk: '@robi', e: '🍀', col: '#fbbf24', xp: 480, st: 12 },
-  { p: 10, nm: 'Simone N.', nk: '@sisi', e: '🌿', col: '#6ee7b7', xp: 410, st: 10 },
-];
-
-const EXAM_RESULTS = {
-  glicemia: [{ m: 'Nov', v: 165 }, { m: 'Dez', v: 148 }, { m: 'Jan', v: 132 }, { m: 'Fev', v: 121 }, { m: 'Mar', v: 109 }, { m: 'Abr', v: 98 }],
-  hba1c: [{ m: 'Nov', v: 8.1 }, { m: 'Jan', v: 7.4 }, { m: 'Mar', v: 6.8 }, { m: 'Abr', v: 6.1 }],
-  peso: [{ m: 'Nov', v: 84.0 }, { m: 'Dez', v: 83.2 }, { m: 'Jan', v: 82.1 }, { m: 'Fev', v: 81.4 }, { m: 'Mar', v: 80.1 }, { m: 'Abr', v: 79.6 }],
-};
-
-const EXAM_ORDERS = [
-  { id: 'eo1', dt: '28/04/2026', st: 'Pendente', ex: ['Glicemia em jejum', 'HbA1c', 'Insulina em jejum', 'Peptídeo C'], ins: 'Jejum mínimo 12h. Coletar pela manhã.', fileReady: false, fileUrl: '' },
-  { id: 'eo2', dt: '15/03/2026', st: 'Realizado', ex: ['Perfil lipídico', 'TSH', 'T4 livre', 'Ferritina', 'Vitamina D'], ins: 'Jejum de 12 horas.', fileReady: true, fileUrl: '' },
-  { id: 'eo3', dt: '10/01/2026', st: 'Realizado', ex: ['Glicemia', 'HbA1c', 'Urina tipo 1', 'Creatinina'], ins: 'Coleta em laboratório credenciado.', fileReady: false, fileUrl: '' },
-];
-
-const CHAT_RESP = [
-  'Com frango, abobrinha e ovos você pode fazer uma fritata proteica! Refogue a abobrinha, cubra com os ovos batidos e tampe. Pronto em 15 min e mantém a glicemia estável 🍳',
-  'Sua glicemia está em queda consistente - parabéns! Continue focada no cardápio 📊✨',
-  'Esse alimento está liberado para você! Quer sugestão de preparo? 🥗',
-  'Para o seu lanche: 10 amêndoas + queijo minas + água com limão 💪',
-  'Sua HbA1c caiu de 8,1% para 6,1% - resultado extraordinário! Continue assim 💕',
-  'Ótima pergunta! Para controle glicêmico, sempre combine proteína com fibras. Isso retarda a absorção do açúcar e reduz os picos 🌿',
-];
-
-const PROFILE_AVATARS = ['🌸', '⚡', '🦋', '🌺', '💎', '🔥', '🌙', '⭐', '🌿', '🦁', '🌊', '🍀'];
-const PROFILE_COLORS = ['#f0059a', '#a78bfa', '#1fcc74', '#f59e0b', '#38bdf8', '#fb7185', '#34d399', '#fbbf24'];
-const XP_LEVELS = [
-  { level: 1, title: 'Iniciante', minXp: 0, color: '#8a8aa0' },
-  { level: 2, title: 'Aprendiz', minXp: 500, color: '#10b981' },
-  { level: 3, title: 'Comprometida', minXp: 1200, color: '#38bdf8' },
-  { level: 4, title: 'Disciplinada', minXp: 2200, color: '#a78bfa' },
-  { level: 5, title: 'Consistente', minXp: 3400, color: '#f59e0b' },
-  { level: 6, title: 'Referência', minXp: 4800, color: '#f43f5e' },
-  { level: 7, title: 'Elite 4D', minXp: 6500, color: '#14b8a6' },
-  { level: 8, title: 'Mestre 4D', minXp: 8500, color: '#eab308' },
 ];
 
 function normalizeAvatarEmoji(value, fallback = '🌙') {
@@ -211,7 +117,7 @@ export class DashboardScreen extends BaseScreen {
     this.currentUser = authService.getCurrentUser();
     this.userProfile = State.get('userProfile') || {};
     this.recipes = State.get('recipes') || RECIPES;
-    this.achievements = State.get('achievements') || BADGES;
+    this.achievements = State.get('achievements') || ACHIEVEMENTS_CATALOG;
     this.chatHistory = State.get('chatHistory') || [];
     this.dailyMeals = State.get('dailyMeals') || this.userProfile.dailyMeals || REFEICOES_DIA;
     this.mealDraft = { icon: '🍽️', nome: '', hora: '08:00', desc: '' };
@@ -756,7 +662,7 @@ export class DashboardScreen extends BaseScreen {
 
     if (!uid) {
       window.setTimeout(() => {
-        this.chatHistory = [...this.chatHistory, { role: 'ai', content: CHAT_RESP[this.chatHistory.length % CHAT_RESP.length] }];
+        this.chatHistory = [...this.chatHistory, { role: 'system', content: 'Faça login para conversar com a Guardiã 💬' }];
         this.mountPreservingScroll();
       }, 900);
       return;
@@ -1065,11 +971,11 @@ export class DashboardScreen extends BaseScreen {
   }
 
   getLevel(xp) {
-    return [...XP_LEVELS].reverse().find(level => xp >= level.minXp) || XP_LEVELS[0];
+    return [...LEVELS].reverse().find(level => xp >= level.minXp) || LEVELS[0];
   }
 
   getNextLevel(levelNumber) {
-    return XP_LEVELS.find(level => level.level === levelNumber + 1) || null;
+    return LEVELS.find(level => level.level === levelNumber + 1) || null;
   }
 
   renderContent() {
@@ -1719,7 +1625,7 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderProfile() {
-    const achievementCards = (Array.isArray(this.achievements) && this.achievements.length ? this.achievements : BADGES)
+    const achievementCards = (Array.isArray(this.achievements) && this.achievements.length ? this.achievements : ACHIEVEMENTS_CATALOG)
       .map(normalizeAchievement)
       .filter(Boolean);
     const unlockedCount = achievementCards.filter(badge => badge.ok).length;

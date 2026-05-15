@@ -24,31 +24,36 @@ initializeApp();
 const db = getFirestore();
 
 // ─────────────────────────────────────────────
-// ACHIEVEMENTS CATALOG (mirror from constants.js)
-// ─────────────────────────────────────────────
+// ACHIEVEMENTS CATALOG — mirror from assets/js/config/constants.js
+// Keep in sync: same ids, titles, descriptions, xp, icons, hidden, condition
+// ────────────────────────────────────────────────────────────────────────
 const ACHIEVEMENTS_CATALOG = [
-  { id: 'first_step', title: 'Primeiro Passo', description: 'Completar onboarding', xp: 100, icon: '🎉' },
-  { id: 'organized', title: 'Organizado', description: 'Preencher todos os 5 formulários', xp: 200, icon: '📋' },
-  { id: 'scientist', title: 'Cientista', description: 'Upload do primeiro exame', xp: 50, icon: '🔬' },
-  { id: 'chef_formation', title: 'Chef em Formação', description: 'Gerar 3 receitas', xp: 75, icon: '👨‍🍳' },
-  { id: 'chef_confirmed', title: 'Chef Confirmado', description: 'Gerar 10 receitas', xp: 150, icon: '🍽️' },
-  { id: 'conversationalist', title: 'Conversador', description: 'Enviar 10 mensagens no chat', xp: 50, icon: '💬' },
-  { id: 'consistent', title: 'Consistente', description: 'Login por 7 dias seguidos', xp: 100, icon: '📅' },
-  { id: 'iron_fire', title: 'Ferro e Fogo', description: 'Login por 30 dias seguidos', xp: 500, icon: '🔥' },
-  { id: 'explorer', title: 'Explorador', description: 'Usar Avaliador Alimentar 5 vezes', xp: 75, icon: '🧭' },
-  { id: 'top_10', title: 'Comunidade Top 10', description: 'Entrar no top 10 do ranking', xp: 200, icon: '🏆' },
-  { id: 'veteran', title: 'Veterano', description: '90 dias de conta ativa', xp: 1000, icon: '🎖️' },
-  { id: 'gmp_master', title: 'Mestre GMP', description: 'Atingir nível 5', xp: 1000, icon: '👑' },
-  { id: 'night_owl', title: 'Coruja Noturna', description: 'Acessar entre 23h e 5h em 3 dias diferentes', xp: 75, icon: '🦉', hidden: true },
-  { id: 'early_bird', title: 'Madrugadora', description: 'Acessar entre 5h e 7h em 5 dias diferentes', xp: 75, icon: '🌅', hidden: true },
-  { id: 'recipe_curator', title: 'Curadora', description: 'Favoritar 5 receitas', xp: 100, icon: '❤️', hidden: true },
-  { id: 'food_explorer_pro', title: 'Exploradora Pro', description: 'Avaliar 25 alimentos diferentes', xp: 200, icon: '🔍', hidden: true },
-  { id: 'streak_breaker', title: 'Persistente', description: 'Retomar o app após perder um dia de streak', xp: 50, icon: '💪', hidden: true },
-  { id: 'polymath', title: 'Polivalente', description: 'Usar 5 abas diferentes do app em menos de 24 horas', xp: 80, icon: '🌐', hidden: true },
-  { id: 'chat_marathoner', title: 'Maratonista', description: 'Enviar 30 mensagens para a Guardiã em um único dia', xp: 150, icon: '🏃', hidden: true },
-  { id: 'forms_finished', title: 'Formulários em Dia', description: 'Completar o formulário de saúde e o cardápio', xp: 200, icon: '✅', hidden: true },
-  { id: 'iron_will', title: 'Vontade de Ferro', description: 'Fazer login 60 vezes no total', xp: 600, icon: '🛡️', hidden: true },
-  { id: 'gmp_legend', title: 'Lenda 4D', description: 'Acumular 5000 XP', xp: 1500, icon: '🌟', hidden: true },
+  // ── Jornada (visíveis) ──
+  { id: 'first_step',       title: 'Primeiro Passo',   description: 'Completar onboarding',                              xp: 100,  icon: '🎉',   condition: { event: 'ONBOARDING_COMPLETED' } },
+  { id: 'organized',        title: 'Organizado',       description: 'Preencher todos os 5 formulários',                xp: 200,  icon: '📋',   condition: { event: 'ALL_FORMS_COMPLETED' } },
+  { id: 'scientist',        title: 'Cientista',         description: 'Upload do primeiro exame',                        xp: 50,   icon: '🔬',   condition: { event: 'FIRST_EXAM_UPLOADED' } },
+  { id: 'chef_formation',   title: 'Chef em Formação',  description: 'Gerar 3 receitas',                                xp: 75,   icon: '👨‍🍳', condition: { event: 'RECIPES_GENERATED', count: 3 } },
+  { id: 'chef_confirmed',   title: 'Chef Confirmado',   description: 'Gerar 10 receitas',                               xp: 150,  icon: '🍽️',   condition: { event: 'RECIPES_GENERATED', count: 10 } },
+  // ── Engajamento (visíveis) ──
+  { id: 'conversationalist',title: 'Conversador',       description: 'Enviar 10 mensagens no chat',                     xp: 50,   icon: '💬',   condition: { event: 'CHAT_MESSAGES', count: 10 } },
+  { id: 'consistent',       title: 'Consistente',       description: 'Login por 7 dias seguidos',                       xp: 100,  icon: '📅',   condition: { event: 'STREAK_DAYS', count: 7 } },
+  { id: 'iron_fire',        title: 'Ferro e Fogo',      description: 'Login por 30 dias seguidos',                      xp: 500,  icon: '🔥',   condition: { event: 'STREAK_DAYS', count: 30 } },
+  { id: 'explorer',         title: 'Explorador',        description: 'Usar Avaliador Alimentar 5 vezes',                xp: 75,   icon: '🧭',   condition: { event: 'FOOD_EVALUATIONS', count: 5 } },
+  // ── Ranking + veterano ──
+  { id: 'top_10',           title: 'Comunidade Top 10', description: 'Entrar no top 10 do ranking',                     xp: 200,  icon: '🏆',   condition: { event: 'TOP_RANKING', rank: 10 } },
+  { id: 'veteran',          title: 'Veterano',          description: '90 dias de conta ativa',                          xp: 1000, icon: '🎖️',   condition: { event: 'ACCOUNT_AGE_DAYS', count: 90 } },
+  { id: 'gmp_master',       title: 'Mestre GMP',        description: 'Atingir nível 5',                                 xp: 1000, icon: '👑',   condition: { event: 'LEVEL_REACHED', level: 5 } },
+  // ── Hidden — revelados ao desbloquear ──
+  { id: 'night_owl',        title: 'Coruja Noturna',    description: 'Acessar o app entre 23h e 5h em 3 dias diferentes', xp: 75, icon: '🦉', hidden: true, condition: { event: 'NIGHT_ACCESS_DAYS', count: 3 } },
+  { id: 'early_bird',       title: 'Madrugadora',       description: 'Acessar o app entre 5h e 7h em 5 dias diferentes',  xp: 75, icon: '🌅', hidden: true, condition: { event: 'EARLY_ACCESS_DAYS', count: 5 } },
+  { id: 'recipe_curator',   title: 'Curadora',          description: 'Favoritar 5 receitas',                             xp: 100, icon: '❤️', hidden: true, condition: { event: 'RECIPES_FAVORITED', count: 5 } },
+  { id: 'food_explorer_pro',title: 'Exploradora Pro',   description: 'Avaliar 25 alimentos diferentes',                  xp: 200, icon: '🔍', hidden: true, condition: { event: 'FOOD_EVALUATIONS_UNIQUE', count: 25 } },
+  { id: 'streak_breaker',   title: 'Persistente',       description: 'Retomar o app após perder um dia de streak',      xp: 50,  icon: '💪', hidden: true, condition: { event: 'STREAK_RECOVERED' } },
+  { id: 'polymath',         title: 'Polivalente',       description: 'Usar 5 abas diferentes do app em menos de 24 horas', xp: 80, icon: '🌐', hidden: true, condition: { event: 'SECTIONS_VISITED_24H', count: 5 } },
+  { id: 'chat_marathoner',  title: 'Maratonista',       description: 'Enviar 30 mensagens para a Guardiã em um único dia', xp: 150, icon: '🏃', hidden: true, condition: { event: 'CHAT_MESSAGES_24H', count: 30 } },
+  { id: 'forms_finished',   title: 'Formulários em Dia',description: 'Completar o formulário de saúde e o cardápio',     xp: 200, icon: '✅', hidden: true, condition: { event: 'HEALTH_AND_MENU_FORMS_COMPLETE' } },
+  { id: 'iron_will',        title: 'Vontade de Ferro',  description: 'Fazer login 60 vezes no total',                   xp: 600, icon: '🛡️', hidden: true, condition: { event: 'TOTAL_LOGINS', count: 60 } },
+  { id: 'gmp_legend',       title: 'Lenda 4D',          description: 'Acumular 5000 XP',                                xp: 1500, icon: '🌟', hidden: true, condition: { event: 'TOTAL_XP', count: 5000 } },
 ];
 
 // ─────────────────────────────────────────────

@@ -4,12 +4,10 @@ import { Colors } from '../config/colors.js';
 import { SCREENS, XP_EVENTS } from '../config/constants.js';
 import { firestoreService } from '../services/firestore.js';
 import { authService } from '../services/auth.js';
-import { getFunctions, httpsCallable } from '../config/firebase.js';
-import { buildChatPayload } from '../config/n8n.js';
+import { n8nService } from '../services/n8n.js';
 import { notificationService } from '../modules/notifications.js';
 import { DOM } from '../utils/helpers.js';
 
-let chatFunction = null;
 
 /**
  * ChatScreen — Chat com IA Guardiã
@@ -46,12 +44,6 @@ export class ChatScreen extends BaseScreen {
 
   async mount() {
     try {
-      // Inicializa Cloud Function reference
-      if (!chatFunction) {
-        const functions = getFunctions();
-        chatFunction = httpsCallable(functions, 'agentChatMessage');
-      }
-
       // Handle pinned recipe from params
       if (this.params?.recipeId) {
         this.pinnedRecipe = {
@@ -101,10 +93,8 @@ export class ChatScreen extends BaseScreen {
   // ---------------------------------------------------------------------------
 
   async _callChatFunction(message) {
-    return chatFunction({
-      message,
-      sessionId: this.sessionId,
-    });
+    const uid = authService.currentUser?.uid || 'anon';
+    return n8nService.sendChatMessage(uid, message, this.sessionId);
   }
 
   // ---------------------------------------------------------------------------
@@ -149,15 +139,15 @@ export class ChatScreen extends BaseScreen {
 
       clearTimeout(timeoutId);
 
-      if (result?.data?.success) {
+      if (result?.success) {
         const aiMessage = {
           id: `ai_${Date.now()}`,
           role: 'assistant',
-          content: result.data.reply,
-          type: result.data.type || 'text',
-          recipe: result.data.recipe || null,
+          content: result.reply,
+          type: result.type || 'text',
+          recipe: result.recipe || null,
           timestamp: new Date(),
-          xpAwarded: result.data.xpAwarded || 0,
+          xpAwarded: result.xpAwarded || 0,
         };
 
         this.chatHistory.push(aiMessage);
@@ -166,30 +156,33 @@ export class ChatScreen extends BaseScreen {
           this.showXPNotification(aiMessage.xpAwarded);
         }
 
-        if (result.data.type === 'recipe' && result.data.recipe) {
+        if (result.type === 'recipe' && result.recipe) {
           notificationService.notify({
             uid: authService.currentUser?.uid,
             title: 'Nova receita gerada',
-            message: `A Guardiã criou uma receita: ${result.data.recipe.title || result.data.recipe.name}`,
+            message: `A Guardiã criou uma receita: ${result.recipe.title || result.recipe.name}`,
             type: 'success',
-            payload: { recipeId: result.data.recipe.id },
+            payload: { recipeId: result.recipe.id },
           });
         }
       }
     } catch (error) {
       clearTimeout(timeoutId);
       const isTimeout = error.message === 'TIMEOUT';
+      const errorDetail = error?.details?.message || error?.message || 'Erro desconhecido';
+      const errorMsg = isTimeout
+        ? '⏱️ A Guardiã demorou muito. Tente novamente.'
+        : navigator.onLine
+          ? `❌ ${errorDetail}`
+          : '📵 Sem conexão com a internet.';
       this.chatHistory.push({
         id: `error_${Date.now()}`,
         role: 'system',
         type: 'error',
-        content: isTimeout
-          ? '⏱️ A Guardiã demorou muito. Tente novamente.'
-          : navigator.onLine
-            ? '❌ Não consegui responder agora. Tente em instantes.'
-            : '📵 Sem conexão com a internet.',
+        content: errorMsg,
         timestamp: new Date(),
       });
+      console.error('[ChatScreen] sendMessage error:', error);
     } finally {
       clearTimeout(timeoutId);
       this.isLoading = false;

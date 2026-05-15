@@ -260,6 +260,11 @@ class App {
       // Garante que o documento do usuário existe ANTES de qualquer operação
       const profile = await firestoreService.ensureUserDocument(user.uid, user.email);
       try { State.set('userProfile', profile); } catch (error) { console.warn('[App] State.set failed', error); }
+      // Carrega appConfig do Firestore (níveis, conquistas, etc.)
+      firestoreService.preloadAppConfig().then(config => {
+        if (config) State.set('appConfig', config);
+        console.log('[App] appConfig carregado:', Object.keys(config || {}));
+      }).catch(e => console.warn('[App] appConfig load failed:', e));
       this._registerOfflineHandlers(user.uid);
       this._setupConnectionListeners();
       await firestoreService.awardDailyLoginXp(user.uid);
