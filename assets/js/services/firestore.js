@@ -36,20 +36,33 @@ import {
 import { LEVELS, ACHIEVEMENTS_CATALOG, XP_EVENTS } from '../config/constants.js';
 
 // ─────────────────────────────────────────────
+// Cache de appConfig (níveis, conquistas, XP)
+// Populado por preloadAppConfig() após login.
+// Funções standalone usam este cache; métodos da
+// classe usam this._appConfig (mesmo objeto).
+// ─────────────────────────────────────────────
+let _appConfigCache = null;
+
+// ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
 
 function getLevelForXp(xp) {
-  for (let i = LEVELS.length - 1; i >= 0; i--) {
-    if (xp >= LEVELS[i].minXp) return LEVELS[i];
+  const levels = _appConfigCache?.levels || LEVELS;
+  for (let i = levels.length - 1; i >= 0; i--) {
+    if (xp >= levels[i].minXp) return levels[i];
   }
-  return LEVELS[0];
+  return levels[0];
 }
 
 function xpToNextLevel(xp) {
   const current = getLevelForXp(xp);
   if (!current.maxXp) return null; // nível máximo
   return current.maxXp - xp + 1;
+}
+
+function getXpEvents() {
+  return _appConfigCache?.xpEvents || XP_EVENTS;
 }
 
 // ─────────────────────────────────────────────
@@ -61,6 +74,7 @@ export class FirestoreService {
     this.db = null;
     this.initialized = false;
     this._cache = new Map();
+    this._appConfig = _appConfigCache; // Cache do appConfig (níveis, conquistas, XP events)
   }
 
   _cacheGet(key) { return this._cache.get(key); }
@@ -249,7 +263,7 @@ export class FirestoreService {
 
       if (completed) {
         await this.updateUserStatus(uid, 'awaiting_menu_form');
-        await this.awardXp(uid, XP_EVENTS.HEALTH_FORM_COMPLETED, 'health_form_done');
+        await this.awardXp(uid, getXpEvents().HEALTH_FORM_COMPLETED, 'health_form_done');
       }
       return true;
     }, 'saveHealthForm', false);
@@ -335,7 +349,7 @@ export class FirestoreService {
 
       if (completed) {
         await this.updateUserStatus(uid, 'active');
-        await this.awardXp(uid, XP_EVENTS.MENU_FORM_COMPLETED, 'menu_form_done');
+        await this.awardXp(uid, getXpEvents().MENU_FORM_COMPLETED, 'menu_form_done');
       }
       return true;
     }, 'saveMenuForm', false);
@@ -359,7 +373,7 @@ export class FirestoreService {
 
       // Atualiza status do usuário para "processando"
       await this.updateUserStatus(uid, 'processing_blood_test');
-      await this.awardXp(uid, XP_EVENTS.BLOOD_TEST_UPLOADED, 'blood_test_uploaded');
+      await this.awardXp(uid, getXpEvents().BLOOD_TEST_UPLOADED, 'blood_test_uploaded');
 
       return ref.id;
     }, 'saveBloodTest');
@@ -437,9 +451,9 @@ export class FirestoreService {
         await this.incrementCounter(uid, 'totalChatMessages');
         const profile = await this.getUserProfile(uid);
         const total = (profile?.totalChatMessages ?? 0) + 1;
-        if (total === 10)  await this.awardXp(uid, XP_EVENTS.CHAT_MESSAGE_SENT * 10, 'chat_10');
-        if (total === 50)  await this.awardXp(uid, XP_EVENTS.CHAT_MESSAGE_SENT * 20, 'chat_50');
-        else               await this.awardXp(uid, XP_EVENTS.CHAT_MESSAGE_SENT);
+        if (total === 10)  await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT * 10, 'chat_10');
+        if (total === 50)  await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT * 20, 'chat_50');
+        else               await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT);
       }
 
       return ref.id;
@@ -648,7 +662,7 @@ export class FirestoreService {
         createdAt: serverTimestamp(),
       });
       await this.incrementCounter(uid, 'totalRecipes');
-      await this.awardXp(uid, XP_EVENTS.RECIPE_GENERATED, 'recipe_generated');
+      await this.awardXp(uid, getXpEvents().RECIPE_GENERATED, 'recipe_generated');
       return ref.id;
     }, 'saveRecipe');
   }
@@ -663,7 +677,7 @@ export class FirestoreService {
         ...evaluationData,
         createdAt: serverTimestamp(),
       });
-      await this.awardXp(uid, XP_EVENTS.FOOD_EVALUATED, 'food_evaluated');
+      await this.awardXp(uid, getXpEvents().FOOD_EVALUATED, 'food_evaluated');
       return ref.id;
     }, 'saveFoodEvaluation');
   }
@@ -846,7 +860,7 @@ export class FirestoreService {
         return false;
       }
 
-      await this.awardXp(uid, XP_EVENTS.DAILY_LOGIN, 'daily_login');
+      await this.awardXp(uid, getXpEvents().DAILY_LOGIN, 'daily_login');
       await this._updateStreak(uid, profile);
       await updateDoc(this.userRef(uid), {
         lastLoginAt: serverTimestamp(),
@@ -905,7 +919,8 @@ export class FirestoreService {
       const existing = await getDoc(ref);
       if (existing.exists()) return false; // idempotente
 
-      const achievement = ACHIEVEMENTS_CATALOG.find(item => item.id === achievementId);
+      const catalog = _appConfigCache?.achievementsCatalog || ACHIEVEMENTS_CATALOG;
+      const achievement = catalog.find(item => item.id === achievementId);
       if (!achievement) {
         console.warn('[Firestore] unlockAchievement: id not found in catalog', achievementId);
         return false;
@@ -952,7 +967,8 @@ export class FirestoreService {
       const data = snap.data();
       if (data.claimed) return false;
 
-      const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === achievementId);
+      const catalog = _appConfigCache?.achievementsCatalog || ACHIEVEMENTS_CATALOG;
+      const achievement = catalog.find(a => a.id === achievementId);
       if (!achievement) return false;
 
       await updateDoc(ref, {
@@ -1077,6 +1093,9 @@ export class FirestoreService {
       const data = await this.getAppConfig(docId);
       if (data) results[docId] = data;
     }));
+    // Popula cache compartilhado (módulo + instância)
+    _appConfigCache = results;
+    this._appConfig = results;
     return results;
   }
 }

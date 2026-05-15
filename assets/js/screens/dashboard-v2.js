@@ -5,7 +5,7 @@ import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
-import { ACHIEVEMENTS_CATALOG, LEVELS } from '../config/constants.js';
+import { getLevels, getAchievementsCatalog } from '../config/constants.js';
 import { offlineQueue } from '../modules/offline-queue.js';
 import { REFEICOES_DIA, DICAS, RECIPES, RANKING, EXAM_RESULTS, EXAM_ORDERS, PROFILE_AVATARS, PROFILE_COLORS } from '../config/data.js';
 
@@ -117,7 +117,7 @@ export class DashboardScreen extends BaseScreen {
     this.currentUser = authService.getCurrentUser();
     this.userProfile = State.get('userProfile') || {};
     this.recipes = State.get('recipes') || RECIPES;
-    this.achievements = State.get('achievements') || ACHIEVEMENTS_CATALOG;
+    this.achievements = State.get('achievements') || getAchievementsCatalog();
     this.chatHistory = State.get('chatHistory') || [];
     this.dailyMeals = State.get('dailyMeals') || this.userProfile.dailyMeals || REFEICOES_DIA;
     this.mealDraft = { icon: '🍽️', nome: '', hora: '08:00', desc: '' };
@@ -550,16 +550,16 @@ export class DashboardScreen extends BaseScreen {
   }
 
   _getLevelForXp(xp) {
-    for (let i = LEVELS.length - 1; i >= 0; i--) {
-      if (xp >= LEVELS[i].minXp) return LEVELS[i].level;
+    for (let i = getLevels().length - 1; i >= 0; i--) {
+      if (xp >= getLevels()[i].minXp) return getLevels()[i].level;
     }
     return 1;
   }
 
   _showXpPopup({ xpBefore, xpAfter, xpGained, levelBefore, levelAfter }) {
     const leveledUp = levelAfter > levelBefore;
-    const levelData = LEVELS.find(l => l.level === levelAfter) || LEVELS[0];
-    const nextLevel = LEVELS.find(l => l.level === levelAfter + 1);
+    const levelData = getLevels().find(l => l.level === levelAfter) || getLevels()[0];
+    const nextLevel = getLevels().find(l => l.level === levelAfter + 1);
     const rangeMin = levelData.minXp;
     const rangeMax = nextLevel ? nextLevel.minXp : levelData.minXp + 500;
     const pctBefore = Math.min(100, Math.max(0, Math.round(((xpBefore - rangeMin) / (rangeMax - rangeMin)) * 100)));
@@ -971,11 +971,11 @@ export class DashboardScreen extends BaseScreen {
   }
 
   getLevel(xp) {
-    return [...LEVELS].reverse().find(level => xp >= level.minXp) || LEVELS[0];
+    return [...getLevels()].reverse().find(level => xp >= level.minXp) || getLevels()[0];
   }
 
   getNextLevel(levelNumber) {
-    return LEVELS.find(level => level.level === levelNumber + 1) || null;
+    return getLevels().find(level => level.level === levelNumber + 1) || null;
   }
 
   renderContent() {
@@ -1441,7 +1441,7 @@ export class DashboardScreen extends BaseScreen {
     // Build merged list: catalog is source of truth, user's unlocked data provides status
     const unlockedMap = new Map((this.achievements || []).map(a => [a.id || a.achievementId, a]));
 
-    const allAchievements = ACHIEVEMENTS_CATALOG.map(catalog => {
+    const allAchievements = getAchievementsCatalog().map(catalog => {
       const userData = unlockedMap.get(catalog.id);
       const isUnlocked = !!userData;
       const isClaimed = !!(userData?.claimed);
@@ -1461,7 +1461,7 @@ export class DashboardScreen extends BaseScreen {
 
     // Mostrar TODAS — ocultas viram placeholder com ❓.
     const visibleAchievements = allAchievements;
-    const totalCount = ACHIEVEMENTS_CATALOG.length;
+    const totalCount = getAchievementsCatalog().length;
     const claimedCount = allAchievements.filter(a => a.claimed).length;
     const pendingClaims = allAchievements.filter(a => a.ok && !a.claimed).length;
     const unlockedCount = allAchievements.filter(a => a.ok).length;
@@ -1625,7 +1625,7 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderProfile() {
-    const achievementCards = (Array.isArray(this.achievements) && this.achievements.length ? this.achievements : ACHIEVEMENTS_CATALOG)
+    const achievementCards = (Array.isArray(this.achievements) && this.achievements.length ? this.achievements : getAchievementsCatalog())
       .map(normalizeAchievement)
       .filter(Boolean);
     const unlockedCount = achievementCards.filter(badge => badge.ok).length;
@@ -1918,7 +1918,7 @@ export class DashboardScreen extends BaseScreen {
         btn.innerHTML = '⏳ Reivindicando...';
 
         try {
-          const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === id);
+          const achievement = getAchievementsCatalog().find(a => a.id === id);
           const xpGained = achievement?.xp || 0;
           const profileBefore = await firestoreService.getUserProfile(this.currentUser.uid);
           const xpBefore = profileBefore?.xp || 0;

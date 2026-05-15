@@ -49,9 +49,11 @@ export const USER_STATUS = {
   ACTIVE: "active",
 };
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════════
 // GAMIFICAÇÃO — XP por evento
-// ============================================================
+// ════════════════════════════════════════════════════════════════════════
+// ⚠️ CANONICAL FALLBACK: dados oficiais vêm do Firestore appConfig/xpEvents.
+// Use sempre getXpEvents() — que prioriza State.appConfig.
 export const XP_EVENTS = {
   DAILY_LOGIN: 10,
   HEALTH_FORM_COMPLETED: 150,
@@ -69,8 +71,13 @@ export const XP_EVENTS = {
   SHARE_ACHIEVEMENT: 20,
 };
 
-// Níveis de progressão — 8 tiers unificados
-// Fonte canônica: usada por gamification.js, firestore.js, dashboard-v2.js
+// ════════════════════════════════════════════════════════════════════════
+// NÍVEIS DE PROGRESSÃO — 8 tiers unificados
+// ════════════════════════════════════════════════════════════════════════
+// ⚠️ CANONICAL FALLBACK: os dados oficiais vêm do Firestore appConfig/levels.
+// Esta constante é usada apenas como fallback quando o appConfig ainda não
+// foi carregado do Firestore (ex: primeiros ms após login, modo offline).
+// Para ler os níveis, use sempre getLevels() — que prioriza State.appConfig.
 // Campos: level, title, name (alias), shortName, minXp, maxXp, color, emoji, icon (alias), rarity
 export const LEVELS = [
   { level: 1, title: "Iniciante",    name: "Iniciante",    shortName: "Inic.",     minXp: 0,    maxXp: 499,   color: "#8a8aa0", emoji: "🌱", icon: "🌱", rarity: "common" },
@@ -83,9 +90,11 @@ export const LEVELS = [
   { level: 8, title: "Mestra 4D",    name: "Mestra 4D",    shortName: "Mestra",    minXp: 8500, maxXp: 99999, color: "#eab308", emoji: "👑", icon: "👑", rarity: "legendary" },
 ];
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════════
 // CONQUISTAS — 22 achievements (12 visíveis + 10 hidden) com XP, condições e descrições
-// ============================================================
+// ════════════════════════════════════════════════════════════════════════
+// ⚠️ CANONICAL FALLBACK: os dados oficiais vêm do Firestore appConfig/achievementsCatalog.
+// Use sempre getAchievementsCatalog() — que prioriza State.appConfig.
 export const ACHIEVEMENTS_CATALOG = [
   {
     id: "first_step",
@@ -389,3 +398,54 @@ export const NAV_ITEMS = [
   { id: 'ranking', label: 'Ranking', icon: 'trophy' },
   { id: 'chat', label: 'Chat', icon: 'message-circle' },
 ];
+
+// ════════════════════════════════════════════════════════════════════════
+// HELPERS — leem do Firestore (State.appConfig) com fallback para as
+// constantes hardcoded acima. Use SEMPRE estas funções; nunca acesse
+// LEVELS, ACHIEVEMENTS_CATALOG ou XP_EVENTS diretamente.
+// ════════════════════════════════════════════════════════════════════════
+
+/**
+ * Retorna array de níveis. Prioriza Firestore (State.appConfig.levels);
+ * fallback para a constante LEVELS.
+ * @returns {Array}
+ */
+export function getLevels() {
+  try {
+    const appConfig = window.State?.data?.appConfig;
+    if (appConfig?.levels && Array.isArray(appConfig.levels) && appConfig.levels.length > 0) {
+      return appConfig.levels;
+    }
+  } catch (_) { /* State ainda não inicializado */ }
+  return LEVELS;
+}
+
+/**
+ * Retorna array de conquistas. Prioriza Firestore (State.appConfig.achievementsCatalog);
+ * fallback para a constante ACHIEVEMENTS_CATALOG.
+ * @returns {Array}
+ */
+export function getAchievementsCatalog() {
+  try {
+    const appConfig = window.State?.data?.appConfig;
+    if (appConfig?.achievementsCatalog && Array.isArray(appConfig.achievementsCatalog) && appConfig.achievementsCatalog.length > 0) {
+      return appConfig.achievementsCatalog;
+    }
+  } catch (_) { /* State ainda não inicializado */ }
+  return ACHIEVEMENTS_CATALOG;
+}
+
+/**
+ * Retorna objeto de eventos XP. Prioriza Firestore (State.appConfig.xpEvents);
+ * fallback para a constante XP_EVENTS.
+ * @returns {Object}
+ */
+export function getXpEvents() {
+  try {
+    const appConfig = window.State?.data?.appConfig;
+    if (appConfig?.xpEvents && typeof appConfig.xpEvents === 'object' && Object.keys(appConfig.xpEvents).length > 0) {
+      return appConfig.xpEvents;
+    }
+  } catch (_) { /* State ainda não inicializado */ }
+  return XP_EVENTS;
+}
