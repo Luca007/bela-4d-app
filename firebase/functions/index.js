@@ -992,3 +992,83 @@ exports.evaluateTimeBasedAchievements = onSchedule(
     log('info', `evaluateTimeBasedAchievements done for ${usersSnap.size} users`);
   }
 );
+
+/**
+ * Seed appConfig no Firestore com dados do dashboard-v2.js.
+ * Idempotente: só insere se o documento ainda não existe.
+ * Chamar uma vez após deploy via Firebase Console ou:
+ *   curl -X POST https://southamerica-east1-bela-4d-app.cloudfunctions.net/seedAppConfig
+ */
+exports.seedAppConfig = onRequest({ region: REGION }, async (req, res) => {
+  // Aceita POST ou GET (pra facilitar teste no navegador)
+  const now = FieldValue.serverTimestamp();
+  const configs = {
+    levels: [
+      { level: 1, title: 'Iniciante', name: 'Iniciante', shortName: 'Inic.', minXp: 0, maxXp: 499, color: '#8a8aa0', emoji: '🌱', rarity: 'common' },
+      { level: 2, title: 'Aprendiz', name: 'Aprendiz', shortName: 'Apr.', minXp: 500, maxXp: 1199, color: '#10b981', emoji: '🌿', rarity: 'common' },
+      { level: 3, title: 'Comprometida', name: 'Comprometida', shortName: 'Comp.', minXp: 1200, maxXp: 2199, color: '#38bdf8', emoji: '💪', rarity: 'uncommon' },
+      { level: 4, title: 'Disciplinada', name: 'Disciplinada', shortName: 'Disc.', minXp: 2200, maxXp: 3399, color: '#a78bfa', emoji: '🔥', rarity: 'uncommon' },
+      { level: 5, title: 'Consistente', name: 'Consistente', shortName: 'Consis.', minXp: 3400, maxXp: 4799, color: '#f59e0b', emoji: '⭐', rarity: 'rare' },
+      { level: 6, title: 'Referência', name: 'Referência', shortName: 'Ref.', minXp: 4800, maxXp: 6499, color: '#f43f5e', emoji: '🏆', rarity: 'rare' },
+      { level: 7, title: 'Elite 4D', name: 'Elite 4D', shortName: 'Elite', minXp: 6500, maxXp: 8499, color: '#14b8a6', emoji: '💎', rarity: 'epic' },
+      { level: 8, title: 'Mestra 4D', name: 'Mestra 4D', shortName: 'Mestra', minXp: 8500, maxXp: 99999, color: '#eab308', emoji: '👑', rarity: 'legendary' },
+    ],
+    achievementsCatalog: [
+      { id: 'b1', emoji: '🌟', name: 'Primeiro Passo', description: 'Completou o cadastro inicial', xp: 50, category: 'Sistema' },
+      { id: 'b2', emoji: '📅', name: '7 Dias no Ritmo', description: 'Seguiu o cardápio por 7 dias', xp: 150, category: 'Alimentação' },
+      { id: 'b3', emoji: '📉', name: 'Glicemia em Queda', description: 'Reduziu a glicemia em 20%', xp: 200, category: 'Saúde' },
+      { id: 'b4', emoji: '💬', name: 'Curiosa', description: 'Fez 10 perguntas ao Chat IA', xp: 80, category: 'Sistema' },
+      { id: 'b5', emoji: '🔥', name: '30 Dias Ativa', description: 'Usou o sistema por 30 dias', xp: 300, category: 'Sistema' },
+      { id: 'b6', emoji: '🏆', name: 'Top 10', description: 'Entrou no top 10 do ranking', xp: 250, category: 'Ranking' },
+      { id: 'b7', emoji: '💪', name: 'Semana Vencida', description: 'Completou a primeira semana', xp: 100, category: 'Alimentação' },
+      { id: 'b8', emoji: '📊', name: 'Monitor Assídua', description: 'Registrou glicemia por 30 dias', xp: 280, category: 'Saúde' },
+      { id: 'b9', emoji: '🌙', name: 'Sono de Qualidade', description: 'Registrou sono 5+ por 7 noites', xp: 130, category: 'Saúde' },
+      { id: 'b10', emoji: '🤝', name: 'Comunidade', description: 'Reagiu a 10 conquistas', xp: 90, category: 'Social' },
+      { id: 'b11', emoji: '⚡', name: 'Velocista', description: 'Iniciou rapidamente no sistema', xp: 60, category: 'Sistema' },
+      { id: 'b12', emoji: '🎯', name: 'Meta Batida', description: 'Atingiu primeira meta de peso', xp: 220, category: 'Saúde' },
+      { id: 'b13', emoji: '🥕', name: 'Colorida', description: 'Completou 5 pratos com vegetais', xp: 90, category: 'Alimentação' },
+      { id: 'b14', emoji: '🧊', name: 'Hidratação em Dia', description: 'Registrou água por 14 dias', xp: 110, category: 'Saúde' },
+      { id: 'b15', emoji: '🚶', name: 'Passos Firmes', description: 'Manteve rotina ativa por 10 dias', xp: 130, category: 'Saúde' },
+      { id: 'b16', emoji: '🍽️', name: 'Prato Completo', description: 'Seguiu o plano completo por 3 dias', xp: 120, category: 'Alimentação' },
+      { id: 'b17', emoji: '💤', name: 'Ritmo do Sono', description: 'Dormiu 7h+ por 7 noites', xp: 140, category: 'Saúde' },
+      { id: 'b18', emoji: '💬', name: 'Parceira da IA', description: 'Interagiu 50 vezes com o chat', xp: 180, category: 'Sistema' },
+      { id: 'b19', emoji: '🎉', name: 'Comunidade Ativa', description: 'Recebeu 25 curtidas em conquistas', xp: 170, category: 'Social' },
+      { id: 'b20', emoji: '🚀', name: 'Virada 4D', description: 'Ultrapassou 5000 XP', xp: 300, category: 'Ranking' },
+    ],
+    xpEvents: {
+      DAILY_LOGIN: 10, HEALTH_FORM_COMPLETED: 150, BLOOD_TEST_UPLOADED: 200,
+      MENU_FORM_COMPLETED: 100, CHAT_MESSAGE_SENT: 5, RECIPE_SAVED: 15,
+      RECIPE_TRIED: 25, EXAM_UPLOADED: 50, STREAK_7_DAYS: 75,
+      STREAK_14_DAYS: 150, STREAK_30_DAYS: 300, PROFILE_COMPLETE: 50,
+      FIRST_RECIPE: 30, SHARE_ACHIEVEMENT: 20,
+    },
+    navItems: [
+      { id: 'inicio', label: 'Início', icon: '🏠', sub: 'Chat · Receita · Cardápio' },
+      { id: 'evolucao', label: 'Evolução', icon: '📊', sub: 'Gráficos · Progresso' },
+      { id: 'receitas', label: 'Receitas', icon: '🥗', sub: 'Cardápio personalizado' },
+      { id: 'exames', label: 'Exames', icon: '🔬', sub: 'Pedidos · Resultados' },
+      { id: 'conquistas', label: 'Conquistas', icon: '🏆', sub: 'Ranking · Comunidade' },
+      { id: 'chat', label: 'Chat IA', icon: '💬', sub: 'Dúvidas alimentares' },
+      { id: 'perfil', label: 'Meu Perfil', icon: '👤', sub: 'Avatar · Configurações' },
+    ],
+  };
+
+  const results = [];
+  for (const [docId, data] of Object.entries(configs)) {
+    const ref = db.collection('appConfig').doc(docId);
+    const existing = await ref.get();
+    if (existing.exists) {
+      results.push(`${docId}: skipped (exists)`);
+      continue;
+    }
+    await ref.set({
+      docId, data,
+      description: 'Auto seed from dashboard-v2.js',
+      version: 1, source: 'dashboard-v2.js',
+      createdAt: now, updatedAt: now,
+    });
+    results.push(`${docId}: created`);
+  }
+
+  res.json({ success: true, results });
+});
