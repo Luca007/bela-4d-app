@@ -33,22 +33,14 @@ import {
   where,
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
-import { LEVELS, ACHIEVEMENTS_CATALOG, XP_EVENTS } from '../config/constants.js';
-
-// ─────────────────────────────────────────────
-// Cache de appConfig (níveis, conquistas, XP)
-// Populado por preloadAppConfig() após login.
-// Funções standalone usam este cache; métodos da
-// classe usam this._appConfig (mesmo objeto).
-// ─────────────────────────────────────────────
-let _appConfigCache = null;
+import { getLevels, getAchievementsCatalog, getXpEvents as getXpEventsFromConfig } from '../config/constants.js';
 
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
 
 function getLevelForXp(xp) {
-  const levels = _appConfigCache?.levels || LEVELS;
+  const levels = getLevels();
   for (let i = levels.length - 1; i >= 0; i--) {
     if (xp >= levels[i].minXp) return levels[i];
   }
@@ -62,7 +54,7 @@ function xpToNextLevel(xp) {
 }
 
 function getXpEvents() {
-  return _appConfigCache?.xpEvents || XP_EVENTS;
+  return getXpEventsFromConfig();
 }
 
 // ─────────────────────────────────────────────
@@ -74,7 +66,6 @@ export class FirestoreService {
     this.db = null;
     this.initialized = false;
     this._cache = new Map();
-    this._appConfig = _appConfigCache; // Cache do appConfig (níveis, conquistas, XP events)
   }
 
   _cacheGet(key) { return this._cache.get(key); }
@@ -919,7 +910,7 @@ export class FirestoreService {
       const existing = await getDoc(ref);
       if (existing.exists()) return false; // idempotente
 
-      const catalog = _appConfigCache?.achievementsCatalog || ACHIEVEMENTS_CATALOG;
+      const catalog = getAchievementsCatalog();
       const achievement = catalog.find(item => item.id === achievementId);
       if (!achievement) {
         console.warn('[Firestore] unlockAchievement: id not found in catalog', achievementId);
@@ -967,7 +958,7 @@ export class FirestoreService {
       const data = snap.data();
       if (data.claimed) return false;
 
-      const catalog = _appConfigCache?.achievementsCatalog || ACHIEVEMENTS_CATALOG;
+      const catalog = getAchievementsCatalog();
       const achievement = catalog.find(a => a.id === achievementId);
       if (!achievement) return false;
 
@@ -1093,9 +1084,6 @@ export class FirestoreService {
       const data = await this.getAppConfig(docId);
       if (data) results[docId] = data;
     }));
-    // Popula cache compartilhado (módulo + instância)
-    _appConfigCache = results;
-    this._appConfig = results;
     return results;
   }
 }
