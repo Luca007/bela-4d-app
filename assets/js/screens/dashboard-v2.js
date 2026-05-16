@@ -7,7 +7,7 @@ import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
 import { getLevels, getAchievementsCatalog } from '../config/constants.js';
 import { offlineQueue } from '../modules/offline-queue.js';
-import { REFEICOES_DIA, DICAS, RECIPES, RANKING, EXAM_RESULTS, EXAM_ORDERS, PROFILE_AVATARS, PROFILE_COLORS } from '../config/data.js';
+import { EXAM_RESULTS, EXAM_ORDERS, PROFILE_AVATARS, PROFILE_COLORS } from '../config/data.js';
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Início', icon: '🏠', sub: 'Chat · Receita · Cardápio' },
@@ -18,6 +18,12 @@ const NAV_ITEMS = [
   { id: 'chat', label: 'Chat IA', icon: '💬', sub: 'Dúvidas alimentares' },
   { id: 'perfil', label: 'Meu Perfil', icon: '👤', sub: 'Avatar · Configurações' },
 ];
+// Helpers: leem do State.appConfig (populado por preloadAppConfig) em vez dos dados hardcoded de data.js
+function getStaticRefeicoes() { return State.get("appConfig")?.refeicoes || []; }
+function getStaticDicas() { return State.get("appConfig")?.dicas || []; }
+function getStaticRecipes() { return State.get("appConfig")?.recipes || []; }
+function getStaticRanking() { return State.get("appConfig")?.ranking || []; }
+
 
 function normalizeAvatarEmoji(value, fallback = '🌙') {
   if (typeof value !== 'string') return fallback;
@@ -69,10 +75,10 @@ function getGreeting() {
 }
 
 function getRecipeOfHour(recipes) {
-  const pool = Array.isArray(recipes) && recipes.length ? recipes : RECIPES;
+  const pool = Array.isArray(recipes) && recipes.length ? recipes : getStaticRecipes();
   const h = new Date().getHours();
   const idx = h < 10 ? 0 : h < 12 ? Math.min(4, pool.length - 1) : h < 15 ? Math.min(2, pool.length - 1) : h < 18 ? Math.min(4, pool.length - 1) : h < 21 ? Math.min(3, pool.length - 1) : Math.min(5, pool.length - 1);
-  return pool[idx] || pool[0] || RECIPES[0];
+  return pool[idx] || pool[0] || getStaticRecipes()[0];
 }
 
 function renderSparkline(points, color, height = 110, labelColor = 'var(--dash-muted)') {
@@ -116,10 +122,10 @@ export class DashboardScreen extends BaseScreen {
     this.currentNav = params.initialNav || 'inicio';
     this.currentUser = authService.getCurrentUser();
     this.userProfile = State.get('userProfile') || {};
-    this.recipes = State.get('recipes') || RECIPES;
+    this.recipes = State.get('recipes') || getStaticRecipes();
     this.achievements = State.get('achievements') || getAchievementsCatalog();
     this.chatHistory = State.get('chatHistory') || [];
-    this.dailyMeals = State.get('dailyMeals') || this.userProfile.dailyMeals || REFEICOES_DIA;
+    this.dailyMeals = State.get('dailyMeals') || this.userProfile.dailyMeals || getStaticRefeicoes();
     this.mealDraft = { icon: '🍽️', nome: '', hora: '08:00', desc: '' };
     this.recipesView = 'catalogo';
     this.sideOpen = false;
@@ -145,12 +151,12 @@ export class DashboardScreen extends BaseScreen {
     this.notificationPanelOpen = false;
     this.recipeFilter = 'Todas';
     const initialRecipeId = params.recipeId || null;
-    this.selectedRecipe = initialRecipeId ? RECIPES.find(recipe => recipe.id === initialRecipeId) || null : null;
+    this.selectedRecipe = initialRecipeId ? getStaticRecipes().find(recipe => recipe.id === initialRecipeId) || null : null;
     this.recipeOriginNav = null;
     this.themeToggleLocked = false;
     this.examOrders = Array.isArray(this.userProfile?.examOrders) && this.userProfile.examOrders.length ? this.userProfile.examOrders : EXAM_ORDERS;
-    this.dicas = State.get('belaTips') || this.userProfile.belaTips || DICAS.map((dica, index) => ({ ...dica, id: `dica-${index + 1}`, likes: 0, dislikes: 0, myVote: null }));
-    this.ranking = State.get('ranking') || RANKING;
+    this.dicas = State.get('belaTips') || this.userProfile.belaTips || getStaticDicas().map((dica, index) => ({ ...dica, id: `dica-${index + 1}`, likes: 0, dislikes: 0, myVote: null }));
+    this.ranking = State.get('ranking') || getStaticRanking();
     this.examResults = State.get('examResults') || EXAM_RESULTS;
     this._dataLoaded = false;
     this._dataLoading = false;
@@ -614,7 +620,7 @@ export class DashboardScreen extends BaseScreen {
   openRecipeEditChat(recipe) {
     this.params?.onNavigate?.('chat', {
       recipeId: recipe.id,
-      recipeName: recipe.nm || recipe.name,
+      recipeName: recipe.name || recipe.nm,
       recipeEmoji: recipe.e || recipe.emoji || '🍽️',
     });
   }
@@ -627,7 +633,7 @@ export class DashboardScreen extends BaseScreen {
       notificationService.toast('Faça login para remover receitas.', { type: 'warning' });
       return;
     }
-    const confirmed = window.confirm(`Remover a receita "${recipe.nm}" do seu cardápio?`);
+    const confirmed = window.confirm(`Remover a receita "${recipe.name || recipe.nm}" do seu cardápio?`);
     if (!confirmed) return;
     const loader = UIComponents.loaderOverlay({ message: 'Removendo receita...', color: '#f0059a' });
     document.body.appendChild(loader);
@@ -993,7 +999,7 @@ export class DashboardScreen extends BaseScreen {
 
   renderHome() {
     const recipe = getRecipeOfHour(this.recipes);
-    const meals = Array.isArray(this.dailyMeals) && this.dailyMeals.length ? this.dailyMeals : REFEICOES_DIA;
+    const meals = Array.isArray(this.dailyMeals) && this.dailyMeals.length ? this.dailyMeals : getStaticRefeicoes();
     const checkedCount = [...this.homeChecked].filter(id => meals.some(meal => meal.id === id)).length;
     const checkPct = meals.length ? Math.round((checkedCount / meals.length) * 100) : 0;
 
@@ -1031,14 +1037,14 @@ export class DashboardScreen extends BaseScreen {
           </div>
         </div>
         <div class="dash-card pad" data-recipe-of-hour="${recipe.id}" style="border-color: rgba(31,204,116,0.2); background: rgba(31,204,116,0.04); display:flex; gap:16px; align-items:flex-start; cursor:pointer;">
-          <div style="font-size:44px;line-height:1;flex-shrink:0;">${recipe.e}</div>
+          <div style="font-size:44px;line-height:1;flex-shrink:0;">${recipe.emoji || recipe.e}</div>
           <div style="flex:1;">
-            <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:4px;">${recipe.nm}</div>
-            <div style="color:var(--dash-muted);font-size:14px;margin-bottom:10px;">${recipe.ct}</div>
+            <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:4px;">${recipe.name || recipe.nm}</div>
+            <div style="color:var(--dash-muted);font-size:14px;margin-bottom:10px;">${recipe.mealType || recipe.ct}</div>
             <div class="dash-chip-row">
-              <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${recipe.tm}</span>
-              <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${recipe.kc} kcal</span>
-              <span class="dash-chip">${recipe.df}</span>
+              <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${recipe.time || recipe.tm}</span>
+              <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${recipe.kcal ?? recipe.kc} kcal</span>
+              <span class="dash-chip">${recipe.difficulty || recipe.df}</span>
             </div>
           </div>
         </div>
@@ -1065,8 +1071,8 @@ export class DashboardScreen extends BaseScreen {
               <div class="dash-meal ${done ? 'done' : ''} ${isCurrent ? 'current' : ''}" data-meal-toggle="${meal.id}" style="background:${isCurrent && !done ? 'rgba(240,5,154,0.06)' : 'transparent'};">
                 <div class="dash-meal-icon" style="background:${done ? 'rgba(31,204,116,0.15)' : isCurrent ? 'rgba(240,5,154,0.12)' : 'rgba(255,255,255,0.04)'}; border-color:${done ? 'rgba(31,204,116,0.5)' : isCurrent ? 'rgba(240,5,154,0.44)' : 'var(--dash-border)'}; border-style:solid; border-width:1.5px;">${done ? '✓' : meal.icon}</div>
                 <div style="flex:1;">
-                  <div class="title" style="color:${done ? 'var(--dash-muted)' : isCurrent ? '#f0059a' : 'var(--dash-text)'}; font-weight:${done ? 500 : 700}; font-size:16px;">${meal.nome}</div>
-                  <div style="color:var(--dash-muted); font-size:13px;">${meal.hora} · ${meal.desc}</div>
+                  <div class="title" style="color:${done ? 'var(--dash-muted)' : isCurrent ? '#f0059a' : 'var(--dash-text)'}; font-weight:${done ? 500 : 700}; font-size:16px;">${meal.name || meal.nome}</div>
+                  <div style="color:var(--dash-muted); font-size:13px;">${meal.time || meal.hora} · ${meal.desc}</div>
                 </div>
                 ${isCurrent && !done ? '<span style="background:rgba(240,5,154,0.12);border:1px solid rgba(240,5,154,0.35);border-radius:6px;padding:3px 8px;color:#f0059a;font-size:12px;font-weight:700;">Agora</span>' : ''}
               </div>
@@ -1083,10 +1089,10 @@ export class DashboardScreen extends BaseScreen {
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${this.dicas.map(dica => `
             <div class="dash-card pad" style="display:flex;gap:14px;">
-              <span style="font-size:26px;flex-shrink:0;">${dica.e}</span>
+              <span style="font-size:26px;flex-shrink:0;">${dica.emoji || dica.e}</span>
               <div style="flex:1;">
-                <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:3px;">${dica.ti}</div>
-                <div style="color:var(--dash-muted);font-size:14px;line-height:1.5;">${dica.tx}</div>
+                <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:3px;">${dica.title || dica.ti}</div>
+                <div style="color:var(--dash-muted);font-size:14px;line-height:1.5;">${dica.text || dica.tx}</div>
                 <div style="display:flex;gap:8px;margin-top:10px;">
                   <button class="dash-chip ${dica.myVote === 'like' ? 'active' : ''}" data-tip-vote="${dica.id}:like" style="padding:6px 10px;font-size:12px;">👍 ${dica.likes}</button>
                   <button class="dash-chip ${dica.myVote === 'dislike' ? 'active' : ''}" data-tip-vote="${dica.id}:dislike" style="padding:6px 10px;font-size:12px;">👎 ${dica.dislikes}</button>
@@ -1155,8 +1161,8 @@ export class DashboardScreen extends BaseScreen {
               <div style="display:flex;align-items:center;gap:10px;">
                 <div style="width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;">${meal.icon}</div>
                 <div style="flex:1;min-width:0;">
-                  <div style="color:var(--dash-text);font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${meal.nome}</div>
-                  <div style="color:var(--dash-muted);font-size:12px;">${meal.hora} · ${meal.desc}</div>
+                  <div style="color:var(--dash-text);font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${meal.name || meal.nome}</div>
+                  <div style="color:var(--dash-muted);font-size:12px;">${meal.time || meal.hora} · ${meal.desc}</div>
                 </div>
                 <button class="dash-ghost-btn" data-meal-remove="${meal.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;">Remover</button>
               </div>
@@ -1181,11 +1187,11 @@ export class DashboardScreen extends BaseScreen {
       : Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
     const steps = Array.isArray(recipe.st) ? recipe.st
       : Array.isArray(recipe.steps) ? recipe.steps : [];
-    const time = recipe.tm || recipe.prepTime || '—';
-    const kcal = recipe.kc ?? recipe.macros?.calories ?? recipe.calories ?? '—';
-    const category = recipe.ct || recipe.category || 'Receita';
+    const time = recipe.time || recipe.tm || recipe.prepTime || '—';
+    const kcal = recipe.kcal ?? recipe.kc ?? recipe.macros?.calories ?? recipe.calories ?? '—';
+    const category = recipe.mealType || recipe.ct || recipe.category || 'Receita';
     const difficulty = recipe.df || recipe.difficulty || 'Fácil';
-    const emoji = recipe.e || recipe.emoji || '🍽️';
+    const emoji = recipe.emoji || recipe.e || '🍽️';
     const name = recipe.nm || recipe.name || 'Receita';
     return `
       <section>
@@ -1221,8 +1227,8 @@ export class DashboardScreen extends BaseScreen {
   }
 
   _renderRecipeCatalog(recipesViewTabs) {
-    const filters = ['Todas', ...new Set(RECIPES.map(recipe => recipe.ct))];
-    const filtered = this.recipeFilter === 'Todas' ? RECIPES : RECIPES.filter(recipe => recipe.ct === this.recipeFilter);
+    const filters = ['Todas', ...new Set(getStaticRecipes().map(recipe => recipe.mealType || recipe.ct))];
+    const filtered = this.recipeFilter === 'Todas' ? getStaticRecipes() : getStaticRecipes().filter(recipe => (recipe.mealType || recipe.ct) === this.recipeFilter);
     return `
       <section>
         <div class="dash-section-title">🥗 Receitas do seu Cardápio</div>
@@ -1234,12 +1240,12 @@ export class DashboardScreen extends BaseScreen {
         <div class="dash-recipe-grid">
           ${filtered.map(recipe => `
             <div class="dash-card dash-recipe-card" data-recipe-open="${recipe.id}">
-              <div style="font-size:38px;margin-bottom:10px;">${recipe.e}</div>
-              <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:4px;">${recipe.nm}</div>
-              <div style="color:var(--dash-muted);font-size:13px;margin-bottom:10px;">${recipe.ct}</div>
+              <div style="font-size:38px;margin-bottom:10px;">${recipe.emoji || recipe.e}</div>
+              <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:4px;">${recipe.name || recipe.nm}</div>
+              <div style="color:var(--dash-muted);font-size:13px;margin-bottom:10px;">${recipe.mealType || recipe.ct}</div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">⏱ ${recipe.tm}</span>
-                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">🔥 ${recipe.kc}</span>
+                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">⏱ ${recipe.time || recipe.tm}</span>
+                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">🔥 ${recipe.kcal ?? recipe.kc}</span>
               </div>
               <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
                 <button class="dash-ghost-btn" data-recipe-edit="${recipe.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;">✏️ Editar</button>
@@ -1273,11 +1279,11 @@ export class DashboardScreen extends BaseScreen {
           ${recipesViewTabs}
           <div class="dash-card pad" style="position:absolute;inset:0;filter:blur(8px);opacity:0.4;pointer-events:none;padding-top:72px;overflow:hidden;">
             <div class="dash-recipe-grid">
-              ${RECIPES.map(recipe => `
+              ${getStaticRecipes().map(recipe => `
                 <div class="dash-card dash-recipe-card">
-                  <div style="font-size:38px;margin-bottom:10px;">${recipe.e}</div>
-                  <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:4px;">${recipe.nm}</div>
-                  <div style="color:var(--dash-muted);font-size:13px;">${recipe.ct}</div>
+                  <div style="font-size:38px;margin-bottom:10px;">${recipe.emoji || recipe.e}</div>
+                  <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:4px;">${recipe.name || recipe.nm}</div>
+                  <div style="color:var(--dash-muted);font-size:13px;">${recipe.mealType || recipe.ct}</div>
                 </div>
               `).join('')}
             </div>
@@ -1435,7 +1441,7 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderConquests() {
-    const rankList = Array.isArray(this.ranking) && this.ranking.length ? this.ranking : RANKING;
+    const rankList = Array.isArray(this.ranking) && this.ranking.length ? this.ranking : getStaticRanking();
     const me = { ...(rankList.find(user => user.me) || rankList[Math.min(7, rankList.length - 1)] || {}), xp: this.xp, st: this.streak };
     const topThree = rankList.length >= 3 ? [rankList[1], rankList[0], rankList[2]] : rankList.slice(0, 3);
     // Build merged list: catalog is source of truth, user's unlocked data provides status
@@ -1961,10 +1967,10 @@ export class DashboardScreen extends BaseScreen {
         e.stopPropagation();
         const recipeId = recipeOfHourEl.getAttribute('data-recipe-of-hour');
         if (!recipeId) return;
-        // Search in user recipes first, then fall back to static RECIPES catalog
+        // Search in user recipes first, then fall back to appConfig recipes
         const pool = [
           ...(Array.isArray(this.recipes) ? this.recipes : []),
-          ...RECIPES,
+          ...getStaticRecipes(),
         ];
         const recipe = pool.find(item => item.id === recipeId);
         if (!recipe) {
@@ -1996,7 +2002,7 @@ export class DashboardScreen extends BaseScreen {
       card.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = card.getAttribute('data-recipe-open');
-        const pool = (Array.isArray(this.recipes) ? this.recipes : []).concat(RECIPES);
+        const pool = (Array.isArray(this.recipes) ? this.recipes : []).concat(getStaticRecipes());
         const recipe = pool.find(r => r.id === id);
         if (!recipe) return;
         this.recipeOriginNav = 'receitas';
@@ -2021,7 +2027,7 @@ export class DashboardScreen extends BaseScreen {
     this.element.querySelectorAll('[data-recipe-edit]').forEach(button => {
       button.addEventListener('click', event => {
         event.stopPropagation();
-        const recipeCatalog = Array.isArray(this.recipes) && this.recipes.length ? this.recipes : RECIPES;
+        const recipeCatalog = Array.isArray(this.recipes) && this.recipes.length ? this.recipes : getStaticRecipes();
         const recipe = recipeCatalog.find(item => item.id === button.getAttribute('data-recipe-edit'));
         if (recipe) this.openRecipeEditChat(recipe);
       });
@@ -2031,7 +2037,7 @@ export class DashboardScreen extends BaseScreen {
       button.addEventListener('click', async event => {
         event.stopPropagation();
         const id = button.getAttribute('data-recipe-remove');
-        const pool = [...(Array.isArray(this.recipes) ? this.recipes : []), ...RECIPES];
+        const pool = [...(Array.isArray(this.recipes) ? this.recipes : []), ...getStaticRecipes()];
         const recipe = pool.find(item => item.id === id);
         if (recipe) await this.removeRecipe(recipe);
       });
