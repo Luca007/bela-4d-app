@@ -653,7 +653,7 @@ export class FirestoreService {
         createdAt: serverTimestamp(),
       });
       await this.incrementCounter(uid, 'totalRecipes');
-      await this.awardXp(uid, getXpEvents().RECIPE_GENERATED, 'recipe_generated');
+      await this.awardXp(uid, getXpEvents().RECIPE_SAVED, 'recipe_generated');
       return ref.id;
     }, 'saveRecipe');
   }

@@ -69,6 +69,8 @@ export const XP_EVENTS = {
   PROFILE_COMPLETE: 50,
   FIRST_RECIPE: 30,
   SHARE_ACHIEVEMENT: 20,
+  RECIPE_GENERATED: 15,    // alias compatibilidade (mesmo que RECIPE_SAVED)
+  FOOD_EVALUATED: 5,       // avaliação de alimento
 };
 
 // ════════════════════════════════════════════════════════════════════════
