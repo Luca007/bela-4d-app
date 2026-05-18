@@ -782,14 +782,21 @@ export class FirestoreService {
     try {
       // Deduplicação: evitar XP duplicado por mesmo eventId em menos de 60s
       if (eventId && eventId !== 'daily_login') {
-        const recentQuery = query(
-          collection(this.getDb(), 'users', uid, 'xpLog'),
-          where('eventId', '==', eventId),
-          where('timestamp', '>', new Date(Date.now() - 60000)),
-          limit(1)
-        );
-        const recentSnap = await getDocs(recentQuery);
-        if (!recentSnap.empty) return 0;
+        try {
+          const recentQuery = query(
+            collection(this.getDb(), 'users', uid, 'xpLog'),
+            where('eventId', '==', eventId),
+            where('timestamp', '>', new Date(Date.now() - 60000)),
+            limit(1)
+          );
+          const recentSnap = await getDocs(recentQuery);
+          if (!recentSnap.empty) return 0;
+        } catch (dedupErr) {
+          // Índice composto ausente — ignora dedup e prossegue
+          if (dedupErr?.code !== 'failed-precondition') {
+            console.warn('[Firestore] awardXp dedup error:', dedupErr.message);
+          }
+        }
       }
 
       const { increment } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js');
