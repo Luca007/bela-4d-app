@@ -59,7 +59,7 @@ export const BADGES = [
 export const RANKING = [
   { p: 1, nm: 'Ana Beatriz', nk: '@anabea', e: '👑', col: '#eab308', xp: 1420, st: 45 },
   { p: 2, nm: 'Carla Mendes', nk: '@carlinha', e: '🔥', col: '#f0059a', xp: 1180, st: 38 },
-  { p: 3, nm: 'Priscila S.', nk: '@prisilva', e: '💎', col: '#a78bfa', xp: 980, st: 31 },
+  { p: 3, nm: 'Priscila S.', nk: '@prisilva', e: '🌟', col: '#a78bfa', xp: 980, st: 31 },
   { p: 4, nm: 'Fernanda L.', nk: '@ferlima', e: '🌺', col: '#1fcc74', xp: 820, st: 28 },
   { p: 5, nm: 'Juliana C.', nk: '@juju', e: '⭐', col: '#38bdf8', xp: 710, st: 22 },
   { p: 6, nm: 'Mariana A.', nk: '@mari', e: '🌸', col: '#fb7185', xp: 640, st: 19 },
@@ -84,7 +84,7 @@ export const EXAM_ORDERS = [
 ];
 
 // --- Cores e avatares disponíveis ---
-export const PROFILE_AVATARS = ['🌸', '⚡', '🦋', '🌺', '💎', '🔥', '🌙', '⭐', '🌿', '🦁', '🌊', '🍀'];
+export const PROFILE_AVATARS = ['🌸', '⚡', '🦋', '🌺', '🌟', '🔥', '🌙', '⭐', '🌿', '🦁', '🌊', '🍀'];
 export const PROFILE_COLORS = ['#f0059a', '#a78bfa', '#1fcc74', '#f59e0b', '#38bdf8', '#fb7185', '#34d399', '#fbbf24'];
 
 // ============================================================
