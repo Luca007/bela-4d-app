@@ -12,7 +12,9 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "seed-test-user": "node seed-test-user.js"
+    "seed-test-user": "node seed-test-user.js",
+    "seed-legacy": "node seed-appConfig.js",
+    "seed-app-config": "echo 'Use Cloud Function seedAppConfig: curl -X POST https://southamerica-east1-bela-4d-app.cloudfunctions.net/seedAppConfig -H \"X-Webhook-Secret: $N8N_WEBHOOK_SECRET\"'"
   },
   "dependencies": {
     "axios": "^1.7.0",

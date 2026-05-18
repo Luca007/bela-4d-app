@@ -143,13 +143,17 @@ async function awardXp(uid, xpAmount, eventId = null) {
   if (!xpAmount || xpAmount <= 0) return;
   try {
     const userRef = db.collection('users').doc(uid);
-    const userSnap = await userRef.get();
-    const data = userSnap.exists ? userSnap.data() : {};
-    const newXp = (data.xp || 0) + xpAmount;
 
-    await userRef.set({ xp: newXp, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    // Use FieldValue.increment() — atomic, no race condition
+    await userRef.set({
+      xp: FieldValue.increment(xpAmount),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
 
     if (eventId) {
+      // Read back for xpLog (increment doesn't return new value)
+      const userSnap = await userRef.get();
+      const newXp = (userSnap.exists ? userSnap.data().xp : 0) || 0;
       await db.collection('users').doc(uid).collection('xpLog').add({
         eventId,
         xpAwarded: xpAmount,
@@ -806,7 +810,7 @@ async function sendWhatsAppNotification(uid, profile, notification, metadata = {
     timestamp: new Date().toISOString(),
   };
 
-  const result = await callN8n('4d-send-whatsapp-notification', payload);
+  const result = await callN8nWithRetry('4d-send-whatsapp-notification', payload);
 
   await db.collection(`users/${uid}/notifications`).add({
     channel: 'whatsapp',
@@ -930,8 +934,10 @@ exports.updateGlobalRanking = onSchedule(
 // recordSectionVisit — registra visita a uma aba do dashboard
 // ─────────────────────────────────────────────
 exports.recordSectionVisit = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
-  const { uid, sectionId } = request.data;
-  if (!uid || !sectionId) throw new HttpsError('invalid-argument', 'uid and sectionId required');
+  requireAuth(request.auth);
+  const uid = request.auth.uid;
+  const { sectionId } = request.data;
+  if (!sectionId) throw new HttpsError('invalid-argument', 'sectionId required');
 
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const ref = db.collection('users').doc(uid).collection('sectionVisits').doc(today);
@@ -996,11 +1002,22 @@ exports.evaluateTimeBasedAchievements = onSchedule(
 /**
  * Seed appConfig no Firestore com dados do dashboard-v2.js.
  * Idempotente: só insere se o documento ainda não existe.
- * Chamar uma vez após deploy via Firebase Console ou:
- *   curl -X POST https://southamerica-east1-bela-4d-app.cloudfunctions.net/seedAppConfig
+ * Requer header X-Webhook-Secret com o valor de N8N_WEBHOOK_SECRET.
+ * Chamar via Firebase Console ou:
+ *   curl -X POST https://southamerica-east1-bela-4d-app.cloudfunctions.net/seedAppConfig \
+ *     -H "X-Webhook-Secret: $N8N_WEBHOOK_SECRET"
  */
-exports.seedAppConfig = onRequest({ region: REGION }, async (req, res) => {
-  // Aceita POST ou GET (pra facilitar teste no navegador)
+exports.seedAppConfig = onRequest({ region: REGION, secrets: SECRETS }, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', getN8nBaseUrl().replace(/\/webhook.*$/, ''));
+  res.set('Access-Control-Allow-Methods', 'POST');
+  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+
+  try {
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'method-not-allowed' });
+      return;
+    }
+    verifyWebhookSecret(req);
   const now = FieldValue.serverTimestamp();
   const configs = {
     levels: [
@@ -1051,6 +1068,95 @@ exports.seedAppConfig = onRequest({ region: REGION }, async (req, res) => {
       { id: 'chat', label: 'Chat IA', icon: '💬', sub: 'Dúvidas alimentares' },
       { id: 'perfil', label: 'Meu Perfil', icon: '👤', sub: 'Avatar · Configurações' },
     ],
+    foodDatabase: {
+      frango: { status: 'g', note: 'Proteína magra ideal — base do programa' },
+      peixe: { status: 'g', note: 'Ômega-3 anti-inflamatório e proteína de alto valor' },
+      salmao: { status: 'g', note: 'Ômega-3 que melhora sensibilidade à insulina' },
+      atum: { status: 'g', note: 'Proteína sem carboidratos' },
+      sardinha: { status: 'g', note: 'Cálcio, ômega-3 e proteína' },
+      tilapia: { status: 'g', note: 'Peixe branco magro, ótimo para o programa' },
+      ovo: { status: 'g', note: 'Proteína completa, zero impacto glicêmico' },
+      ovos: { status: 'g', note: 'Proteína completa, zero impacto glicêmico' },
+      brocolis: { status: 'g', note: 'Fibras e antioxidantes que regulam a glicemia' },
+      abobrinha: { status: 'g', note: 'Vegetal de baixíssimo índice glicêmico' },
+      espinafre: { status: 'g', note: 'Magnésio melhora sensibilidade à insulina' },
+      couve: { status: 'g', note: 'Fibras reguladoras e alto valor nutricional' },
+      rucula: { status: 'g', note: 'Baixo IG, rico em nutrientes' },
+      tomate: { status: 'g', note: 'Licopeno e baixo índice glicêmico' },
+      abacate: { status: 'g', note: 'Gordura boa que suaviza picos glicêmicos' },
+      morango: { status: 'g', note: 'Fruta de baixo IG, rica em vitamina C' },
+      amendoa: { status: 'g', note: 'Gordura e proteína que estabilizam a glicose' },
+      azeite: { status: 'g', note: 'Anti-inflamatório, melhora perfil lipídico' },
+      arroz: { status: 'a', note: 'Prefira integral — máx. 2 colheres de sopa por refeição' },
+      batata_doce: { status: 'a', note: 'IG médio — 1 unidade pequena com proteína' },
+      banana: { status: 'a', note: 'IG moderado — 1 unidade pequena com oleaginosas' },
+      maca: { status: 'a', note: '1 unidade média com amêndoas' },
+      laranja: { status: 'a', note: 'Vitamina C, mas frutose — 1 unidade por vez' },
+      iogurte: { status: 'a', note: 'Preferir natural sem açúcar ou grego' },
+      queijo: { status: 'a', note: 'Laticínio — 1 a 2 fatias por refeição' },
+      feijao: { status: 'a', note: 'Fibras boas — máx. 4 colheres de sopa' },
+      lentilha: { status: 'a', note: 'Carboidrato de baixo IG em porção controlada' },
+      acucar: { status: 'r', note: 'Eleva a glicemia imediatamente. Substituir por stevia' },
+      refrigerante: { status: 'r', note: 'Alto teor de açúcar — fortemente contraindicado' },
+      pao: { status: 'r', note: 'Se branco/francês, IG altíssimo. Use pão de sementes' },
+      farinha: { status: 'r', note: 'Carboidrato refinado — usar farinha de amêndoa' },
+      macarrao: { status: 'r', note: 'Carboidrato refinado de alto IG' },
+      bolo: { status: 'r', note: 'Açúcar + farinha refinada = pico glicêmico elevado' },
+      biscoito: { status: 'r', note: 'Ultra processado com açúcar oculto' },
+      sorvete: { status: 'r', note: 'Açúcar + gordura = pico de insulina' },
+      chocolate: { status: 'r', note: 'Se ao leite ou branco, alto açúcar. Use 70%+ cacau' },
+      margarina: { status: 'r', note: 'Gordura trans — substituir por manteiga ou azeite' },
+      salsicha: { status: 'r', note: 'Ultra processado com conservantes inflamatórios' },
+      mel: { status: 'r', note: 'Açúcar natural de alto IG — substituir por stevia' },
+      suco: { status: 'r', note: 'Remove fibras e concentra o açúcar da fruta' },
+      cerveja: { status: 'r', note: 'Carboidrato líquido + álcool que interferem na glicose' },
+      tapioca: { status: 'r', note: 'Amido puro com IG altíssimo — evitar' },
+      pizza: { status: 'r', note: 'Farinha refinada + gordura elevam glicemia' },
+      fritura: { status: 'r', note: 'Gordura trans e oxidação aumentam inflamação' },
+      miojo: { status: 'r', note: 'Ultra processado — sódio alto e carboidrato refinado' },
+    },
+    recipes: [
+      { id: 'r1', emoji: '🥚', name: 'Omelete de Legumes', time: '15 min', kcal: 280, category: 'Café da manhã', difficulty: 'Fácil', ingredients: ['3 ovos', 'Abobrinha', 'Tomate', 'Sal e ervas'], steps: ['Bata os ovos com sal.', 'Refogue legumes no azeite.', 'Despeje e tampe 3 min.', 'Sirva com folhas verdes.'] },
+      { id: 'r2', emoji: '🐟', name: 'Salmão com Aspargos', time: '20 min', kcal: 380, category: 'Almoço', difficulty: 'Médio', ingredients: ['200g salmão', 'Aspargos', 'Azeite', 'Limão'], steps: ['Tempere o salmão.', 'Grelhe 4 min/lado.', 'Refogue aspargos.', 'Sirva com limão.'] },
+      { id: 'r3', emoji: '🥗', name: 'Bowl Low-Carb Frango', time: '25 min', kcal: 320, category: 'Almoço', difficulty: 'Fácil', ingredients: ['150g frango', 'Rúcula', 'Abacate', 'Azeite'], steps: ['Grelhe o frango.', 'Monte bowl com rúcula.', 'Adicione abacate.', 'Regue com azeite.'] },
+      { id: 'r4', emoji: '🍳', name: 'Frittata de Espinafre', time: '20 min', kcal: 260, category: 'Jantar', difficulty: 'Fácil', ingredients: ['4 ovos', 'Espinafre', 'Queijo minas', 'Alho'], steps: ['Refogue espinafre.', 'Bata ovos com queijo.', 'Combine na frigideira.', 'Forno 10 min 180°C.'] },
+      { id: 'r5', emoji: '🥑', name: 'Mousse de Abacate', time: '10 min', kcal: 200, category: 'Lanche', difficulty: 'Fácil', ingredients: ['1 abacate', 'Cacau em pó', 'Stevia'], steps: ['Amasse o abacate.', 'Adicione cacau e stevia.', 'Misture bem.', 'Sirva gelado.'] },
+      { id: 'r6', emoji: '🍲', name: 'Caldo de Frango', time: '40 min', kcal: 180, category: 'Ceia', difficulty: 'Médio', ingredients: ['Frango', 'Chuchu', 'Cenoura', 'Ervas'], steps: ['Cozinhe frango 30 min.', 'Adicione legumes.', 'Tempere.', 'Coe e sirva.'] },
+    ],
+    badges: [
+      { id: 'b1', emoji: '🌟', name: 'Primeiro Passo', description: 'Completou o cadastro inicial', xp: 50, category: 'Sistema' },
+      { id: 'b2', emoji: '📅', name: '7 Dias no Ritmo', description: 'Seguiu o cardápio por 7 dias', xp: 150, category: 'Alimentação' },
+      { id: 'b3', emoji: '📉', name: 'Glicemia em Queda', description: 'Reduziu a glicemia em 20%', xp: 200, category: 'Saúde' },
+      { id: 'b4', emoji: '💬', name: 'Curiosa', description: 'Fez 10 perguntas ao Chat IA', xp: 80, category: 'Sistema' },
+      { id: 'b5', emoji: '🔥', name: '30 Dias Ativa', description: 'Usou o sistema por 30 dias', xp: 300, category: 'Sistema' },
+      { id: 'b6', emoji: '🏆', name: 'Top 10', description: 'Entrou no top 10 do ranking', xp: 250, category: 'Ranking' },
+      { id: 'b7', emoji: '💪', name: 'Semana Vencida', description: 'Completou a primeira semana', xp: 100, category: 'Alimentação' },
+      { id: 'b8', emoji: '📊', name: 'Monitor Assídua', description: 'Registrou glicemia por 30 dias', xp: 280, category: 'Saúde' },
+      { id: 'b9', emoji: '🌙', name: 'Sono de Qualidade', description: 'Registrou sono 5+ por 7 noites', xp: 130, category: 'Saúde' },
+      { id: 'b10', emoji: '🤝', name: 'Comunidade', description: 'Reagiu a 10 conquistas', xp: 90, category: 'Social' },
+      { id: 'b11', emoji: '⚡', name: 'Velocista', description: 'Iniciou rapidamente no sistema', xp: 60, category: 'Sistema' },
+      { id: 'b12', emoji: '🎯', name: 'Meta Batida', description: 'Atingiu primeira meta de peso', xp: 220, category: 'Saúde' },
+      { id: 'b13', emoji: '🥕', name: 'Colorida', description: 'Completou 5 pratos com vegetais', xp: 90, category: 'Alimentação' },
+      { id: 'b14', emoji: '🧊', name: 'Hidratação em Dia', description: 'Registrou água por 14 dias', xp: 110, category: 'Saúde' },
+      { id: 'b15', emoji: '🚶', name: 'Passos Firmes', description: 'Manteve rotina ativa por 10 dias', xp: 130, category: 'Saúde' },
+      { id: 'b16', emoji: '🍽️', name: 'Prato Completo', description: 'Seguiu o plano completo por 3 dias', xp: 120, category: 'Alimentação' },
+      { id: 'b17', emoji: '💤', name: 'Ritmo do Sono', description: 'Dormiu 7h+ por 7 noites', xp: 140, category: 'Saúde' },
+      { id: 'b18', emoji: '💬', name: 'Parceira da IA', description: 'Interagiu 50 vezes com o chat', xp: 180, category: 'Sistema' },
+      { id: 'b19', emoji: '🎉', name: 'Comunidade Ativa', description: 'Recebeu 25 curtidas em conquistas', xp: 170, category: 'Social' },
+      { id: 'b20', emoji: '🚀', name: 'Virada 4D', description: 'Ultrapassou 5000 XP', xp: 300, category: 'Ranking' },
+    ],
+    ranking: [
+      { position: 1, name: 'Ana Beatriz', nick: '@anabea', emoji: '👑', color: '#eab308', xp: 1420, streak: 45 },
+      { position: 2, name: 'Carla Mendes', nick: '@carlinha', emoji: '🔥', color: '#f0059a', xp: 1180, streak: 38 },
+      { position: 3, name: 'Priscila S.', nick: '@prisilva', emoji: '💎', color: '#a78bfa', xp: 980, streak: 31 },
+      { position: 4, name: 'Fernanda L.', nick: '@ferlima', emoji: '🌺', color: '#1fcc74', xp: 820, streak: 28 },
+      { position: 5, name: 'Juliana C.', nick: '@juju', emoji: '⭐', color: '#38bdf8', xp: 710, streak: 22 },
+      { position: 6, name: 'Mariana A.', nick: '@mari', emoji: '🌸', color: '#fb7185', xp: 640, streak: 19 },
+      { position: 7, name: 'Tatiane R.', nick: '@tati', emoji: '🦋', color: '#34d399', xp: 580, streak: 17 },
+      { position: 8, name: 'Você', nick: '@voce', emoji: '🌙', color: '#f0059a', xp: 520, streak: 14, isMe: true },
+      { position: 9, name: 'Roberta D.', nick: '@robi', emoji: '🍀', color: '#fbbf24', xp: 480, streak: 12 },
+      { position: 10, name: 'Simone N.', nick: '@sisi', emoji: '🌿', color: '#6ee7b7', xp: 410, streak: 10 },
+    ],
   };
 
   const results = [];
@@ -1071,4 +1177,8 @@ exports.seedAppConfig = onRequest({ region: REGION }, async (req, res) => {
   }
 
   res.json({ success: true, results });
+  } catch (error) {
+    console.error('[Functions] seedAppConfig error:', error.message || error);
+    res.status(500).json({ success: false, error: 'internal-error' });
+  }
 });
