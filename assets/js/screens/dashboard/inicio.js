@@ -67,7 +67,7 @@ export function render(dash) {
       <div class="dash-card" style="overflow:hidden;">
         ${meals.map((meal, index) => {
           const done = dash.homeChecked.has(meal.id);
-          const [h, m] = meal.hora.split(':').map(Number);
+          const [h, m] = (meal.hora || '00:00').split(':').map(Number);
           const minutes = h * 60 + m;
           const now = new Date();
           const currentMinutes = now.getHours() * 60 + now.getMinutes();

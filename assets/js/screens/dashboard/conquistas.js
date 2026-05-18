@@ -84,7 +84,7 @@ export function render(dash) {
                 return `
                   <div style="display:flex;flex-direction:column;align-items:center;gap:7px;">
                     <div class="dash-avatar" style="width:48px;height:48px;background:${user.col}22;border:2px solid ${user.col}55;">${user.e}</div>
-                    <div style="font-weight:800;font-size:13px;color:var(--dash-text);text-align:center;max-width:70px;">${user.nm.split(' ')[0]}</div>
+                    <div style="font-weight:800;font-size:13px;color:var(--dash-text);text-align:center;max-width:70px;">${(user.nm || 'Usuário').split(' ')[0]}</div>
                     <div style="color:${colors[index]};font-size:11px;font-weight:600;">${user.xp} XP</div>
                     <div style="width:68px;height:${heights[index]}px;border-radius:8px 8px 0 0;background:linear-gradient(180deg,${colors[index]}30,${colors[index]}10);border:1px solid ${colors[index]}40;display:flex;align-items:center;justify-content:center;"><span style="font-size:26px;">${medals[index]}</span></div>
                   </div>
