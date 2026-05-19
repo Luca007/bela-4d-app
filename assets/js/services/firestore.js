@@ -1217,6 +1217,59 @@ export class FirestoreService {
     }));
     return results;
   }
+
+  // ─────────────────────────────────────────────
+  // LISTENERS EM TEMPO REAL (onSnapshot)
+  // ─────────────────────────────────────────────
+
+  /**
+   * Escuta mudanças no chat history do usuário.
+   * @returns {function} unsubscribe
+   */
+  onChatHistoryUpdate(uid, callback) {
+    const q = query(
+      collection(this.getDb(), 'users', uid, 'chatHistory'),
+      orderBy('timestamp', 'asc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(messages);
+    });
+  }
+
+  onChatHistoryChange(uid, callback) {
+    return this.onChatHistoryUpdate(uid, callback);
+  }
+
+  /**
+   * Escuta mudanças nas conquistas/achievements do usuário.
+   * @returns {function} unsubscribe
+   */
+  onAchievementsChange(uid, callback) {
+    const q = query(
+      collection(this.getDb(), 'users', uid, 'achievements'),
+      orderBy('unlockedAt', 'desc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const achievements = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(achievements);
+    });
+  }
+
+  /**
+   * Escuta mudanças nas receitas do usuário.
+   * @returns {function} unsubscribe
+   */
+  onRecipesChange(uid, callback) {
+    const q = query(
+      collection(this.getDb(), 'users', uid, 'recipes'),
+      orderBy('createdAt', 'desc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const recipes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(recipes);
+    });
+  }
 }
 
 // Export singleton instance

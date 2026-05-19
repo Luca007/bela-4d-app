@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheduler de Reunião - Bela 4D</title>
+<style>
+:root {
+  --color-bg: #0a0a0f;
+  --color-surface: #111118;
+  --color-text: #f0f0f0;
+  --color-muted: #888;
+  --radius-lg: 16px;
+  --shadow-xl: 0 8px 32px rgba(0,0,0,0.4);
+}
+* { box-sizing: border-box; margin:0; padding:0; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const DOM = {
+  create(tag, cls) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    return el;
+  },
+  byId(id) { return document.getElementById(id); }
+};
+
+const Colors = {
+  pink: '#f0059a', muted: '#888', text: '#f0f0f0', border: 'rgba(255,255,255,0.1)'
+};
+
+function primaryButton(text) {
+  const b = DOM.create('button');
+  b.textContent = text;
+  b.style.cssText = 'padding:14px 24px;background:linear-gradient(135deg,#f0059a,#c0027c);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;transition:all 0.2s;';
+  return b;
+}
+
+function buildScheduler() {
+  const now = new Date();
+  let selectedDate = null;
+  let selectedTime = null;
+  let viewMonth = now.getMonth();
+  let viewYear = now.getFullYear();
+
+  const screen = DOM.create('div');
+  screen.style.cssText = 'min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;';
+
+  const card = DOM.create('div');
+  card.style.cssText = 'background:var(--color-surface);border-radius:var(--radius-lg);padding:40px 32px;max-width:480px;width:100%;text-align:center;border:1px solid rgba(255,255,255,0.08);box-shadow:var(--shadow-xl);';
+
+  const emoji = DOM.create('div');
+  emoji.style.cssText = 'font-size:56px;margin-bottom:16px;line-height:1;';
+  emoji.textContent = '🗓️';
+
+  const subtitle = DOM.create('span');
+  subtitle.style.cssText = 'display:inline-block;background:rgba(240,5,154,0.12);color:#f0059a;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:12px;';
+  subtitle.textContent = 'Bem-vinda ao Programa 4D!';
+
+  const title = DOM.create('h1');
+  title.style.cssText = 'font-size:22px;font-weight:800;color:var(--color-text);margin:0 0 12px;line-height:1.3;';
+  title.textContent = 'Agende sua reunião inicial';
+
+  const desc = DOM.create('p');
+  desc.style.cssText = 'font-size:14px;color:var(--color-muted);line-height:1.6;margin:0 0 20px;';
+  desc.textContent = 'Escolha a data e o horário em que sua Guardiã pode te encontrar pelo Google Meet. A reunião dura cerca de 40 minutos.';
+
+  // Quick entry
+  const quickLabel = DOM.create('div');
+  quickLabel.textContent = '① Escolha data e horário';
+  quickLabel.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:#f0059a;color:#fff;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:0.6px;margin-bottom:8px;';
+
+  const quickEntry = DOM.create('div');
+  quickEntry.style.cssText = 'background:rgba(240,5,154,0.06);border:2px solid rgba(240,5,154,0.35);border-radius:14px;padding:16px;margin-bottom:16px;text-align:left;box-shadow:0 0 24px rgba(240,5,154,0.08);';
+
+  const row = DOM.create('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;';
+
+  const dateWrap = DOM.create('div');
+  const dateLabel = DOM.create('label');
+  dateLabel.textContent = '📅 Data';
+  dateLabel.style.cssText = 'display:block;font-size:11px;color:var(--color-muted);margin-bottom:4px;font-weight:600;';
+  const dateInput = DOM.create('input');
+  dateInput.type = 'date';
+  dateInput.min = new Date(Date.now()+86400000).toISOString().split('T')[0];
+  dateInput.max = new Date(Date.now()+30*86400000).toISOString().split('T')[0];
+  dateInput.style.cssText = 'width:100%;padding:10px 12px;box-sizing:border-box;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--color-text);font-size:13px;font-weight:600;outline:none;cursor:pointer;color-scheme:dark;';
+  dateInput.addEventListener('change', () => {
+    selectedDate = dateInput.value;
+    selectedTime = null;
+    renderCalendar();
+    renderTimes();
+    renderSummary();
+  });
+
+  dateWrap.appendChild(dateLabel);
+  dateWrap.appendChild(dateInput);
+
+  const timeWrap = DOM.create('div');
+  const timeLabel = DOM.create('label');
+  timeLabel.textContent = '🕐 Horário';
+  timeLabel.style.cssText = 'display:block;font-size:11px;color:var(--color-muted);margin-bottom:4px;font-weight:600;';
+  const timeInput = DOM.create('input');
+  timeInput.type = 'time';
+  timeInput.min = '08:00';
+  timeInput.max = '17:30';
+  timeInput.step = '1800';
+  timeInput.style.cssText = 'width:100%;padding:10px 12px;box-sizing:border-box;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--color-text);font-size:13px;font-weight:600;outline:none;cursor:pointer;color-scheme:dark;';
+  timeInput.addEventListener('change', () => {
+    if (!selectedDate) { timeInput.value = ''; return; }
+    selectedTime = timeInput.value;
+    renderSummary();
+  });
+
+  timeWrap.appendChild(timeLabel);
+  timeWrap.appendChild(timeInput);
+
+  row.appendChild(dateWrap);
+  row.appendChild(timeWrap);
+  quickEntry.appendChild(row);
+
+  // Selection summary
+  const summary = DOM.create('div');
+  summary.id = 'summary';
+  summary.style.cssText = 'background:rgba(240,5,154,0.08);border:1px solid rgba(240,5,154,0.25);border-radius:12px;padding:12px 14px;margin-bottom:16px;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:12px;';
+
+  // Calendar grid
+  const calLabel = DOM.create('div');
+  calLabel.textContent = '② Ou navegue pelo calendário';
+  calLabel.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);color:var(--color-muted);padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.6px;margin-bottom:8px;';
+
+  const calendar = DOM.create('div');
+  calendar.id = 'calendar';
+  calendar.style.cssText = 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;margin-bottom:16px;';
+
+  // Time slots
+  const timeSlots = DOM.create('div');
+  timeSlots.id = 'time-slots';
+  timeSlots.style.cssText = 'margin-bottom:16px;text-align:left;';
+
+  function renderCalendar() {
+    calendar.innerHTML = '';
+    const days = ['D','S','T','Q','Q','S','S'];
+    const header = DOM.create('div');
+    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;';
+    const monthName = new Date(viewYear,viewMonth,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+    const monthLabel = DOM.create('div');
+    monthLabel.textContent = monthName;
+    monthLabel.style.cssText = 'font-size:14px;font-weight:800;color:var(--color-text);text-transform:capitalize;';
+    const prevBtn = DOM.create('button');
+    prevBtn.textContent = '‹';
+    prevBtn.style.cssText = 'width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:18px;font-weight:700;cursor:pointer;';
+    prevBtn.addEventListener('click',()=>{viewMonth--;if(viewMonth<0){viewMonth=11;viewYear--;}renderCalendar();});
+    const nextBtn = DOM.create('button');
+    nextBtn.textContent = '›';
+    nextBtn.style.cssText = prevBtn.style.cssText;
+    nextBtn.addEventListener('click',()=>{viewMonth++;if(viewMonth>11){viewMonth=0;viewYear++;}renderCalendar();});
+    header.appendChild(prevBtn);
+    header.appendChild(monthLabel);
+    header.appendChild(nextBtn);
+    calendar.appendChild(header);
+
+    const wRow = DOM.create('div');
+    wRow.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;';
+    days.forEach((d,i)=>{
+      const c = DOM.create('div');
+      c.textContent = d;
+      c.style.cssText = `text-align:center;font-size:11px;font-weight:700;color:${i===0||i===6?'rgba(239,68,68,0.6)':'#888'};padding:4px 0;`;
+      wRow.appendChild(c);
+    });
+    calendar.appendChild(wRow);
+
+    const grid = DOM.create('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:4px;';
+    const firstDay = new Date(viewYear,viewMonth,1);
+    const daysInMonth = new Date(viewYear,viewMonth+1,0).getDate();
+    const startOffset = firstDay.getDay();
+    const today = new Date(); today.setHours(0,0,0,0);
+
+    for(let i=0;i<startOffset;i++){ const e = DOM.create('div'); grid.appendChild(e); }
+    for(let d=1;d<=daysInMonth;d++){
+      const date = new Date(viewYear,viewMonth,d);
+      const dow = date.getDay();
+      const iso = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isWeekend = dow===0||dow===6;
+      const isPast = date <= today;
+      const isDisabled = isWeekend||isPast;
+      const isSelected = selectedDate===iso;
+      const cell = DOM.create('button');
+      cell.textContent = String(d);
+      cell.style.cssText = `aspect-ratio:1;border-radius:8px;font-size:13px;font-weight:600;border:1px solid ${isSelected?'#f0059a':'rgba(255,255,255,0.06)'};background:${isSelected?'#f0059a':(isDisabled?'rgba(255,255,255,0.02)':'rgba(255,255,255,0.04)')};color:${isSelected?'#fff':(isDisabled?'rgba(255,255,255,0.18)':'#fff')};cursor:${isDisabled?'not-allowed':'pointer'};transition:all 0.15s;font-family:inherit;padding:0;`;
+      if(!isDisabled){
+        cell.addEventListener('click',()=>{
+          selectedDate=iso;
+          selectedTime=null;
+          timeInput.value='';
+          dateInput.value=iso;
+          viewMonth=date.getMonth();
+          viewYear=date.getFullYear();
+          renderCalendar();
+          renderTimes();
+          renderSummary();
+        });
+      } else { cell.disabled = true; }
+      grid.appendChild(cell);
+    }
+    calendar.appendChild(grid);
+  }
+
+  function renderTimes() {
+    timeSlots.innerHTML = '';
+    const label = DOM.create('div');
+    label.textContent = '🕐 Horário';
+    label.style.cssText = 'font-size:13px;font-weight:700;color:var(--color-text);margin-bottom:8px;';
+    timeSlots.appendChild(label);
+
+    if(!selectedDate){
+      const hint = DOM.create('div');
+      hint.textContent = 'Selecione uma data primeiro';
+      hint.style.cssText = 'font-size:12px;color:var(--color-muted);padding:12px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.1);border-radius:8px;text-align:center;';
+      timeSlots.appendChild(hint);
+      return;
+    }
+    const slots = [];
+    for(let h=8;h<18;h++){ slots.push(`${String(h).padStart(2,'0')}:00`); slots.push(`${String(h).padStart(2,'0')}:30`); }
+    const grid = DOM.create('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;';
+    slots.forEach(t => {
+      const b = DOM.create('button');
+      b.textContent = t;
+      b.style.cssText = `padding:10px 6px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid ${selectedTime===t?'#f0059a':'rgba(255,255,255,0.1)'};background:${selectedTime===t?'#f0059a':'rgba(255,255,255,0.05)'};color:${selectedTime===t?'#fff':'#fff'};cursor:pointer;transition:all 0.15s;`;
+      b.addEventListener('click',()=>{
+        selectedTime=t;
+        timeInput.value=t;
+        renderTimes();
+        renderSummary();
+      });
+      grid.appendChild(b);
+    });
+    timeSlots.appendChild(grid);
+  }
+
+  function renderSummary() {
+    summary.innerHTML = '';
+    const left = DOM.create('div');
+    const label = DOM.create('div');
+    label.textContent = 'Sua seleção';
+    label.style.cssText = 'font-size:10px;color:#f0059a;font-weight:800;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;';
+    const val = DOM.create('div');
+    val.style.cssText = 'font-size:14px;color:var(--color-text);font-weight:700;';
+    if(selectedDate && selectedTime){
+      const d = new Date(`${selectedDate}T${selectedTime}`);
+      val.textContent = d.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}) + ' às ' + selectedTime;
+    } else if(selectedDate){
+      val.textContent = 'Escolha um horário';
+      val.style.color = '#888';
+    } else {
+      val.textContent = 'Escolha data e horário';
+      val.style.color = '#888';
+    }
+    left.appendChild(label);
+    left.appendChild(val);
+    const ic = DOM.create('div');
+    ic.textContent = (selectedDate&&selectedTime)?'✅':'🗓️';
+    ic.style.cssText = 'font-size:22px;';
+    summary.appendChild(left);
+    summary.appendChild(ic);
+  }
+
+  const btn = primaryButton('🗓️ Agendar reunião');
+  btn.style.cssText += 'width:100%;margin-bottom:8px;';
+  btn.addEventListener('click', () => {
+    if(!selectedDate||!selectedTime){
+      alert('Selecione data e horário');
+      return;
+    }
+    // Show confirmation
+    card.innerHTML = '';
+    const okEmoji = DOM.create('div');
+    okEmoji.textContent = '✅';
+    okEmoji.style.cssText = 'font-size:56px;margin-bottom:16px;';
+    const okBadge = DOM.create('span');
+    okBadge.textContent = 'Sua vaga está reservada!';
+    okBadge.style.cssText = 'display:inline-block;background:rgba(240,5,154,0.12);color:#f0059a;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:12px;';
+    const okTitle = DOM.create('h1');
+    okTitle.textContent = 'Reunião agendada!';
+    okTitle.style.cssText = 'font-size:22px;font-weight:800;color:#fff;margin:0 0 12px;';
+    const okDesc = DOM.create('p');
+    okDesc.textContent = 'Em breve, sua Guardiã enviará o link do Google Meet por e-mail ou WhatsApp.';
+    okDesc.style.cssText = 'font-size:14px;color:#888;line-height:1.6;margin-bottom:20px;';
+
+    const dateCard = DOM.create('div');
+    dateCard.style.cssText = 'background:rgba(240,5,154,0.08);border:1px solid rgba(240,5,154,0.3);border-radius:12px;padding:16px;margin-bottom:20px;display:flex;align-items:center;gap:14px;text-align:left;';
+    const dIcon = DOM.create('div');
+    dIcon.textContent = '🗓️';
+    dIcon.style.cssText = 'font-size:28px;';
+    const dTxt = DOM.create('div');
+    const dLabel = DOM.create('div');
+    dLabel.textContent = 'Sua reunião';
+    dLabel.style.cssText = 'font-size:11px;color:#f0059a;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;';
+    const dVal = DOM.create('div');
+    const dt = new Date(`${selectedDate}T${selectedTime}`);
+    dVal.textContent = dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) + ' às ' + dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    dVal.style.cssText = 'font-size:15px;color:#fff;font-weight:700;';
+    dTxt.appendChild(dLabel);
+    dTxt.appendChild(dVal);
+    dateCard.appendChild(dIcon);
+    dateCard.appendChild(dTxt);
+
+    const steps = ['Aguarde o contato da sua Guardiã','Participe da reunião pelo Google Meet','Seu perfil será criado automaticamente','Acesse o app e comece sua jornada'];
+    const stepsWrap = DOM.create('div');
+    stepsWrap.style.cssText = 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;margin-bottom:24px;text-align:left;';
+    steps.forEach((s,i)=>{
+      const r = DOM.create('div');
+      r.style.cssText = `display:flex;align-items:center;gap:12px;padding:8px 0;${i<steps.length-1?'border-bottom:1px solid rgba(255,255,255,0.04)':''}`;
+      r.innerHTML = `<span style="font-size:18px;flex-shrink:0;width:28px;text-align:center;">${['📱','🎥','📋','🍽️'][i]}</span><span style="font-size:13px;color:#fff;font-weight:500;">${s}</span>`;
+      stepsWrap.appendChild(r);
+    });
+
+    const reschedBtn = primaryButton('🔄 Reagendar reunião');
+    reschedBtn.style.cssText += 'width:100%;margin-bottom:12px;';
+    reschedBtn.addEventListener('click',()=>{
+      card.innerHTML = '';
+      card.appendChild(emoji);
+      card.appendChild(subtitle);
+      card.appendChild(title);
+      card.appendChild(desc);
+      card.appendChild(quickLabel);
+      card.appendChild(quickEntry);
+      card.appendChild(summary);
+      card.appendChild(calLabel);
+      card.appendChild(calendar);
+      card.appendChild(timeSlots);
+      card.appendChild(btn);
+      selectedDate = null;
+      selectedTime = null;
+      dateInput.value = '';
+      timeInput.value = '';
+      renderCalendar();
+      renderTimes();
+      renderSummary();
+    });
+
+    card.appendChild(okEmoji);
+    card.appendChild(okBadge);
+    card.appendChild(okTitle);
+    card.appendChild(okDesc);
+    card.appendChild(dateCard);
+    card.appendChild(stepsWrap);
+    card.appendChild(reschedBtn);
+  });
+
+  card.appendChild(emoji);
+  card.appendChild(subtitle);
+  card.appendChild(title);
+  card.appendChild(desc);
+  card.appendChild(quickLabel);
+  card.appendChild(quickEntry);
+  card.appendChild(summary);
+  card.appendChild(calLabel);
+  card.appendChild(calendar);
+  card.appendChild(timeSlots);
+  card.appendChild(btn);
+
+  screen.appendChild(card);
+  document.getElementById('app').appendChild(screen);
+
+  renderCalendar();
+  renderTimes();
+  renderSummary();
+}
+
+buildScheduler();
+</script>
+</body>
+</html>
