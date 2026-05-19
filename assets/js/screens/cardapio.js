@@ -21,11 +21,10 @@ const MODERATE_FOODS = [
 export class CardapioScreen extends BaseScreen {
   constructor(params) {
     super(params);
-    // Auto-fill for testing
-    this.selectedObjective = 'Controle glicêmico';
-    this.selectedAllowed = ['Filé de frango', 'Salmão', 'Ovos', 'Brócolis'];
-    this.selectedModerate = ['Arroz', 'Batata doce'];
-    this.selectedForbidden = ['Açúcar branco', 'Refrigerante', 'Pão branco / francês'];
+    this.selectedObjective = '';
+    this.selectedAllowed = [];
+    this.selectedModerate = [];
+    this.selectedForbidden = [];
     this.mealTimes = MEAL_TIMES.map(meal => ({ ...meal, enabled: true }));
     this.isSubmitting = false;
     this.hasLoadedSavedData = false;

@@ -239,6 +239,7 @@ export class FirestoreService {
    * @param {boolean} completed   — se o usuário confirmou/completou
    */
   async saveHealthForm(uid, formData, { aiPrefilled = false, completed = false } = {}) {
+    if (!uid) return false;
     this._cacheDelete(`healthForm_${uid}`);
     return this._run(async () => {
       const ref = this.subDoc(uid, 'healthForm', 'data');
@@ -258,6 +259,28 @@ export class FirestoreService {
       }
       return true;
     }, 'saveHealthForm', false);
+  }
+
+  /**
+   * Salva rascunho do Formulário de Saúde sem disparar XP / mudança de status.
+   * Usado para auto-save por seção durante o preenchimento.
+   */
+  async saveHealthFormDraft(uid, formData, currentSection = 0) {
+    if (!uid) return false;
+    this._cacheDelete(`healthForm_${uid}`);
+    return this._run(async () => {
+      const ref = this.subDoc(uid, 'healthForm', 'data');
+      const existing = await getDoc(ref);
+      const toSave = {
+        ...formData,
+        completed: false,
+        draftSection: currentSection,
+        updatedAt: serverTimestamp(),
+      };
+      if (!existing.exists()) toSave.createdAt = serverTimestamp();
+      await setDoc(ref, toSave, { merge: true });
+      return true;
+    }, 'saveHealthFormDraft', false);
   }
 
   // ─────────────────────────────────────────────
@@ -344,6 +367,55 @@ export class FirestoreService {
       }
       return true;
     }, 'saveMenuForm', false);
+  }
+
+  // ─────────────────────────────────────────────
+  // FORMULÁRIO MULTI-ETAPAS (FormsScreen)
+  // ─────────────────────────────────────────────
+
+  async getFormProgress(uid) {
+    const cacheKey = `formProgress_${uid}`;
+    const cached = this._cacheGet(cacheKey);
+    if (cached !== undefined) return cached;
+    return this._run(async () => {
+      const snap = await getDoc(this.subDoc(uid, 'formProgress', 'data'));
+      const value = snap.exists() ? snap.data() : null;
+      this._cacheSet(cacheKey, value);
+      return value;
+    }, 'getFormProgress');
+  }
+
+  async saveFormProgress(uid, data) {
+    if (!uid) return false;
+    this._cacheDelete(`formProgress_${uid}`);
+    return this._run(async () => {
+      const ref = this.subDoc(uid, 'formProgress', 'data');
+      const existing = await getDoc(ref);
+      const toSave = {
+        ...data,
+        updatedAt: serverTimestamp(),
+      };
+      if (!existing.exists()) toSave.createdAt = serverTimestamp();
+      await setDoc(ref, toSave, { merge: true });
+      return true;
+    }, 'saveFormProgress', false);
+  }
+
+  async submitFormsComplete(uid, formData) {
+    if (!uid) return false;
+    this._cacheDelete(`formProgress_${uid}`);
+    return this._run(async () => {
+      const ref = this.subDoc(uid, 'formProgress', 'data');
+      await setDoc(ref, {
+        ...formData,
+        completed: true,
+        completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      await this.updateUserStatus(uid, 'active');
+      await this.awardXp(uid, getXpEvents().MENU_FORM_COMPLETED, 'forms_completed');
+      return true;
+    }, 'submitFormsComplete');
   }
 
   // ─────────────────────────────────────────────

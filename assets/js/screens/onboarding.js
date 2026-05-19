@@ -19,20 +19,20 @@ export class OnboardingScreen extends BaseScreen {
     super(params);
     this.currentStep = 0;
     this.formData = {
-      name: 'Maria Silva',
-      birthDate: '1990-05-15',
-      gender: 'Feminino',
-      weight: '75',
-      height: '165',
-      waist: '82',
-      diagnostics: ['Diabetes tipo 2', 'Hipertensão arterial'],
-      otherConditions: 'Nenhuma',
-      medications: 'Metformina',
-      glucose: '145',
-      hba1c: '7.2',
+      name: '',
+      birthDate: '',
+      gender: '',
+      weight: '',
+      height: '',
+      waist: '',
+      diagnostics: [],
+      otherConditions: '',
+      medications: '',
+      glucose: '',
+      hba1c: '',
       sleep: 3,
       stress: 2,
-      activity: 'Regular 3 a 4× por semana'
+      activity: ''
     };
   }
 
