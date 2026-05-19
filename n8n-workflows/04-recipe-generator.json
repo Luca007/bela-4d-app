@@ -12,7 +12,10 @@
       "name": "Webhook: Recebe Requisição",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "webhookId": "4d-generate-recipe"
     },
     {
@@ -31,7 +34,10 @@
       "name": "Valida Webhook Secret",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -45,7 +51,10 @@
       "name": "Resposta: Não Autorizado",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [680, 460]
+      "position": [
+        680,
+        460
+      ]
     },
     {
       "parameters": {
@@ -67,7 +76,10 @@
       "name": "OpenAI: Gera Receita",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1,
-      "position": [680, 300],
+      "position": [
+        680,
+        300
+      ],
       "credentials": {
         "openAiApi": {
           "id": "openAiApi",
@@ -83,29 +95,10 @@
       "name": "Code: Parse & Enhance",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.FIREBASE_FUNCTIONS_URL }}/saveRecipe",
-        "authentication": "none",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "recipe",
-              "value": "={{ $json }}"
-            }
-          ]
-        }
-      },
-      "id": "http-firebase-4",
-      "name": "HTTP Request: Save Recipe",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1100, 300],
-      "continueOnFail": true
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -119,34 +112,62 @@
       "name": "Resposta: Sucesso",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1320, 300]
+      "position": [
+        1320,
+        300
+      ]
     }
   ],
   "connections": {
     "Webhook: Recebe Requisição": {
       "main": [
-        [{ "node": "Valida Webhook Secret", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Valida Webhook Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Valida Webhook Secret": {
       "main": [
-        [{ "node": "OpenAI: Gera Receita", "type": "main", "index": 0 }],
-        [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "OpenAI: Gera Receita",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resposta: Não Autorizado",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "OpenAI: Gera Receita": {
       "main": [
-        [{ "node": "Code: Parse & Enhance", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Code: Parse & Enhance",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Code: Parse & Enhance": {
       "main": [
-        [{ "node": "HTTP Request: Save Recipe", "type": "main", "index": 0 }]
-      ]
-    },
-    "HTTP Request: Save Recipe": {
-      "main": [
-        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Resposta: Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -157,7 +178,11 @@
     "errorWorkflow": ""
   },
   "staticData": null,
-  "tags": ["programa-4d", "recipes", "gerador"],
+  "tags": [
+    "programa-4d",
+    "recipes",
+    "gerador"
+  ],
   "pinData": {},
   "versionId": "d4e5f6a7-b8c9-d0e1-f2a3-b4c5d6e7f8a9",
   "id": "recipe-generator-004",

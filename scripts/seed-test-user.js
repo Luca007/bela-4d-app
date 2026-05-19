@@ -1,417 +1,217 @@
 #!/usr/bin/env node
 /**
- * Seed de dados de teste — Programa 4D
- *
- * Popula o Firestore com dados completos para o usuário de teste.
- *
- * Uso:
- *   node scripts/seed-test-user.js --email=teste@gmail.com --reset
- *
- * Pré-requisito: variável de ambiente GOOGLE_APPLICATION_CREDENTIALS apontando
- * para uma service account com permissão de leitura/escrita no Firestore, OU
- * estar rodando com o emulador (FIRESTORE_EMULATOR_HOST=localhost:8080).
- *
- * Credenciais de teste: teste@gmail.com / Teste@01
+ * Seed test user data via Firebase REST API — ZERO dependencies
+ * 
+ * Usa a Firebase Auth REST API + Firestore REST API via service account.
+ * Cria/atualiza o usuário de teste no Firestore com dados completos.
+ * 
+ * REQUISITO: Service Account JSON em ~/.firebase/bela-4d-app-service-account.json
+ * 
+ * USO:
+ *   node scripts/seed-test-user.js [--reset]
+ *   --reset: apaga e recria o usuário (default: idempotente, só atualiza)
  */
 
-const { initializeApp, cert, getApps } = require('firebase-admin/app');
-const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
-const { getAuth } = require('firebase-admin/auth');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
-// ─── Parse args ──────────────────────────────────────────────────────────────
-const args = Object.fromEntries(
-  process.argv.slice(2)
-    .filter(a => a.startsWith('--'))
-    .map(a => {
-      const [k, v] = a.slice(2).split('=');
-      return [k, v === undefined ? true : v];
-    })
-);
+const PROJECT_ID = 'bela-4d-app';
+const FIREBASE_API_KEY = 'AIzaSyBPIZCJq9DVn8MT4hjkRRIuktOfUgW97yw';
+const TEST_EMAIL = 'teste@gmail.com';
+const TEST_PASSWORD = 'Teste@01';
+const TEST_UID = 'test_user_001'; // UID fixo para facilitar debug
 
-const EMAIL = args.email || 'teste@gmail.com';
-const RESET = !!args.reset;
+const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 
-// ─── Firebase init ────────────────────────────────────────────────────────────
-if (!getApps().length) {
-  if (process.env.FIRESTORE_EMULATOR_HOST) {
-    initializeApp({ projectId: process.env.GCLOUD_PROJECT || 'bela-4d-app' });
-  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    initializeApp({ credential: cert(require(process.env.GOOGLE_APPLICATION_CREDENTIALS)) });
-  } else {
-    // Tenta service account local
-    try {
-      const sa = require('../firebase/service-account.json');
-      initializeApp({ credential: cert(sa) });
-    } catch {
-      initializeApp({ projectId: 'bela-4d-app' });
-    }
-  }
+// ─── Auth helpers ─────────────────────────────────────────────────────────────
+
+function base64url(buf) {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-const db = getFirestore();
-const auth = getAuth();
+function getAccessTokenFromSA(saJson) {
+  return new Promise((resolve, reject) => {
+    const header = base64url(Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
+    const now = Math.floor(Date.now() / 1000);
+    const claim = base64url(Buffer.from(JSON.stringify({
+      iss: saJson.client_email,
+      scope: 'https://www.googleapis.com/auth/datastore',
+      aud: saJson.token_uri || 'https://oauth2.googleapis.com/token',
+      exp: now + 3600,
+      iat: now,
+    })));
+    const unsigned = `${header}.${claim}`;
+    const sign = crypto.createSign('RSA-SHA256');
+    sign.update(unsigned);
+    const signature = base64url(sign.sign(saJson.private_key));
+    const jwt = `${unsigned}.${signature}`;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function now() { return Timestamp.now(); }
-function daysAgo(n) { return Timestamp.fromMillis(Date.now() - n * 86400000); }
+    const body = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    });
 
-async function deleteCollection(ref) {
-  const snap = await ref.listDocuments();
-  const batch = db.batch();
-  for (const d of snap) {
-    batch.delete(d);
-    // Não deleta subcoleções de netos — aceitável para dados de teste
-  }
-  await batch.commit();
+    const https = require('https');
+    const req = https.request(saJson.token_uri || 'https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.access_token) resolve(parsed.access_token);
+          else reject(new Error(`Token error: ${data}`));
+        } catch (e) { reject(new Error(`Parse error: ${data}`)); }
+      });
+    });
+    req.on('error', reject);
+    req.write(body.toString());
+    req.end();
+  });
 }
 
-async function getUserUid(email) {
-  try {
-    const user = await auth.getUserByEmail(email);
-    return user.uid;
-  } catch (e) {
-    console.error(`[Seed] Usuário ${email} não encontrado no Firebase Auth.`);
-    console.error('[Seed] Crie o usuário primeiro em Firebase Console → Authentication.');
+function firestoreReq(token, method, docPath, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`${BASE}${docPath}`);
+    const opts = { method, headers: { Authorization: `Bearer ${token}` } };
+    if (body) opts.headers['Content-Type'] = 'application/json';
+    const https = require('https');
+    const req = https.request(url, opts, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('error', reject);
+    if (body) req.write(JSON.stringify(body));
+    req.end();
+  });
+}
+
+// Firebase Auth REST API — sign in to get ID token, then verify/create user in Firestore
+function firebaseAuthReq(endpoint, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`https://identitytoolkit.googleapis.com/v1/${endpoint}?key=${FIREBASE_API_KEY}`);
+    const data = JSON.stringify(body);
+    const https = require('https');
+    const req = https.request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': data.length },
+    }, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(d) }); }
+        catch { resolve({ status: res.statusCode, body: d }); }
+      });
+    });
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
+
+// ─── MAIN ────────────────────────────────────────────────────────────────────
+
+async function main() {
+  const reset = process.argv.includes('--reset');
+  const saPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || 
+    path.join(process.env.HOME || '/root', '.firebase', 'bela-4d-app-service-account.json');
+
+  if (!fs.existsSync(saPath)) {
+    console.error('[SeedUser] ❌ Service account não encontrada:', saPath);
+    console.error('   Gere em: https://console.cloud.google.com/iam-admin/serviceaccounts?project=bela-4d-app');
     process.exit(1);
   }
-}
 
-// ─── Seed ─────────────────────────────────────────────────────────────────────
-async function seed(uid) {
-  const userRef = db.doc(`users/${uid}`);
+  const saJson = JSON.parse(fs.readFileSync(saPath, 'utf8'));
+  console.log('[SeedUser] Obtendo access token...');
+  const token = await getAccessTokenFromSA(saJson);
+  console.log('[SeedUser] ✅ Token obtido\n');
 
-  if (RESET) {
-    console.log('[Seed] Apagando dados antigos...');
-    const subcols = [
-      'chatHistory', 'recipes', 'achievements', 'notifications',
-      'pendingActions', 'xpLog', 'bloodTests', 'examRequests',
-      'healthForm', 'menuForm', 'onboardingInterview', 'examTracking',
-    ];
-    for (const col of subcols) {
-      try { await deleteCollection(db.collection(`users/${uid}/${col}`)); } catch {}
+  // Step 1: Sign in / create test user via Firebase Auth REST API
+  console.log(`[SeedUser] Autenticando ${TEST_EMAIL}...`);
+  let idToken, localId;
+  
+  // Try sign in first
+  const signInResp = await firebaseAuthReq('accounts:signInWithPassword', {
+    email: TEST_EMAIL,
+    password: TEST_PASSWORD,
+    returnSecureToken: true,
+  });
+
+  if (signInResp.status === 200) {
+    idToken = signInResp.body.idToken;
+    localId = signInResp.body.localId;
+    console.log(`[SeedUser] ✅ Login OK (uid: ${localId})`);
+  } else if (signInResp.body?.error?.message === 'EMAIL_NOT_FOUND') {
+    // Create user
+    console.log('[SeedUser] Usuário não existe. Criando...');
+    const signUpResp = await firebaseAuthReq('accounts:signUp', {
+      email: TEST_EMAIL,
+      password: TEST_PASSWORD,
+      returnSecureToken: true,
+    });
+    if (signUpResp.status === 200) {
+      idToken = signUpResp.body.idToken;
+      localId = signUpResp.body.localId;
+      console.log(`[SeedUser] ✅ Criado (uid: ${localId})`);
+    } else {
+      console.error('[SeedUser] ❌ Falha ao criar:', JSON.stringify(signUpResp.body));
+      process.exit(1);
     }
-    await userRef.delete().catch(() => {});
-    console.log('[Seed] Dados apagados.');
+  } else {
+    console.error('[SeedUser] ❌ Erro auth:', JSON.stringify(signInResp.body));
+    process.exit(1);
   }
 
-  // ── Perfil principal ────────────────────────────────────────────────────────
-  await userRef.set({
-    uid,
-    email: EMAIL,
-    name: 'Maria Teste',
-    avatar: '🌸',
-    avatarColor: '#f0059a',
-    status: 'active',
-    xp: 1500,
-    level: 3,
-    streak: 7,
-    lastActivityDate: daysAgo(0),
-    totalRecipes: 3,
-    totalChatMessages: 5,
-    diagnostics: ['Diabetes tipo 2', 'Hipertensão'],
-    hba1c: 7.2,
-    glucoseFasting: 110,
-    objective: 'controle_glicemia',
-    phone: '+5511999999999',
-    createdAt: daysAgo(30),
-    updatedAt: now(),
-  }, { merge: true });
+  // Step 2: Write user document via Firestore REST (admin access)
+  const userData = {
+    fields: {
+      email:  { stringValue: TEST_EMAIL },
+      name:   { stringValue: reset ? '' : 'Teste Usuária' },
+      status: { stringValue: 'awaiting_onboarding' },
+      xp:     { integerValue: 0 },
+      level:  { integerValue: 1 },
+      streak: { integerValue: 0 },
+      onboardingCompleted: { booleanValue: false },
+      createdAt: { timestampValue: new Date().toISOString() },
+    }
+  };
 
-  console.log('[Seed] Perfil salvo.');
-
-  // ── Entrevista de onboarding ────────────────────────────────────────────────
-  await db.doc(`users/${uid}/onboardingInterview/data`).set({
-    extractedHealthData: {
-      diagnostics: ['Diabetes tipo 2', 'Hipertensão'],
-      medications: ['Metformina 500mg', 'Losartana 50mg'],
-      allergies: ['Amendoim'],
-      foodPreferences: 'Gosta de frango, legumes e arroz integral',
-      lifestyle: 'Sedentária, trabalha em home office',
-      sleepHours: 7,
-      stressLevel: 'moderado',
-    },
-    hasBloodTest: true,
-    processedAt: daysAgo(28),
-    source: 'seed',
-  });
-
-  // ── Exame de sangue processado ──────────────────────────────────────────────
-  const bloodTestRef = await db.collection(`users/${uid}/bloodTests`).add({
-    driveFileUrl: 'https://drive.google.com/file/d/seed-blood-test',
-    status: 'done',
-    processingStatus: 'done',
-    extractedData: {
-      glicemia: [
-        { d: daysAgo(20), v: 125 },
-        { d: daysAgo(10), v: 118 },
-        { d: daysAgo(0), v: 112 },
-      ],
-      hba1c: [
-        { d: daysAgo(20), v: 7.5 },
-        { d: daysAgo(0), v: 7.2 },
-      ],
-      peso: [
-        { d: daysAgo(20), v: 78 },
-        { d: daysAgo(0), v: 76.5 },
-      ],
-    },
-    createdAt: daysAgo(20),
-    processedAt: daysAgo(19),
-  });
-
-  console.log('[Seed] Exame de sangue salvo:', bloodTestRef.id);
-
-  // ── Pedido de exame ─────────────────────────────────────────────────────────
-  const examRequestRef = await db.collection(`users/${uid}/examRequests`).add({
-    status: 'sent',
-    driveFileUrl: 'https://drive.google.com/file/d/seed-exam-request',
-    fileName: 'pedido_exame_maria.pdf',
-    examsRequested: ['Hemoglobina Glicada', 'Glicemia em Jejum', 'Colesterol Total', 'TSH'],
-    createdAt: daysAgo(15),
-    sentAt: daysAgo(15),
-  });
-
-  console.log('[Seed] Pedido de exame salvo:', examRequestRef.id);
-
-  // ── Formulário de saúde ─────────────────────────────────────────────────────
-  await db.doc(`users/${uid}/healthForm/data`).set({
-    completed: true,
-    aiPrefilled: true,
-    diagnostics: ['Diabetes tipo 2', 'Hipertensão'],
-    hba1c: 7.2,
-    glucoseFasting: 110,
-    weight: 76.5,
-    height: 162,
-    age: 45,
-    medications: ['Metformina 500mg', 'Losartana 50mg'],
-    allergies: ['Amendoim'],
-    foodRestrictions: [],
-    physicalActivity: 'sedentario',
-    sleepHours: 7,
-    createdAt: daysAgo(25),
-    updatedAt: daysAgo(10),
-  });
-
-  // ── Formulário pré-cardápio ─────────────────────────────────────────────────
-  await db.doc(`users/${uid}/menuForm/data`).set({
-    completed: true,
-    objective: 'controle_glicemia',
-    mealTimes: [
-      { id: 'breakfast', label: 'Café da Manhã', enabled: true, time: '07:00', foods: ['Aveia', 'Ovo', 'Fruta'] },
-      { id: 'morning_snack', label: 'Lanche da Manhã', enabled: true, time: '10:00', foods: ['Iogurte', 'Castanhas'] },
-      { id: 'lunch', label: 'Almoço', enabled: true, time: '12:30', foods: ['Arroz integral', 'Frango', 'Salada'] },
-      { id: 'afternoon_snack', label: 'Lanche da Tarde', enabled: true, time: '15:30', foods: ['Fruta'] },
-      { id: 'dinner', label: 'Jantar', enabled: true, time: '19:00', foods: ['Sopa de legumes', 'Pão integral'] },
-    ],
-    foodPreferences: 'Frango, peixes, legumes',
-    foodAversions: 'Fígado, quiabo',
-    createdAt: daysAgo(12),
-    updatedAt: daysAgo(12),
-  });
-
-  // ── Histórico do chat ───────────────────────────────────────────────────────
-  const chatMessages = [
-    { role: 'user', content: 'Bom dia! O que posso comer no café da manhã?', type: 'text', timestamp: daysAgo(5) },
-    { role: 'assistant', content: 'Bom dia, Maria! Para o café da manhã com seu perfil, recomendo aveia com frutas vermelhas e 2 ovos mexidos. O índice glicêmico é baixo e vai ajudar no controle da glicemia.', type: 'text', timestamp: daysAgo(5), xpAwarded: 10 },
-    { role: 'user', content: 'Posso comer arroz branco no almoço?', type: 'text', timestamp: daysAgo(3) },
-    { role: 'assistant', content: 'Com moderação! Prefira o *arroz integral* pois tem mais fibras e impacto glicêmico menor. Se for arroz branco, limite a 3 colheres de sopa e combine com proteína e salada.', type: 'text', timestamp: daysAgo(3), xpAwarded: 10 },
-    { role: 'user', content: 'Qual é meu progresso esta semana?', type: 'text', timestamp: daysAgo(1) },
-    { role: 'assistant', content: 'Você está indo muito bem! 🎉 Sua glicemia reduziu de 125 para 112 mg/dL nas últimas semanas. Continue assim! Sua próxima meta é manter abaixo de 100 mg/dL.', type: 'text', timestamp: daysAgo(1), xpAwarded: 15 },
-  ];
-
-  const chatBatch = db.batch();
-  for (const msg of chatMessages) {
-    const ref = db.collection(`users/${uid}/chatHistory`).doc();
-    chatBatch.set(ref, { ...msg, id: ref.id });
+  if (reset) {
+    // Delete and recreate
+    console.log('[SeedUser] 🗑️ Reset — apagando dados existentes...');
+    await firestoreReq(token, 'DELETE', `/users/${localId}`);
+    // Delete subcollections
+    const subs = ['onboardingInterview','healthForm','menuForm','formProgress','bloodTests','examRequests','examTracking','chatHistory','recipes','foodEvaluations','notifications','pendingActions','achievements','xpLog','xpEvents'];
+    for (const sub of subs) {
+      await firestoreReq(token, 'DELETE', `/users/${localId}/${sub}`);
+    }
+    console.log('[SeedUser] 🗑️ Dados antigos removidos');
   }
-  await chatBatch.commit();
 
-  console.log('[Seed] Histórico do chat salvo.');
-
-  // ── Receitas ────────────────────────────────────────────────────────────────
-  const recipes = [
-    {
-      title: 'Bowl de Aveia com Frutas Vermelhas',
-      mealType: 'breakfast',
-      difficulty: 'fácil',
-      prepTime: 10,
-      servings: 1,
-      glycemicIndex: 45,
-      nutrition: { calories: 320, proteins: 12, carbs: 48, fat: 8 },
-      ingredients: [
-        { name: 'Aveia em flocos', quantity: '4', unit: 'colheres' },
-        { name: 'Leite desnatado', quantity: '200', unit: 'ml' },
-        { name: 'Morango', quantity: '100', unit: 'g' },
-        { name: 'Mirtilo', quantity: '50', unit: 'g' },
-        { name: 'Chia', quantity: '1', unit: 'colher de chá' },
-      ],
-      instructions: [
-        'Aqueça o leite e misture com a aveia.',
-        'Cozinhe por 3 minutos mexendo sempre.',
-        'Adicione as frutas vermelhas e a chia por cima.',
-        'Sirva morno.',
-      ],
-      tips: 'Pode substituir o leite por leite vegetal sem açúcar.',
-      tags: ['diabetes', 'café da manhã', 'baixo IG'],
-      createdAt: daysAgo(8),
-    },
-    {
-      title: 'Frango Grelhado com Legumes no Vapor',
-      mealType: 'lunch',
-      difficulty: 'fácil',
-      prepTime: 25,
-      servings: 1,
-      glycemicIndex: 30,
-      nutrition: { calories: 380, proteins: 42, carbs: 22, fat: 12 },
-      ingredients: [
-        { name: 'Filé de frango', quantity: '150', unit: 'g' },
-        { name: 'Brócolis', quantity: '100', unit: 'g' },
-        { name: 'Cenoura', quantity: '80', unit: 'g' },
-        { name: 'Azeite', quantity: '1', unit: 'colher de sopa' },
-        { name: 'Alho', quantity: '2', unit: 'dentes' },
-        { name: 'Sal', quantity: 'a gosto', unit: '' },
-      ],
-      instructions: [
-        'Tempere o frango com alho, sal e azeite.',
-        'Grelhe por 6-7 minutos de cada lado.',
-        'Cozinhe os legumes no vapor por 8 minutos.',
-        'Sirva junto.',
-      ],
-      tips: 'Adicione limão para realçar o sabor sem sódio extra.',
-      tags: ['diabetes', 'proteína', 'sem glúten'],
-      createdAt: daysAgo(5),
-    },
-    {
-      title: 'Sopa de Legumes com Quinoa',
-      mealType: 'dinner',
-      difficulty: 'média',
-      prepTime: 35,
-      servings: 2,
-      glycemicIndex: 40,
-      nutrition: { calories: 290, proteins: 14, carbs: 38, fat: 6 },
-      ingredients: [
-        { name: 'Quinoa', quantity: '80', unit: 'g' },
-        { name: 'Caldo de frango sem sal', quantity: '500', unit: 'ml' },
-        { name: 'Abobrinha', quantity: '1', unit: 'unidade' },
-        { name: 'Cenoura', quantity: '1', unit: 'unidade' },
-        { name: 'Cebola', quantity: '½', unit: 'unidade' },
-        { name: 'Alho', quantity: '3', unit: 'dentes' },
-        { name: 'Azeite', quantity: '1', unit: 'colher de sopa' },
-      ],
-      instructions: [
-        'Refogue cebola e alho no azeite.',
-        'Adicione os legumes em cubos e o caldo.',
-        'Acrescente a quinoa lavada.',
-        'Cozinhe por 20 minutos em fogo médio.',
-        'Ajuste o sal e sirva.',
-      ],
-      tags: ['diabetes', 'jantar', 'sem glúten', 'fibras'],
-      createdAt: daysAgo(2),
-    },
-  ];
-
-  const recipeBatch = db.batch();
-  for (const recipe of recipes) {
-    const ref = db.collection(`users/${uid}/recipes`).doc();
-    recipeBatch.set(ref, { ...recipe, id: ref.id, uid });
+  console.log(`[SeedUser] Gravando perfil (status: awaiting_onboarding)...`);
+  const resp = await firestoreReq(token, 'PATCH', `/users/${localId}`, userData);
+  
+  if (resp.status === 200 || resp.status === 201) {
+    console.log('[SeedUser] ✅ Perfil criado/atualizado');
+  } else {
+    console.error(`[SeedUser] ❌ Erro: HTTP ${resp.status}: ${resp.body}`);
+    process.exit(1);
   }
-  await recipeBatch.commit();
 
-  console.log('[Seed] Receitas salvas.');
-
-  // ── Conquistas ──────────────────────────────────────────────────────────────
-  const achievements = [
-    {
-      id: 'first_login',
-      unlocked: true,
-      seen: true,
-      title: 'Primeiro Acesso',
-      description: 'Bem-vinda ao Programa 4D!',
-      icon: '🌟',
-      xp: 50,
-      unlockedAt: daysAgo(30),
-    },
-    {
-      id: 'streak_7',
-      unlocked: true,
-      seen: false,
-      title: '7 Dias Seguidos',
-      description: 'Você acessou o app por 7 dias consecutivos!',
-      icon: '🔥',
-      xp: 100,
-      unlockedAt: daysAgo(0),
-    },
-  ];
-
-  const achBatch = db.batch();
-  for (const ach of achievements) {
-    const ref = db.doc(`users/${uid}/achievements/${ach.id}`);
-    achBatch.set(ref, ach);
-  }
-  await achBatch.commit();
-
-  console.log('[Seed] Conquistas salvas.');
-
-  // ── Notificações ────────────────────────────────────────────────────────────
-  const notifBatch = db.batch();
-  [
-    { title: 'Bem-vinda ao Programa 4D!', message: 'Sua jornada começa agora. Acesse o app e conheça sua Guardiã.', type: 'welcome', priority: 'high', status: 'sent', createdAt: daysAgo(30) },
-    { title: 'Lembrete de Consulta', message: 'Não esqueça de registrar seus resultados de exame mais recentes.', type: 'reminder', priority: 'normal', status: 'sent', createdAt: daysAgo(7) },
-  ].forEach(n => {
-    const ref = db.collection(`users/${uid}/notifications`).doc();
-    notifBatch.set(ref, { ...n, id: ref.id });
-  });
-  await notifBatch.commit();
-
-  // ── Ações pendentes ─────────────────────────────────────────────────────────
-  const pendingBatch = db.batch();
-  [
-    { type: 'achievement_unlocked', seen: false, message: 'Nova conquista desbloqueada: 7 Dias Seguidos!', payload: { achievementId: 'streak_7' }, createdAt: daysAgo(0) },
-    { type: 'exam_processed', seen: true, message: 'Seus exames foram processados. Confira seus resultados!', payload: { bloodTestId: 'seed-blood-test' }, createdAt: daysAgo(19) },
-  ].forEach(a => {
-    const ref = db.collection(`users/${uid}/pendingActions`).doc();
-    pendingBatch.set(ref, { ...a, id: ref.id });
-  });
-  await pendingBatch.commit();
-
-  // ── XP Log ──────────────────────────────────────────────────────────────────
-  const xpBatch = db.batch();
-  [
-    { source: 'daily_login', amount: 10, eventId: 'daily_login', timestamp: daysAgo(0) },
-    { source: 'daily_login', amount: 10, eventId: 'daily_login', timestamp: daysAgo(1) },
-    { source: 'daily_login', amount: 10, eventId: 'daily_login', timestamp: daysAgo(2) },
-    { source: 'chat_message', amount: 10, eventId: 'chat_msg_1', timestamp: daysAgo(5) },
-    { source: 'food_evaluated', amount: 15, eventId: 'food_eval_1', timestamp: daysAgo(4) },
-  ].forEach(e => {
-    const ref = db.collection(`users/${uid}/xpLog`).doc();
-    xpBatch.set(ref, { ...e, id: ref.id });
-  });
-  await xpBatch.commit();
-
-  console.log('[Seed] XP Log salvo.');
-  console.log('\n✅ Seed completo para', EMAIL, '(uid:', uid + ')');
-  console.log('\n📋 Dados criados:');
-  console.log('  - Perfil com XP 1500, nível 3, streak 7 dias');
-  console.log('  - 1 exame de sangue processado');
-  console.log('  - 1 pedido de exame');
-  console.log('  - Formulário de saúde preenchido');
-  console.log('  - Formulário de cardápio preenchido');
-  console.log('  - 6 mensagens no chat');
-  console.log('  - 3 receitas personalizadas');
-  console.log('  - 2 conquistas (1 não vista)');
-  console.log('  - 2 notificações');
-  console.log('  - 2 ações pendentes');
-  console.log('  - 5 eventos de XP');
+  console.log('\n[SeedUser] ✅ Pronto!');
+  console.log(`   Email: ${TEST_EMAIL}`);
+  console.log(`   Senha: ${TEST_PASSWORD}`);
+  console.log(`   UID: ${localId}`);
+  console.log(`   Status: awaiting_onboarding (verá tela de agendamento após login)`);
+  console.log('\n   Fluxo esperado:');
+  console.log('   1. Login → Onboarding (4 passos) → Agendamento de reunião');
+  console.log('   2. Após agendar → Aguardando confirmação da Guardiã');
+  console.log('   3. Guardiã marca reunião como concluída → Dashboard');
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
-(async () => {
-  console.log(`[Seed] Buscando usuário: ${EMAIL}`);
-  const uid = await getUserUid(EMAIL);
-  console.log(`[Seed] UID encontrado: ${uid}`);
-  await seed(uid);
-  process.exit(0);
-})().catch(err => {
-  console.error('[Seed] Erro:', err.message);
-  process.exit(1);
-});
+main().catch(e => { console.error(e); process.exit(1); });

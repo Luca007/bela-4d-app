@@ -1,8 +1,15 @@
 import { DOM } from '../utils/helpers.js';
 
+const MAX_VISIBLE_ACHIEVEMENTS = 1;
+const ACHIEVEMENT_GROUP_WINDOW_MS = 800;
+
 class NotificationService {
   constructor() {
     this.container = null;
+    this._achievementQueue = [];
+    this._achievementShowing = 0;
+    this._pendingBatchTimer = null;
+    this._pendingBatch = [];
     this._ensureContainer();
   }
 
@@ -10,7 +17,17 @@ class NotificationService {
     if (this.container) return;
     this.container = DOM.create('div', 'gmp-notifications');
     Object.assign(this.container.style, {
-      position: 'fixed', top: '20px', right: '20px', zIndex: 99999, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-end', pointerEvents: 'none'
+      position: 'fixed',
+      top: 'max(72px, calc(env(safe-area-inset-top, 0px) + 72px))',
+      right: '16px',
+      zIndex: 99999,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px',
+      alignItems: 'flex-end',
+      pointerEvents: 'none',
+      maxHeight: 'calc(100vh - 120px)',
+      overflow: 'hidden',
     });
     document.body.appendChild(this.container);
   }
@@ -128,24 +145,63 @@ class NotificationService {
   }
 
   // large achievement popup
+  // Calls within ACHIEVEMENT_GROUP_WINDOW_MS are batched into a single "+X XP combinado" toast
+  // to prevent stacking multiple toasts that cover the dashboard on retroactive unlocks.
   showAchievement({ icon = '🏆', title = 'Conquista', subtitle = '', xp = 0 } = {}) {
-    const panel = DOM.create('div', 'gmp-ach');
-    Object.assign(panel.style, { pointerEvents: 'auto', width: '340px', background: 'linear-gradient(180deg, rgba(240,5,154,0.98), rgba(192,2,124,0.95))', color: '#fff', borderRadius: '14px', padding: '16px', boxShadow: '0 16px 50px rgba(0,0,0,0.6)', display: 'flex', gap: '12px', alignItems: 'center', transform: 'translateY(-10px)', opacity: '0', transition: 'transform 360ms cubic-bezier(.2,.9,.2,1), opacity 360ms ease' });
+    this._pendingBatch.push({ icon, title, subtitle, xp: Number(xp) || 0 });
+    if (this._pendingBatchTimer) return;
+    this._pendingBatchTimer = window.setTimeout(() => {
+      const batch = this._pendingBatch.splice(0, this._pendingBatch.length);
+      this._pendingBatchTimer = null;
+      this._enqueueBatch(batch);
+    }, ACHIEVEMENT_GROUP_WINDOW_MS);
+  }
 
-    const iconEl = DOM.create('div'); iconEl.textContent = icon; Object.assign(iconEl.style, { fontSize: '36px' });
-    const txt = DOM.create('div');
-    const t = DOM.create('div'); t.textContent = title; Object.assign(t.style, { fontWeight: 800, fontSize: '15px' });
-    const s = DOM.create('div'); s.textContent = subtitle; Object.assign(s.style, { fontSize: '13px', opacity: 0.9 });
-    const xpEl = DOM.create('div'); xpEl.textContent = xp ? `+${xp} XP` : ''; Object.assign(xpEl.style, { marginTop: '6px', fontWeight: 900, color: 'rgba(255,255,255,0.95)' });
-    txt.appendChild(t); txt.appendChild(s); if (xp) txt.appendChild(xpEl);
+  _enqueueBatch(batch) {
+    if (!batch || !batch.length) return;
+    let item;
+    if (batch.length === 1) {
+      item = batch[0];
+    } else {
+      const totalXp = batch.reduce((sum, b) => sum + (Number(b.xp) || 0), 0);
+      item = {
+        icon: '🎉',
+        title: `${batch.length} conquistas desbloqueadas`,
+        subtitle: batch.slice(0, 3).map(b => b.title).join(' · ') + (batch.length > 3 ? '…' : ''),
+        xp: totalXp,
+      };
+    }
+    this._achievementQueue.push(item);
+    this._pumpAchievementQueue();
+  }
+
+  _pumpAchievementQueue() {
+    if (this._achievementShowing >= MAX_VISIBLE_ACHIEVEMENTS) return;
+    const next = this._achievementQueue.shift();
+    if (!next) return;
+    this._achievementShowing += 1;
+    this._renderAchievementPanel(next, () => {
+      this._achievementShowing -= 1;
+      this._pumpAchievementQueue();
+    });
+  }
+
+  _renderAchievementPanel({ icon, title, subtitle, xp }, onDone) {
+    const panel = DOM.create('div', 'gmp-ach');
+    Object.assign(panel.style, { pointerEvents: 'auto', width: '320px', maxWidth: 'calc(100vw - 32px)', background: 'linear-gradient(180deg, rgba(240,5,154,0.98), rgba(192,2,124,0.95))', color: '#fff', borderRadius: '14px', padding: '14px 16px', boxShadow: '0 16px 50px rgba(0,0,0,0.6)', display: 'flex', gap: '12px', alignItems: 'center', transform: 'translateY(-10px)', opacity: '0', transition: 'transform 360ms cubic-bezier(.2,.9,.2,1), opacity 360ms ease' });
+
+    const iconEl = DOM.create('div'); iconEl.textContent = icon; Object.assign(iconEl.style, { fontSize: '32px', flexShrink: '0' });
+    const txt = DOM.create('div'); Object.assign(txt.style, { flex: '1', minWidth: '0' });
+    const t = DOM.create('div'); t.textContent = title; Object.assign(t.style, { fontWeight: 800, fontSize: '14px' });
+    const s = DOM.create('div'); s.textContent = subtitle; Object.assign(s.style, { fontSize: '12px', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
+    const xpEl = DOM.create('div'); xpEl.textContent = xp ? `+${xp} XP` : ''; Object.assign(xpEl.style, { marginTop: '4px', fontWeight: 900, fontSize: '13px', color: 'rgba(255,255,255,0.95)' });
+    txt.appendChild(t); if (subtitle) txt.appendChild(s); if (xp) txt.appendChild(xpEl);
 
     panel.appendChild(iconEl); panel.appendChild(txt);
     this.container.appendChild(panel);
-    // animate in
     requestAnimationFrame(() => { panel.style.transform = 'translateY(0)'; panel.style.opacity = '1'; });
-    // auto-dismiss
-    setTimeout(() => { panel.style.opacity = '0'; panel.style.transform = 'translateY(-8px)'; }, 4200);
-    setTimeout(() => panel.remove(), 4700);
+    setTimeout(() => { panel.style.opacity = '0'; panel.style.transform = 'translateY(-8px)'; }, 3200);
+    setTimeout(() => { panel.remove(); onDone(); }, 3700);
   }
 
   // generic system notification modal overlay

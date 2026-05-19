@@ -10,7 +10,9 @@ import {
   ONBOARDING_STEPS,
   DIAGNOSTIC_OPTIONS,
   GENDER_OPTIONS,
-  ACTIVITY_LEVELS
+  ACTIVITY_LEVELS,
+  SCREENS,
+  USER_STATUS
 } from '../config/constants.js';
 import { notificationService } from '../modules/notifications.js';
 
@@ -689,6 +691,9 @@ export class OnboardingScreen extends BaseScreen {
         throw new Error('Erro ao salvar dados');
       }
 
+      // Update user status to awaiting_onboarding
+      await firestoreService.updateUserStatus(user.uid, USER_STATUS.AWAITING_ONBOARDING);
+
       // Update user profile with onboarding status
       await firestoreService.saveUserProfile(user.uid, {
         onboardingCompleted: true,
@@ -700,9 +705,9 @@ export class OnboardingScreen extends BaseScreen {
       Session.set('onboardingData', this.formData);
       State.set('onboardingData', this.formData);
 
-      // Navigate to next screen
+      // Navigate to awaiting screen (scheduling meeting)
       setTimeout(() => {
-        this.params.onNavigate('cardapio', this.formData);
+        this.params.onNavigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_ONBOARDING });
       }, 300);
     } catch (error) {
       console.error('Error completing onboarding:', error);

@@ -485,19 +485,7 @@ exports.deleteRecipe = onCall({ region: REGION, secrets: SECRETS }, async (reque
     throw new HttpsError('not-found', 'Receita não encontrada');
   }
 
-  const recipeData = recipeDoc.data() || {};
-
   try {
-    await callN8nWithRetry('4d-delete-recipe', {
-      uid,
-      recipeId,
-      recipe: {
-        id: recipeId,
-        name: recipeData.nm || recipeData.name || '',
-        source: recipeData.source || 'manual',
-      },
-    });
-
     await recipeRef.delete();
 
     await db.doc(`users/${uid}`).set({
