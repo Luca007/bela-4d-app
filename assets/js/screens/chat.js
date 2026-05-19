@@ -285,14 +285,14 @@ export class ChatScreen extends BaseScreen {
       const isFirst = i === 0 || messages[i - 1].role !== msg.role;
 
       if (msg.role === 'user') {
-        return `<div class="message user-message${isFirst ? ' is-first' : ''}">
+        return `<div class="chat-message--user message user-message${isFirst ? ' is-first' : ''}">
           <div class="message-avatar"></div>
           <div class="message-bubble">${this._escapeHTML(msg.content || '')}</div>
         </div>`;
       }
 
       if (msg.type === 'error' || msg.role === 'system') {
-        return `<div class="message ai-message is-first">
+        return `<div class="chat-message--ai message ai-message is-first">
           <div class="message-avatar">👩‍⚕️</div>
           <div class="message-bubble error-bubble">${this._escapeHTML(msg.content || '')}</div>
         </div>`;
@@ -301,7 +301,7 @@ export class ChatScreen extends BaseScreen {
       if (msg.type === 'recipe' && msg.recipe) {
         const r = msg.recipe;
         const macros = r.macros || r.nutrition || {};
-        return `<div class="message ai-message${isFirst ? ' is-first' : ''}">
+        return `<div class="chat-message--ai message ai-message${isFirst ? ' is-first' : ''}">
           <div class="message-avatar">👩‍⚕️</div>
           <div class="chat-recipe-card">
             <span class="recipe-card-emoji">${r.emoji || r.e || '🍽️'}</span>
@@ -318,7 +318,7 @@ export class ChatScreen extends BaseScreen {
       }
 
       // Default AI text message
-      return `<div class="message ai-message${isFirst ? ' is-first' : ''}">
+      return `<div class="chat-message--ai message ai-message${isFirst ? ' is-first' : ''}">
         <div class="message-avatar">👩‍⚕️</div>
         <div class="message-bubble">${this.formatMessageContent(msg.content || msg.reply || '')}</div>
       </div>`;
@@ -358,7 +358,7 @@ export class ChatScreen extends BaseScreen {
         <div class="chat-messages" id="chat-messages">
           ${this._renderMessages()}
           ${this.thinkingVisible ? `
-          <div class="thinking-bubble message ai-message is-first">
+          <div class="chat-message--ai message ai-message is-first thinking-bubble">
             <div class="message-avatar">👩‍⚕️</div>
             <div class="thinking-content">
               <span class="thinking-label">Guardiã está pensando</span>
@@ -375,8 +375,8 @@ export class ChatScreen extends BaseScreen {
         </div>
         ` : ''}
 
-        <!-- Input area -->
-        <div class="chat-input-area">
+        <!-- Input bar -->
+        <div class="chat-input-bar">
           <textarea
             class="chat-textarea"
             id="chat-input"

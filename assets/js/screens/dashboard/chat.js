@@ -23,7 +23,7 @@ export function render(dash) {
         const isUser = msg.role === 'user';
         const text = isUser && parsed.recipeId ? parsed.text : (msg.content || msg.t || msg.text || msg.message || '');
         return `
-          <div class="message ${isUser ? 'user-message' : 'ai-message'} is-first">
+          <div class="chat-message--${isUser ? 'user' : 'ai'} message ${isUser ? 'user-message' : 'ai-message'} is-first">
             <div class="message-avatar">${isUser ? '' : '👩‍⚕️'}</div>
             <div class="message-bubble">${parsed.recipeId ? '<div style="background:rgba(240,5,154,0.12);border:1px solid rgba(240,5,154,0.24);color:#f0059a;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;display:inline-block;margin-bottom:6px;">Editando receita #' + escapeHTML(parsed.recipeId) + '</div><br/>' : ''}${escapeHTML(text)}</div>
           </div>
@@ -32,7 +32,7 @@ export function render(dash) {
     : dash.homeChatMessages.map(msg => {
         const isUser = msg.r === 'user';
         return `
-          <div class="message ${isUser ? 'user-message' : 'ai-message'} is-first">
+          <div class="chat-message--${isUser ? 'user' : 'ai'} message ${isUser ? 'user-message' : 'ai-message'} is-first">
             <div class="message-avatar">${isUser ? '' : '👩‍⚕️'}</div>
             <div class="message-bubble">${escapeHTML(msg.t)}</div>
           </div>
@@ -52,7 +52,7 @@ export function render(dash) {
       <div class="chat-messages" data-chat-list>
         ${messagesHTML}
       </div>
-      <div class="chat-input-area">
+      <div class="chat-input-bar">
         <textarea class="chat-textarea" data-chat-input rows="1" placeholder="${escapeHTML(placeholder)}">${escapeHTML(dash.homeChatInput)}</textarea>
         <button class="chat-send-btn" data-chat-send aria-label="Enviar mensagem">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>

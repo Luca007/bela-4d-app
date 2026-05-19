@@ -162,24 +162,39 @@
 .chat-messages::-webkit-scrollbar-track { background: transparent; }
 .chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
 
-/* Message bubbles */
+/* Message bubbles — new canonical classes (.chat-message--user / .chat-message--ai) */
+.chat-message--user,
+.chat-message--ai {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 75%;
+  animation: msgIn 0.22s ease;
+}
+
+/* Backwards compat aliases */
 .message {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  max-width: 82%;
+  max-width: 75%;
   animation: msgIn 0.22s ease;
 }
 
+.chat-message--user,
 .message.user-message {
   align-self: flex-end;
   flex-direction: row-reverse;
 }
 
+.chat-message--ai,
 .message.ai-message {
   align-self: flex-start;
 }
 
+/* Message avatar */
+.chat-message--user .message-avatar,
+.chat-message--ai .message-avatar,
 .message-avatar {
   width: 30px;
   height: 30px;
@@ -194,17 +209,23 @@
   visibility: hidden;
 }
 
+.chat-message--user.is-first .message-avatar,
+.chat-message--ai.is-first .message-avatar,
 .message.is-first .message-avatar {
   visibility: visible;
 }
 
+/* Bubble content */
+.chat-message--user .message-bubble,
+.chat-message--ai .message-bubble,
 .message-bubble {
-  padding: 10px 14px;
+  padding: 12px 16px;
   font-size: 14px;
   line-height: 1.5;
   word-break: break-word;
 }
 
+.chat-message--user .message-bubble,
 .user-message .message-bubble {
   background: linear-gradient(135deg, rgba(220,4,140,0.82), rgba(130,2,190,0.82));
   color: #fff;
@@ -212,6 +233,7 @@
   box-shadow: 0 1px 4px rgba(0,0,0,0.22);
 }
 
+.chat-message--ai .message-bubble,
 .ai-message .message-bubble {
   background: rgba(255,255,255,0.05);
   color: rgba(255,255,255,0.95);
@@ -219,6 +241,8 @@
   border: 1px solid rgba(255,255,255,0.07);
 }
 
+.chat-message--ai .message-bubble.error-bubble,
+.ai-message .message-bubble.error-bubble,
 .message-bubble.error-bubble {
   background: rgba(239,68,68,0.12);
   border: 1px solid rgba(239,68,68,0.3);
@@ -227,6 +251,7 @@
 }
 
 /* Thinking bubble */
+.chat-message--ai.is-first.thinking-bubble,
 .thinking-bubble {
   align-self: flex-start;
   display: flex;
@@ -353,15 +378,32 @@
 }
 .suggestion-chip:hover { background: rgba(240,5,154,0.16); }
 
-/* Input area */
-.chat-input-area {
+/* Input bar — fixed bottom, responsive */
+.chat-input-area,
+.chat-input-bar {
   display: flex;
   align-items: flex-end;
   gap: 10px;
   padding: 12px 14px;
-  background: rgba(0,0,0,0.3);
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: rgba(15, 15, 26, 0.97);
   border-top: 1px solid rgba(255,255,255,0.06);
   flex-shrink: 0;
+  backdrop-filter: blur(10px);
+}
+
+/* Fixed-bottom input bar for full-screen chat */
+.chat-screen > .chat-input-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+}
+
+/* Extra bottom padding for messages so they're not hidden behind fixed input */
+.chat-screen > .chat-input-bar ~ .chat-messages {
+  padding-bottom: 90px;
 }
 
 .chat-textarea {
@@ -413,19 +455,10 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Mobile: fix input to bottom */
+/* Mobile: extra padding for safe area */
 @media (max-width: 600px) {
-  .chat-input-area {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
-    background: rgba(15, 15, 26, 0.97);
-    backdrop-filter: blur(10px);
-  }
-  .chat-messages {
-    padding-bottom: 90px;
+  .chat-screen > .chat-input-bar ~ .chat-messages {
+    padding-bottom: 100px;
   }
 }
 
@@ -464,15 +497,19 @@
   flex-direction: column;
   gap: 4px;
 }
+.chat-screen-embedded .chat-message--user,
+.chat-screen-embedded .chat-message--ai,
 .chat-screen-embedded .message {
-  max-width: 82%;
+  max-width: 75%;
 }
+.chat-screen-embedded .chat-input-bar,
 .chat-screen-embedded .chat-input-area {
   display: flex;
   gap: 10px;
   padding: 12px 14px;
   border-top: 1px solid rgba(255,255,255,0.06);
   align-items: flex-end;
+  background: rgba(15,15,22,0.6);
 }
 .chat-screen-embedded .chat-textarea {
   flex: 1;
