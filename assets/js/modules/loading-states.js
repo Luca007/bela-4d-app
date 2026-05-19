@@ -293,7 +293,7 @@ const AI_LOADING_MESSAGES = {
  */
 export async function aiLoading(actionName, fn) {
   const message = AI_LOADING_MESSAGES[actionName] || AI_LOADING_MESSAGES.default;
-  const loader = UIComponents_loaderOverlay(message);
+  const loader = await UIComponents_loaderOverlay(message);
   document.body.appendChild(loader);
 
   try {

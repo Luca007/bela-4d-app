@@ -1225,6 +1225,15 @@ exports.awardXp = onCall({ region: REGION }, async (request) => {
     throw new HttpsError('invalid-argument', `amount deve ser inteiro entre 1 e 2000, recebido: ${amount}`);
   }
 
+  // Validação do amount vs XP_EVENTS_MAP (impede XP inflation via DevTools)
+  const expectedAmount = XP_EVENTS_MAP[event];
+  if (expectedAmount !== undefined && xp !== expectedAmount) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Amount ${xp} não confere com evento ${event} (esperado: ${expectedAmount})`
+    );
+  }
+
   // Validação do reason (opcional)
   if (reason !== undefined && (typeof reason !== 'string' || reason.length > 200)) {
     throw new HttpsError('invalid-argument', 'reason deve ser string <= 200 chars');
