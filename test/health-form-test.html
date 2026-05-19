@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TEST — Health Form (Seção 1)</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/forms.css">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+      "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+    }
+  }
+  </script>
+
+  <style>
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', system-ui, sans-serif; margin: 0; }
+    #app { width: 100%; min-height: 100vh; }
+    #test-banner {
+      position: fixed; top: 0; left: 0; right: 0;
+      background: #fbbf24; color: #000; padding: 4px 12px;
+      font-size: 11px; font-weight: 700; z-index: 10000;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="test-banner">🧪 MODO TESTE — firestoreService mockado | section=<span id="cs">0</span></div>
+  <div id="app"></div>
+
+  <script type="module">
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    import { HealthFormScreen } from '/assets/js/screens/health-form.js';
+
+    // Setup fake user session
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+
+    // Read URL params for prefill/section
+    const params = new URLSearchParams(window.location.search);
+    const section = parseInt(params.get('section') || '0', 10);
+    const useAiPrefill = params.get('aiPrefill') === '1';
+
+    const aiPrefillData = useAiPrefill ? {
+      fullName: 'Maria da Silva',
+      birthDate: '1985-03-12',
+      gender: 'Feminino',
+      weight: '72.5',
+      height: '163',
+      hba1c: '7.2',
+      glucoseFasting: '128',
+    } : null;
+
+    // Mount the screen
+    window.__screen = new HealthFormScreen({ aiPrefillData, onNavigate: (...a) => console.log('[NAV]', a) });
+    window.__screen.currentSection = section;
+    document.getElementById('cs').textContent = String(section);
+
+    // Hook ready-flag for Puppeteer/Playwright
+    (async () => {
+      await window.__screen.mount();
+      window.__screen.currentSection = section;
+      // Re-render at the requested section
+      window.__screen.container.innerHTML = '';
+      window.__screen.container.appendChild(window.__screen.render());
+      window.__ready = true;
+      console.log('[TEST] mounted, section=', section);
+    })();
+  </script>
+</body>
+</html>

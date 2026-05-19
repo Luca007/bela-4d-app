@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TEST — Próximo→ sem preencher</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/forms.css">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+      "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+    }
+  }
+  </script>
+
+  <style>
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', system-ui, sans-serif; margin: 0; }
+    #app { width: 100%; min-height: 100vh; }
+    #test-banner {
+      position: fixed; top: 0; left: 0; right: 0;
+      background: #fbbf24; color: #000; padding: 2px 12px;
+      font-size: 10px; font-weight: 700; z-index: 10000;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="test-banner">🧪 TESTE: clicando Próximo→ na Seção 1 vazia (deve bloquear, suspeitamos que avança)</div>
+  <div id="app"></div>
+
+  <script type="module">
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    import { HealthFormScreen } from '/assets/js/screens/health-form.js';
+
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+
+    window.__screen = new HealthFormScreen({ aiPrefillData: null, onNavigate: (...a) => console.log('[NAV]', a) });
+
+    (async () => {
+      await window.__screen.mount();
+      // Now simulate clicking Próximo→
+      await new Promise(r => setTimeout(r, 200));
+      const buttons = document.querySelectorAll('button');
+      const nextBtn = Array.from(buttons).find(b => b.textContent.includes('Próximo'));
+      console.log('[TEST] Found Próximo button:', !!nextBtn, 'text:', nextBtn?.textContent);
+      if (nextBtn) {
+        nextBtn.click();
+        await new Promise(r => setTimeout(r, 300));
+      }
+      window.__currentSection = window.__screen.currentSection;
+      window.__ready = true;
+      console.log('[TEST] After click, currentSection =', window.__screen.currentSection);
+    })();
+  </script>
+</body>
+</html>
