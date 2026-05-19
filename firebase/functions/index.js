@@ -57,6 +57,57 @@ const ACHIEVEMENTS_CATALOG = [
 ];
 
 // ─────────────────────────────────────────────
+// LEVELS TABLE — mirror from seedAppConfig / constants.js
+// ─────────────────────────────────────────────
+const LEVELS = [
+  { level: 1, minXp: 0,    maxXp: 499   },
+  { level: 2, minXp: 500,  maxXp: 1199  },
+  { level: 3, minXp: 1200, maxXp: 2199  },
+  { level: 4, minXp: 2200, maxXp: 3399  },
+  { level: 5, minXp: 3400, maxXp: 4799  },
+  { level: 6, minXp: 4800, maxXp: 6499  },
+  { level: 7, minXp: 6500, maxXp: 8499  },
+  { level: 8, minXp: 8500, maxXp: 99999 },
+];
+
+function getLevelForXp(xp) {
+  for (let i = LEVELS.length - 1; i >= 0; i--) {
+    if (xp >= LEVELS[i].minXp) return LEVELS[i].level;
+  }
+  return 1;
+}
+
+// ─────────────────────────────────────────────
+// XP EVENTS MAP — mirror from seedAppConfig xpEvents
+// ─────────────────────────────────────────────
+const XP_EVENTS_MAP = {
+  DAILY_LOGIN: 10,
+  HEALTH_FORM_COMPLETED: 150,
+  MENU_FORM_COMPLETED: 100,
+  CHAT_MESSAGE_SENT: 5,
+  RECIPE_GENERATED: 30,
+  RECIPE_SAVED: 15,
+  FOOD_EVALUATED: 10,
+  BLOOD_TEST_UPLOADED: 200,
+  ONBOARDING_COMPLETED: 100,
+  STREAK_7_DAYS: 75,
+  STREAK_14_DAYS: 150,
+  STREAK_30_DAYS: 300,
+  PROFILE_COMPLETE: 50,
+  SHARE_ACHIEVEMENT: 20,
+  ACHIEVEMENT_CLAIMED: 0,
+};
+
+const ACHIEVEMENT_CONDITION_EVENTS = [
+  ...new Set(ACHIEVEMENTS_CATALOG.map(a => a.condition?.event).filter(Boolean)),
+];
+
+const VALID_EVENTS = new Set([
+  ...Object.keys(XP_EVENTS_MAP),
+  ...ACHIEVEMENT_CONDITION_EVENTS,
+]);
+
+// ─────────────────────────────────────────────
 // SECRETS — definir via: firebase functions:secrets:set N8N_BASE_URL
 // ─────────────────────────────────────────────
 const secretN8nBaseUrl = defineSecret('N8N_BASE_URL');
@@ -138,8 +189,8 @@ async function unlockAchievement(uid, achievementId) {
   return true;
 }
 
-// Helper: concede XP ao usuário (backend)
-async function awardXp(uid, xpAmount, eventId = null) {
+// Helper interno: concede XP ao usuário (usado por Cloud Functions existentes)
+async function awardXpInternal(uid, xpAmount, eventId = null) {
   if (!xpAmount || xpAmount <= 0) return;
   try {
     const userRef = db.collection('users').doc(uid);
@@ -159,10 +210,11 @@ async function awardXp(uid, xpAmount, eventId = null) {
         xpAwarded: xpAmount,
         totalXp: newXp,
         timestamp: FieldValue.serverTimestamp(),
+        source: 'function',
       });
     }
   } catch (e) {
-    log('error', 'awardXp error', { error: e.message });
+    log('error', 'awardXpInternal error', { error: e.message });
   }
 }
 
@@ -528,9 +580,9 @@ exports.claimAchievement = onCall({ region: REGION, secrets: SECRETS }, async (r
 
   if (achievement.xp > 0) {
     try {
-      await awardXp(uid, achievement.xp, `claim_${achievementId}`);
+      await awardXpInternal(uid, achievement.xp, `claim_${achievementId}`);
     } catch (e) {
-      log('error', 'awardXp on claim failed', { error: e.message });
+      log('error', 'awardXpInternal on claim failed', { error: e.message });
     }
   }
 
@@ -1146,4 +1198,99 @@ exports.seedAppConfig = onRequest({ region: REGION, secrets: SECRETS }, async (r
     console.error('[Functions] seedAppConfig error:', error.message || error);
     res.status(500).json({ success: false, error: 'internal-error' });
   }
+});
+
+// ─────────────────────────────────────────────
+// awardXp — Cloud Function onCall (chamada pelo frontend)
+//
+// Substitui o write direto a users/{uid}/xpLog pelo cliente.
+// Valida event + amount server-side, executa transação atômica.
+// Retorna: { ok: true, xp, level, leveledUp }
+// ─────────────────────────────────────────────
+exports.awardXp = onCall({ region: REGION }, async (request) => {
+  const { auth, data } = request;
+  if (!auth?.uid) throw new HttpsError('unauthenticated', 'Login obrigatório');
+  const uid = auth.uid;
+
+  const { event, amount, reason, meta, idempotencyKey } = data || {};
+
+  // Validação do evento
+  if (!event || typeof event !== 'string' || !VALID_EVENTS.has(event)) {
+    throw new HttpsError('invalid-argument', `Evento inválido: ${event}`);
+  }
+
+  // Validação do amount
+  const xp = Math.floor(Number(amount));
+  if (!Number.isFinite(xp) || xp < 1 || xp > 2000) {
+    throw new HttpsError('invalid-argument', `amount deve ser inteiro entre 1 e 2000, recebido: ${amount}`);
+  }
+
+  // Validação do reason (opcional)
+  if (reason !== undefined && (typeof reason !== 'string' || reason.length > 200)) {
+    throw new HttpsError('invalid-argument', 'reason deve ser string <= 200 chars');
+  }
+
+  const userRef = db.collection('users').doc(uid);
+  const rankingRef = db.collection('globalRanking').doc(uid);
+
+  // Se idempotencyKey fornecido, usá-lo como doc ID para evitar duplicata
+  const xpLogRef = idempotencyKey
+    ? db.collection('users').doc(uid).collection('xpLog').doc(String(idempotencyKey))
+    : db.collection('users').doc(uid).collection('xpLog').doc();
+
+  let newXp, newLevel, leveledUp;
+
+  try {
+    await db.runTransaction(async (tx) => {
+      const [userSnap, xpLogSnap] = await Promise.all([
+        tx.get(userRef),
+        idempotencyKey ? tx.get(xpLogRef) : Promise.resolve({ exists: false }),
+      ]);
+
+      // Idempotência: se já existe, retorna sem modificar
+      if (xpLogSnap.exists) {
+        const existing = xpLogSnap.data();
+        newXp = existing.totalXp;
+        newLevel = existing.level || getLevelForXp(newXp);
+        leveledUp = false;
+        return;
+      }
+
+      const userData = userSnap.exists ? userSnap.data() : {};
+      const prevXp = userData.xp || 0;
+      const prevLevel = userData.level || getLevelForXp(prevXp);
+      newXp = prevXp + xp;
+      newLevel = getLevelForXp(newXp);
+      leveledUp = newLevel > prevLevel;
+
+      const userUpdate = { xp: newXp, updatedAt: FieldValue.serverTimestamp() };
+      if (leveledUp) userUpdate.level = newLevel;
+
+      tx.set(userRef, userUpdate, { merge: true });
+
+      tx.set(xpLogRef, {
+        event,
+        amount: xp,
+        totalXp: newXp,
+        level: newLevel,
+        reason: reason || null,
+        meta: meta || null,
+        source: 'function',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      tx.set(rankingRef, {
+        uid,
+        xp: newXp,
+        level: newLevel,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
+  } catch (e) {
+    log('error', 'awardXp onCall transaction error', { uid, event, error: e.message });
+    throw new HttpsError('internal', 'Erro ao registrar XP');
+  }
+
+  log('info', 'awardXp onCall ok', { uid, event, xp, newXp, newLevel, leveledUp });
+  return { ok: true, xp: newXp, level: newLevel, leveledUp: !!leveledUp };
 });

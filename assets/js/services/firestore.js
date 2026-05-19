@@ -14,7 +14,7 @@
  *   users/{uid}/examTracking/{id}  → exames de acompanhamento (HbA1c, glicemia etc.)
  */
 
-import { getFirestore, firebaseConfig } from '../config/firebase.js';
+import { getFirestore, firebaseConfig, getFunctions, httpsCallable } from '../config/firebase.js';
 import {
   addDoc,
   arrayUnion,
@@ -382,7 +382,7 @@ export class FirestoreService {
 
       if (completed) {
         await this.updateUserStatus(uid, 'awaiting_menu_form');
-        await this.awardXp(uid, getXpEvents().HEALTH_FORM_COMPLETED, 'health_form_done');
+        await this.awardXp(uid, getXpEvents().HEALTH_FORM_COMPLETED, 'HEALTH_FORM_COMPLETED', { idempotencyKey: 'health_form_done' });
       }
       return true;
     }, 'saveHealthForm', false);
@@ -498,7 +498,7 @@ export class FirestoreService {
 
       if (completed) {
         await this.updateUserStatus(uid, 'active');
-        await this.awardXp(uid, getXpEvents().MENU_FORM_COMPLETED, 'menu_form_done');
+        await this.awardXp(uid, getXpEvents().MENU_FORM_COMPLETED, 'MENU_FORM_COMPLETED', { idempotencyKey: 'menu_form_done' });
       }
       return true;
     }, 'saveMenuForm', false);
@@ -548,7 +548,7 @@ export class FirestoreService {
         updatedAt: serverTimestamp(),
       }, { merge: true });
       await this.updateUserStatus(uid, 'active');
-      await this.awardXp(uid, getXpEvents().MENU_FORM_COMPLETED, 'forms_completed');
+      await this.awardXp(uid, getXpEvents().MENU_FORM_COMPLETED, 'MENU_FORM_COMPLETED', { idempotencyKey: 'forms_completed' });
       return true;
     }, 'submitFormsComplete');
   }
@@ -571,7 +571,7 @@ export class FirestoreService {
 
       // Atualiza status do usuário para "processando"
       await this.updateUserStatus(uid, 'processing_blood_test');
-      await this.awardXp(uid, getXpEvents().BLOOD_TEST_UPLOADED, 'blood_test_uploaded');
+      await this.awardXp(uid, getXpEvents().BLOOD_TEST_UPLOADED, 'BLOOD_TEST_UPLOADED', { idempotencyKey: 'blood_test_uploaded' });
 
       return ref.id;
     }, 'saveBloodTest');
@@ -649,9 +649,9 @@ export class FirestoreService {
         await this.incrementCounter(uid, 'totalChatMessages');
         const profile = await this.getUserProfile(uid);
         const total = (profile?.totalChatMessages ?? 0) + 1;
-        if (total === 10)  await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT * 10, 'chat_10');
-        if (total === 50)  await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT * 20, 'chat_50');
-        else               await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT);
+        if (total === 10)  await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT * 10, 'CHAT_MESSAGE_SENT', { idempotencyKey: 'chat_10' });
+        if (total === 50)  await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT * 20, 'CHAT_MESSAGE_SENT', { idempotencyKey: 'chat_50' });
+        else               await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT, 'CHAT_MESSAGE_SENT');
       }
 
       return ref.id;
@@ -860,7 +860,7 @@ export class FirestoreService {
         createdAt: serverTimestamp(),
       });
       await this.incrementCounter(uid, 'totalRecipes');
-      await this.awardXp(uid, getXpEvents().RECIPE_SAVED, 'recipe_generated');
+      await this.awardXp(uid, getXpEvents().RECIPE_SAVED, 'RECIPE_SAVED', { idempotencyKey: 'recipe_generated' });
       return ref.id;
     }, 'saveRecipe');
   }
@@ -875,7 +875,7 @@ export class FirestoreService {
         ...evaluationData,
         createdAt: serverTimestamp(),
       });
-      await this.awardXp(uid, getXpEvents().FOOD_EVALUATED, 'food_evaluated');
+      await this.awardXp(uid, getXpEvents().FOOD_EVALUATED, 'FOOD_EVALUATED', { idempotencyKey: 'food_evaluated' });
       return ref.id;
     }, 'saveFoodEvaluation');
   }
@@ -985,50 +985,31 @@ export class FirestoreService {
     }
   }
 
-  async awardXp(uid, xpAmount, eventId = null) {
+  async awardXp(uid, xpAmount, event, options = {}) {
     try {
-      // Deduplicação: evitar XP duplicado por mesmo eventId em menos de 60s
-      if (eventId && eventId !== 'daily_login') {
-        try {
-          const recentQuery = query(
-            collection(this.getDb(), 'users', uid, 'xpLog'),
-            where('eventId', '==', eventId),
-            where('timestamp', '>', new Date(Date.now() - 60000)),
-            limit(1)
-          );
-          const recentSnap = await getDocs(recentQuery);
-          if (!recentSnap.empty) return 0;
-        } catch (dedupErr) {
-          // Índice composto ausente — ignora dedup e prossegue
-          if (dedupErr?.code !== 'failed-precondition') {
-            console.warn('[Firestore] awardXp dedup error:', dedupErr.message);
-          }
-        }
-      }
+      const fn = httpsCallable(getFunctions(), 'awardXp');
+      const payload = {
+        event: event || 'DAILY_LOGIN',
+        amount: xpAmount,
+      };
+      if (options.idempotencyKey) payload.idempotencyKey = options.idempotencyKey;
+      if (options.reason) payload.reason = options.reason;
+      if (options.meta) payload.meta = options.meta;
 
-      const { increment } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js');
-      const profile = await this.getUserProfile(uid);
-      const newXp = (profile?.xp || 0) + xpAmount;
-      const newLevel = getLevelForXp(newXp);
-
-      const updates = { xp: newXp };
-      if (newLevel.level !== (profile?.level || 1)) {
-        updates.level = newLevel.level;
-      }
-
-      await updateDoc(this.userRef(uid), updates);
-
-      // Log do evento
-      if (eventId) {
-        await addDoc(collection(this.getDb(), 'users', uid, 'xpLog'), {
-          eventId,
-          xpAwarded: xpAmount,
-          totalXp: newXp,
-          timestamp: serverTimestamp(),
-        });
-      }
+      const result = await fn(payload);
+      return result.data;
     } catch (e) {
-      console.error('[Firestore] awardXp:', e);
+      const code = e?.code || '';
+      if (code === 'functions/permission-denied') {
+        console.error('[Firestore] awardXp: permissão negada pela Function');
+        this._showToast?.('Não foi possível registrar XP: acesso negado.', 'error');
+      } else if (code === 'functions/invalid-argument') {
+        console.error('[Firestore] awardXp: argumento inválido', e.message);
+        this._showToast?.('Não foi possível registrar XP: evento inválido.', 'error');
+      } else {
+        console.error('[Firestore] awardXp:', e);
+      }
+      return null;
     }
   }
 
@@ -1065,7 +1046,7 @@ export class FirestoreService {
         return false;
       }
 
-      await this.awardXp(uid, getXpEvents().DAILY_LOGIN, 'daily_login');
+      await this.awardXp(uid, getXpEvents().DAILY_LOGIN, 'DAILY_LOGIN', { idempotencyKey: 'daily_login' });
       await this._updateStreak(uid, profile);
       await updateDoc(this.userRef(uid), {
         lastLoginAt: serverTimestamp(),
@@ -1184,7 +1165,7 @@ export class FirestoreService {
 
       // Award XP only on claim
       if (achievement.xp > 0) {
-        await this.awardXp(uid, achievement.xp, `claim_${achievementId}`);
+        await this.awardXp(uid, achievement.xp, 'ACHIEVEMENT_CLAIMED', { idempotencyKey: `claim_${achievementId}`, meta: { achievementId } });
       }
 
       return true;

@@ -27,7 +27,7 @@ export async function initializeFirebase() {
     app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
     auth = getAuthInstance(app);
     db = getFirestoreInstance(app);
-    functions = getFunctionsInstance(app);
+    functions = getFunctionsInstance(app, 'southamerica-east1');
 
     // Habilita persistência offline (Firestore) — dados em cache no IndexedDB
     try {
