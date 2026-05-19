@@ -194,16 +194,29 @@ export class AwaitingScreen extends BaseScreen {
     desc.textContent = 'Escolha a data e o horário em que sua Guardiã pode te encontrar pelo Google Meet. A reunião dura cerca de 40 minutos.';
     wrap.appendChild(desc);
 
-    // ─── Entrada rápida (data + hora nativas) ───
+    // ─── PASSO 1: Entrada rápida (data + hora nativas) — em destaque ───
+    const step1Label = DOM.create('div');
+    step1Label.style.cssText = `
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #f0059a; color: #fff;
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 10px; font-weight: 800;
+      letter-spacing: 0.6px; text-transform: uppercase;
+      margin-bottom: 8px;
+    `;
+    step1Label.textContent = '① Escolha data e horário';
+    wrap.appendChild(step1Label);
+
     const quickEntry = DOM.create('div');
     quickEntry.id = 'meeting-quick-entry';
     quickEntry.style.cssText = `
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 12px;
-      padding: 14px;
+      background: rgba(240,5,154,0.06);
+      border: 2px solid rgba(240,5,154,0.35);
+      border-radius: 14px;
+      padding: 16px;
       margin-bottom: 16px;
       text-align: left;
+      box-shadow: 0 0 24px rgba(240,5,154,0.08);
     `;
     wrap.appendChild(quickEntry);
 
@@ -221,11 +234,18 @@ export class AwaitingScreen extends BaseScreen {
     `;
     wrap.appendChild(summary);
 
-    // ─── Calendário em grade ───
-    const calLabel = DOM.create('div');
-    calLabel.style.cssText = 'font-size: 11px; color: var(--color-muted); margin-bottom: 6px; text-align: left; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;';
-    calLabel.textContent = 'Ou escolha pelo calendário';
-    wrap.appendChild(calLabel);
+    // ─── PASSO 2: Calendário em grade (alternativa visual) ───
+    const step2Label = DOM.create('div');
+    step2Label.style.cssText = `
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,0.08); color: var(--color-muted);
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.6px; text-transform: uppercase;
+      margin-bottom: 8px;
+    `;
+    step2Label.textContent = '② Ou navegue pelo calendário';
+    wrap.appendChild(step2Label);
 
     const calendar = DOM.create('div');
     calendar.id = 'meeting-calendar';
@@ -293,15 +313,15 @@ export class AwaitingScreen extends BaseScreen {
 
     const title = DOM.create('div');
     title.style.cssText = `
-      font-size: 13px; font-weight: 700; color: var(--color-text);
+      font-size: 14px; font-weight: 800; color: var(--color-text);
       margin-bottom: 4px;
     `;
-    title.textContent = '⚡ Entrada rápida';
+    title.textContent = '⚡ Quando você prefere conversar?';
     host.appendChild(title);
 
     const hint = DOM.create('div');
-    hint.style.cssText = 'font-size: 11px; color: var(--color-muted); margin-bottom: 10px; line-height: 1.4;';
-    hint.textContent = 'Já sabe a data e horário? Digite aqui — seg a sex, 08:00 às 17:30.';
+    hint.style.cssText = 'font-size: 12px; color: var(--color-muted); margin-bottom: 12px; line-height: 1.4;';
+    hint.textContent = 'Selecione a data e o horário (seg a sex, 08:00 às 17:30, slots de 30 min).';
     host.appendChild(hint);
 
     const row = DOM.create('div');

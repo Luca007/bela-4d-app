@@ -43,6 +43,16 @@ export class ChatScreen extends BaseScreen {
   }
 
   async mount() {
+    // Anexa o elemento ao DOM ANTES de qualquer operação async para que
+    // _render() (que depende de this.element) funcione mesmo se algum
+    // listener disparar antes do loadChatHistory completar.
+    this.container = DOM.byId('app') || DOM.query('main') || document.body;
+    this.element = this.render();
+    if (this.container) {
+      this.container.innerHTML = '';
+      this.container.appendChild(this.element);
+    }
+
     try {
       // Handle pinned recipe from params
       if (this.params?.recipeId) {
