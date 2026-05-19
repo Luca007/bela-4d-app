@@ -389,22 +389,23 @@ export const RED_LIST = [
 ];
 
 // ============================================================
-// DASHBOARD NAVIGATION
+// DASHBOARD NAVIGATION — lido do Firestore (State.appConfig.navItems)
+// com fallback para o array abaixo (mantido sincronizado com seed-app-config.js)
 // ============================================================
-export const NAV_ITEMS = [
-  { id: 'home', label: 'Início', icon: 'home' },
-  { id: 'perfil', label: 'Meu Perfil', icon: 'user' },
-  { id: 'receitas', label: 'Receitas', icon: 'book-open' },
-  { id: 'avaliador', label: 'Avaliador', icon: 'utensils' },
-  { id: 'exames', label: 'Exames', icon: 'bar-chart-2' },
-  { id: 'ranking', label: 'Ranking', icon: 'trophy' },
-  { id: 'chat', label: 'Chat', icon: 'message-circle' },
+const NAV_ITEMS_FALLBACK = [
+  { id: 'inicio',     label: 'Início',     icon: '🏠', sub: 'Chat · Receita · Cardápio' },
+  { id: 'evolucao',   label: 'Evolução',   icon: '📊', sub: 'Gráficos · Progresso' },
+  { id: 'receitas',   label: 'Receitas',   icon: '🥗', sub: 'Cardápio personalizado' },
+  { id: 'exames',     label: 'Exames',     icon: '🔬', sub: 'Pedidos · Resultados' },
+  { id: 'conquistas', label: 'Conquistas', icon: '🏆', sub: 'Ranking · Comunidade' },
+  { id: 'chat',       label: 'Chat IA',    icon: '💬', sub: 'Dúvidas alimentares' },
+  { id: 'perfil',     label: 'Meu Perfil', icon: '👤', sub: 'Avatar · Configurações' },
 ];
 
 // ════════════════════════════════════════════════════════════════════════
 // HELPERS — leem do Firestore (State.appConfig) com fallback para as
 // constantes hardcoded acima. Use SEMPRE estas funções; nunca acesse
-// LEVELS, ACHIEVEMENTS_CATALOG ou XP_EVENTS diretamente.
+// LEVELS, ACHIEVEMENTS_CATALOG, XP_EVENTS ou NAV_ITEMS_FALLBACK diretamente.
 // ════════════════════════════════════════════════════════════════════════
 
 /**
@@ -450,4 +451,19 @@ export function getXpEvents() {
     }
   } catch (_) { /* State ainda não inicializado */ }
   return XP_EVENTS;
+}
+
+/**
+ * Retorna array de itens de navegação. Prioriza Firestore (State.appConfig.navItems);
+ * fallback para NAV_ITEMS_FALLBACK.
+ * @returns {Array}
+ */
+export function getNavItems() {
+  try {
+    const appConfig = window.State?.data?.appConfig;
+    if (appConfig?.navItems && Array.isArray(appConfig.navItems) && appConfig.navItems.length > 0) {
+      return appConfig.navItems;
+    }
+  } catch (_) { /* State ainda não inicializado */ }
+  return NAV_ITEMS_FALLBACK;
 }
