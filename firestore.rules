@@ -1,6 +1,24 @@
 rules_version = '2';
+
+// =============================================================
+// Firestore Security Rules — Programa 4D (Bela 4D)
+//
+// Princípios:
+//   1. Usuário só lê/escreve os PRÓPRIOS dados.
+//   2. Config global da app (appConfig/*) é leitura pública para
+//      qualquer usuário autenticado, sem escrita pelo cliente.
+//   3. Coleções derivadas (xpLog, achievements, globalRanking)
+//      só podem ser ESCRITAS por Cloud Functions (Admin SDK
+//      ignora rules) — bloqueamos write pelo cliente.
+//   4. Novos usuários: ao logar pela 1ª vez, app.js chama
+//      ensureUserDocument(uid) que cria users/{uid} com defaults
+//      — permitido pela regra de owner.
+// =============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---------- helpers ----------
     function isSignedIn() {
       return request.auth != null;
     }
@@ -9,23 +27,94 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    // App config — leitura pública para usuários autenticados
+    // -------------------------------------------------------
+    // appConfig/{docId}
+    //   Documentos: levels, achievementsCatalog, xpEvents,
+    //   navItems, recipes, ranking, dicas, refeicoes.
+    //   Lidos pelo frontend após login para evitar hardcode.
+    // -------------------------------------------------------
     match /appConfig/{docId} {
-      allow read: if isSignedIn();
-      allow write: if false;  // apenas admin/Cloud Functions
+      allow read:  if isSignedIn();
+      allow write: if false; // só Cloud Functions / Admin SDK
     }
 
+    // -------------------------------------------------------
+    // globalRanking/{uid}
+    //   Top ranking público (lido por todos autenticados).
+    //   Mantido por Cloud Function (updateGlobalRanking).
+    //   Contém apenas campos públicos: name, xp, level, streak,
+    //   avatar, position.
+    // -------------------------------------------------------
+    match /globalRanking/{uid} {
+      allow read:  if isSignedIn();
+      allow write: if false;
+    }
+
+    // -------------------------------------------------------
+    // users/{uid}
+    //   Documento principal do usuário + todas as subcoleções.
+    //   - Owner pode ler/escrever o próprio doc (necessário para
+    //     ensureUserDocument criar registro no 1º login).
+    //   - Owner pode ler/escrever a maioria das subcoleções.
+    //   - Subcoleções "sensíveis" (xpLog, achievements) bloqueiam
+    //     write pelo cliente — apenas Functions escrevem.
+    // -------------------------------------------------------
     match /users/{uid} {
       allow read, write: if isOwner(uid);
 
-      match /{subCollection}/{docId} {
+      // -- Subcoleções escrita-livre para owner --
+      match /onboardingInterview/{docId} {
         allow read, write: if isOwner(uid);
       }
-    }
+      match /healthForm/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /menuForm/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /formProgress/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /bloodTests/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /examRequests/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /examTracking/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /chatHistory/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /recipes/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /foodEvaluations/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /notifications/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /pendingActions/{docId} {
+        allow read, write: if isOwner(uid);
+      }
 
-    match /globalRanking/{uid} {
-      allow read: if isSignedIn();
-      allow write: if false;
+      // -- Subcoleções READ-ONLY para owner (write via Function) --
+      // achievements: claim acontece via Cloud Function/Admin SDK.
+      // xpLog: histórico imutável; awardXp roda em Function.
+      match /achievements/{docId} {
+        allow read:  if isOwner(uid);
+        allow write: if false;
+      }
+      match /xpLog/{docId} {
+        allow read:  if isOwner(uid);
+        allow write: if false;
+      }
+      match /xpEvents/{docId} {
+        allow read:  if isOwner(uid);
+        allow write: if false;
+      }
     }
   }
 }
