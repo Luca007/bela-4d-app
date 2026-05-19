@@ -1292,6 +1292,10 @@ exports.awardXp = onCall({ region: REGION }, async (request) => {
         uid,
         xp: newXp,
         level: newLevel,
+        name: userData.name || null,
+        avatar: userData.avatar || null,
+        avatarColor: userData.avatarColor || null,
+        streak: Number(userData.streak || 0),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
     });

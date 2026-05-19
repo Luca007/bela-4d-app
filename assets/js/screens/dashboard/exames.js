@@ -17,7 +17,7 @@ export function render(dash) {
           <div class="dash-card pad" style="border-color: rgba(240,5,154,0.18); background: rgba(240,5,154,0.06);">
             <p style="color:var(--dash-muted);font-size:14px;"><span style="color:#f0059a;font-weight:700;">Dra. Jessica Benevides</span> · CRM-SP 145.832 · Endocrinologista parceira da Mentoria 4D</p>
           </div>
-          ${dash.examOrders.map(order => {
+          ${(dash.examOrders || []).map(order => {
             const fileReady = Boolean(order.fileReady || order.pdfReady || order.fileUrl || order.driveFileUrl);
             return `
             <div class="dash-card pad">
@@ -28,7 +28,7 @@ export function render(dash) {
                 </div>
                 <span style="background:${order.st === 'Pendente' ? 'rgba(240,5,154,0.15)' : 'rgba(31,204,116,0.12)'};border:1px solid ${order.st === 'Pendente' ? 'rgba(240,5,154,0.28)' : 'rgba(31,204,116,0.32)'};border-radius:8px;padding:5px 12px;color:${order.st === 'Pendente' ? '#f0059a' : '#1fcc74'};font-size:13px;font-weight:700;">${order.st}</span>
               </div>
-              <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px;">${order.ex.map(exam => '<div style="display:flex;gap:10px;align-items:center;"><div style="width:6px;height:6px;border-radius:50%;background:#f0059a;flex-shrink:0;"></div><span style="color:var(--dash-text);font-size:15px;">' + exam + '</span></div>').join('')}</div>
+              <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px;">${(order.ex || []).map(exam => '<div style="display:flex;gap:10px;align-items:center;"><div style="width:6px;height:6px;border-radius:50%;background:#f0059a;flex-shrink:0;"></div><span style="color:var(--dash-text);font-size:15px;">' + exam + '</span></div>').join('')}</div>
               <div class="dash-card pad" style="padding:10px 14px;border-radius:10px;">📋 <strong style="color:var(--dash-text);">Instruções:</strong> <span style="color:var(--dash-muted);font-size:14px;">${order.ins}</span></div>
               <div style="margin-top:12px;display:flex;justify-content:flex-end;">
                 <button class="dash-primary-btn ${fileReady ? '' : 'dash-hide-disabled'}" data-order-download="${order.id}" ${fileReady ? '' : 'disabled'} style="min-height:42px;padding:10px 14px;border-radius:10px;opacity:${fileReady ? 1 : 0.5};cursor:${fileReady ? 'pointer' : 'not-allowed'};">

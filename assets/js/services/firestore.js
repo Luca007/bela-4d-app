@@ -1174,19 +1174,45 @@ export class FirestoreService {
 
   async getTopRanking(limitCount = 10) {
     return this._run(async () => {
-      const q = query(collection(this.getDb(), 'users'), orderBy('xp', 'desc'), limit(limitCount));
+      // Lê de globalRanking (firestore rules: signed-in pode ler), não de users
+      const q = query(collection(this.getDb(), 'globalRanking'), orderBy('xp', 'desc'), limit(limitCount));
       const snap = await getDocs(q);
-      return snap.docs.map((docSnap, index) => {
+
+      if (snap.empty) return [];
+
+      // Dados base do globalRanking
+      const rawList = snap.docs.map(docSnap => {
         const data = docSnap.data() || {};
         return {
-          position: index + 1,
           uid: docSnap.id,
-          name: data.name || 'Usuário',
           xp: Number(data.xp || 0),
           level: Number(data.level || 1),
           streak: Number(data.streak || 0),
-          avatar: data.avatar || '🌸',
-          avatarColor: data.avatarColor || '#f0059a',
+          name: data.name || null,
+          avatar: data.avatar || null,
+          avatarColor: data.avatarColor || null,
+        };
+      });
+
+      // Batch-fetch user docs para campos que globalRanking pode não ter
+      // (remove após cloud function escrever name/avatar/etc)
+      const userDocs = await Promise.all(
+        rawList.map(item =>
+          item.uid ? getDoc(doc(this.getDb(), 'users', item.uid)).catch(() => null) : null
+        )
+      );
+
+      return rawList.map((item, index) => {
+        const ud = userDocs[index]?.data?.() || {};
+        return {
+          position: index + 1,
+          uid: item.uid,
+          name: item.name || ud.name || 'Usuário',
+          xp: item.xp,
+          level: item.level,
+          streak: item.streak || Number(ud.streak || 0),
+          avatar: item.avatar || ud.avatar || '🌸',
+          avatarColor: item.avatarColor || ud.avatarColor || '#f0059a',
         };
       });
     }, 'getTopRanking', []);
