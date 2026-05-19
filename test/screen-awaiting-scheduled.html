@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TEST — Awaiting (scheduled)</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+      "/assets/js/services/auth.js": "/test/mocks/auth.js",
+      "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+      "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+    }
+  }
+  </script>
+  <style>
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', system-ui, sans-serif; margin: 0; }
+    #app { width: 100%; min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    import { firestoreService } from '/test/mocks/firestore.js';
+    import { AwaitingScreen } from '/assets/js/screens/awaiting.js';
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+    // Force a meeting to be scheduled to test confirmation view
+    firestoreService.__memory.userProfile.meeting = {
+      scheduledFor: '2026-05-25T10:00',
+      scheduledAt: new Date().toISOString(),
+      timezone: 'America/Sao_Paulo',
+      status: 'scheduled',
+    };
+    window.__screen = new AwaitingScreen({ status: 'awaiting_onboarding', onNavigate: (...a) => console.log('[NAV]', a) });
+    (async () => { await window.__screen.mount(); window.__ready = true; })();
+  </script>
+</body>
+</html>

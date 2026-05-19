@@ -215,6 +215,58 @@ export class FirestoreService {
     }, 'updateUserStatus', false);
   }
 
+  /**
+   * Agenda a reunião de onboarding. Grava em users/{uid}.meeting e cria
+   * notificação. Mantém o status awaiting_onboarding — a Guardiã confirma
+   * no Firestore quando a reunião acontece (mudando para pending_blood_test
+   * ou filling_health_form).
+   *
+   * @param {string} uid
+   * @param {string} isoDatetime — formato 'YYYY-MM-DDTHH:MM' (input local)
+   * @param {string} timezone   — IANA tz string (ex: 'America/Sao_Paulo')
+   */
+  async scheduleOnboardingMeeting(uid, isoDatetime, timezone = null) {
+    if (!uid || !isoDatetime) return false;
+    this._cacheDelete(`profile_${uid}`);
+    const tz = timezone || (Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo');
+    return this._run(async () => {
+      await updateDoc(this.userRef(uid), {
+        meeting: {
+          scheduledFor: isoDatetime,           // 'YYYY-MM-DDTHH:MM' (local)
+          scheduledAt: serverTimestamp(),       // quando o usuário agendou
+          timezone: tz,
+          status: 'scheduled',                  // scheduled | confirmed | done | cancelled
+        },
+        updatedAt: serverTimestamp(),
+      });
+      try {
+        const human = new Date(isoDatetime).toLocaleString('pt-BR', {
+          dateStyle: 'short', timeStyle: 'short',
+        });
+        await this.createNotification(uid, {
+          title: 'Reunião agendada',
+          message: `Sua reunião inicial foi marcada para ${human}.`,
+          type: 'meeting_scheduled',
+          priority: 'high',
+        });
+      } catch (e) { console.warn('[Firestore] schedule notification failed:', e); }
+      return true;
+    }, 'scheduleOnboardingMeeting', false);
+  }
+
+  async cancelOnboardingMeeting(uid) {
+    if (!uid) return false;
+    this._cacheDelete(`profile_${uid}`);
+    return this._run(async () => {
+      await updateDoc(this.userRef(uid), {
+        'meeting.status': 'cancelled',
+        'meeting.cancelledAt': serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return true;
+    }, 'cancelOnboardingMeeting', false);
+  }
+
   // ─────────────────────────────────────────────
   // FORMULÁRIO DE SAÚDE — Form 1
   // ─────────────────────────────────────────────

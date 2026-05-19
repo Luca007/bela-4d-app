@@ -3,7 +3,18 @@ import { getStaticRefeicoes, getStaticRecipes, getRecipeOfHour, getGreeting, get
 import { Colors } from '../../config/colors.js';
 
 export function render(dash) {
-  const recipe = getRecipeOfHour(dash.recipes);
+  const raw = getRecipeOfHour(dash.recipes);
+  // Normaliza receita com fallbacks para evitar "undefined" no DOM. A IA / Firestore
+  // pode trazer formatos diferentes (camelCase ou abreviado); aqui consolidamos.
+  const recipe = raw ? {
+    id:         raw.id || raw.nm || 'recipe-x',
+    emoji:      raw.emoji || raw.e || '🍽️',
+    name:       raw.name || raw.nm || raw.title || 'Receita sugerida',
+    mealType:   raw.mealType || raw.ct || raw.category || 'Sugestão do dia',
+    time:       raw.time || raw.tm || raw.prepTime || '—',
+    kcal:       raw.kcal ?? raw.kc ?? raw.calories ?? '—',
+    difficulty: raw.difficulty || raw.df || 'Fácil',
+  } : null;
   const meals = Array.isArray(dash.dailyMeals) && dash.dailyMeals.length ? dash.dailyMeals : getStaticRefeicoes();
   const checkedCount = [...dash.homeChecked].filter(id => meals.some(meal => meal.id === id)).length;
   const checkPct = meals.length ? Math.round((checkedCount / meals.length) * 100) : 0;
@@ -41,18 +52,25 @@ export function render(dash) {
           <div style="color:var(--dash-muted);font-size:13px;">Baseada no horário atual</div>
         </div>
       </div>
+      ${recipe ? `
       <div class="dash-card pad" data-recipe-of-hour="${recipe.id}" style="border-color: rgba(31,204,116,0.2); background: rgba(31,204,116,0.04); display:flex; gap:16px; align-items:flex-start; cursor:pointer;">
-        <div style="font-size:44px;line-height:1;flex-shrink:0;">${recipe.emoji || recipe.e}</div>
+        <div style="font-size:44px;line-height:1;flex-shrink:0;">${recipe.emoji}</div>
         <div style="flex:1;">
-          <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:4px;">${recipe.name || recipe.nm}</div>
-          <div style="color:var(--dash-muted);font-size:14px;margin-bottom:10px;">${recipe.mealType || recipe.ct}</div>
+          <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:4px;">${recipe.name}</div>
+          <div style="color:var(--dash-muted);font-size:14px;margin-bottom:10px;">${recipe.mealType}</div>
           <div class="dash-chip-row">
-            <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${recipe.time || recipe.tm}</span>
-            <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${recipe.kcal ?? recipe.kc} kcal</span>
-            <span class="dash-chip">${recipe.difficulty || recipe.df}</span>
+            <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${recipe.time}</span>
+            <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${recipe.kcal} kcal</span>
+            <span class="dash-chip">${recipe.difficulty}</span>
           </div>
         </div>
       </div>
+      ` : `
+      <div class="dash-card pad" style="text-align:center;padding:32px 16px;color:var(--dash-muted);">
+        <div style="font-size:36px;margin-bottom:8px;">🍽️</div>
+        <div style="font-size:14px;">Nenhuma receita sugerida ainda. Peça uma à Guardiã!</div>
+      </div>
+      `}
     </section>
 
     <section>

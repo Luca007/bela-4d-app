@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TEST — Onboarding</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/forms.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+      "/assets/js/services/auth.js": "/test/mocks/auth.js",
+      "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+      "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+    }
+  }
+  </script>
+  <style>
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', system-ui, sans-serif; margin: 0; }
+    #app { width: 100%; min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    import { OnboardingScreen } from '/assets/js/screens/onboarding.js';
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+    const params = new URLSearchParams(window.location.search);
+    const step = parseInt(params.get('step') || '0', 10);
+    window.__screen = new OnboardingScreen({ onNavigate: (...a) => console.log('[NAV]', a) });
+    (async () => {
+      window.__screen.currentStep = step;
+      await window.__screen.mount();
+      window.__screen.currentStep = step;
+      // Re-render at the requested step
+      window.__screen.container.innerHTML = '';
+      window.__screen.container.appendChild(window.__screen.render());
+      window.__ready = true;
+      console.log('[TEST] mounted, step=', step);
+    })();
+  </script>
+</body>
+</html>

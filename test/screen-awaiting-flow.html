@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>TEST — Awaiting flow</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+      "/assets/js/services/auth.js": "/test/mocks/auth.js",
+      "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+      "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+    }
+  }
+  </script>
+  <style>
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', system-ui, sans-serif; margin: 0; }
+    #app { width: 100%; min-height: 100vh; }
+    #flowlog { position: fixed; bottom: 0; right: 0; max-height: 200px; overflow: auto; font-size: 10px; background: #0006; padding: 4px; max-width: 280px; z-index: 10000; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="flowlog"></div>
+  <script type="module">
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    import { AwaitingScreen } from '/assets/js/screens/awaiting.js';
+    const log = (m) => { document.getElementById('flowlog').innerHTML += m + '<br>'; console.log(m); };
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+    window.__screen = new AwaitingScreen({ status: 'awaiting_onboarding', onNavigate: (...a) => console.log('[NAV]', a) });
+    (async () => {
+      await window.__screen.mount();
+      window.__ready = true;
+      // Wait a frame
+      await new Promise(r => setTimeout(r, 100));
+      // STEP 1: Click on first available date
+      const cells = document.querySelectorAll('#meeting-calendar button[data-date]:not([disabled])');
+      log('Available date cells: ' + cells.length);
+      if (cells.length === 0) { log('FAIL: no dates'); return; }
+      cells[0].click();
+      log('Clicked date: ' + cells[0].dataset.date);
+      // STEP 2: Click on a time slot
+      await new Promise(r => setTimeout(r, 50));
+      const slots = document.querySelectorAll('#meeting-times button[data-time]');
+      log('Available time slots: ' + slots.length);
+      if (slots.length === 0) { log('FAIL: no slots'); return; }
+      // pick "10:00" if exists
+      const slot10 = Array.from(slots).find(s => s.textContent === '10:00') || slots[2];
+      slot10.click();
+      log('Clicked time: ' + slot10.textContent);
+      // STEP 3: Verify summary
+      await new Promise(r => setTimeout(r, 50));
+      const summary = document.getElementById('meeting-summary');
+      log('Summary text: ' + summary.textContent);
+      // STEP 4: Click schedule
+      document.getElementById('schedule-meeting-btn').click();
+      log('Clicked schedule button');
+      // STEP 5: Wait for re-render & verify confirmation view
+      await new Promise(r => setTimeout(r, 200));
+      const confirmTitle = document.querySelector('h1');
+      log('Confirmation title: ' + (confirmTitle ? confirmTitle.textContent : 'NONE'));
+      window.__flowComplete = true;
+    })();
+  </script>
+</body>
+</html>

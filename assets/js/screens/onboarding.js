@@ -184,8 +184,15 @@ export class OnboardingScreen extends BaseScreen {
     
     // Birth Date
     const dateLabel = UIComponents.label('Data de nascimento');
-    const dateInput = UIComponents.textInput('DD/MM/AAAA', this.formData.birthDate);
-    dateInput.addEventListener('input', (e) => this.formData.birthDate = e.target.value);
+    const today = new Date();
+    const minDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+    const maxDate = new Date(today.getFullYear() - 13, today.getMonth(), today.getDate());
+    const fmtIso = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const dateInput = UIComponents.dateInput(this.formData.birthDate, {
+      min: fmtIso(minDate),
+      max: fmtIso(maxDate),
+    });
+    dateInput.addEventListener('change', (e) => this.formData.birthDate = e.target.value);
     container.appendChild(dateLabel);
     container.appendChild(dateInput);
     
@@ -208,8 +215,7 @@ export class OnboardingScreen extends BaseScreen {
       
       btn.addEventListener('click', () => {
         this.formData.gender = gender;
-        this.element.querySelector('.onboarding-content').innerHTML = '';
-        this.render();
+        this.mount();
       });
       
       genderContainer.appendChild(btn);
@@ -285,8 +291,7 @@ export class OnboardingScreen extends BaseScreen {
         } else {
           this.formData.diagnostics.push(diagnostic);
         }
-        this.element.querySelector('.onboarding-content').innerHTML = '';
-        this.render();
+        this.mount();
       });
       
       diagGrid.appendChild(btn);
@@ -484,8 +489,7 @@ export class OnboardingScreen extends BaseScreen {
 
       btn.addEventListener('click', () => {
         this.formData.activity = activity;
-        this.element.querySelector('.onboarding-content').innerHTML = '';
-        this.render();
+        this.mount();
       });
 
       actContainer.appendChild(btn);

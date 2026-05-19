@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Targeted</title>
+<link rel="stylesheet" href="/assets/css/reset.css">
+<link rel="stylesheet" href="/assets/css/variables.css">
+<link rel="stylesheet" href="/assets/css/animations.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/layout.css">
+<script type="importmap">{ "imports": {
+  "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+  "/assets/js/services/auth.js": "/test/mocks/auth.js",
+  "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+  "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+}}</script>
+<style>body{background:var(--color-bg);color:var(--color-text);font-family:'DM Sans',sans-serif;margin:0}#app{min-height:50vh}#r{padding:12px;font-size:12px;background:#111;color:#0f0;font-family:monospace;white-space:pre-wrap;max-height:400px;overflow:auto}</style>
+</head><body><div id="app"></div><pre id="r">…</pre>
+<script type="module">
+const r=document.getElementById('r');const out=[];const log=m=>{out.push(m);r.textContent=out.join('\n')};
+const errs=[];window.addEventListener('error',e=>errs.push(`ERR ${e.message}`));window.addEventListener('unhandledrejection',e=>errs.push(`REJ ${e.reason?.message||e.reason}`));
+import { Session, State } from '/assets/js/utils/helpers.js';
+Session.set('userId','test-user-uid-123');
+State.set('currentUser',{uid:'test-user-uid-123',email:'test@bela4d.com'});
+
+(async()=>{
+  // ─── ONBOARDING — descobrir como os inputs são identificados ───
+  log('══ ONBOARDING INPUTS ══');
+  const ob = (await import('/assets/js/screens/onboarding.js')).OnboardingScreen;
+  const o = new ob({onNavigate:()=>{}});
+  o.element = o.render();
+  document.getElementById('app').appendChild(o.element);
+  await new Promise(r => setTimeout(r, 200));
+  document.querySelectorAll('input, select').forEach((el,i)=>{
+    log(`  inp[${i}] type=${el.type} name=${el.name||'-'} id=${el.id||'-'} placeholder="${el.placeholder||''}"`);
+  });
+  // Tenta encontrar nome por placeholder
+  const nameByPlaceholder = document.querySelector('input[placeholder*="nome" i], input[placeholder*="Maria" i]');
+  log('  → nome by placeholder: ' + (nameByPlaceholder ? 'FOUND' : 'NONE'));
+
+  // Buscar botão Próximo na step 1
+  const buttons = document.querySelectorAll('button');
+  log('  total buttons: ' + buttons.length);
+  let proximoFound = false;
+  buttons.forEach((b,i) => {
+    const t = b.textContent.trim();
+    if (/próximo|avançar|próxima|seguir/i.test(t)) { log(`  prox btn[${i}]: "${t.slice(0,40)}"`); proximoFound = true; }
+  });
+  log('  proximo button found: ' + proximoFound);
+
+  // ─── HEALTH FORM — esperar async load completar ───
+  log('\n══ HEALTH FORM (after async load) ══');
+  document.getElementById('app').innerHTML='';
+  const hf = (await import('/assets/js/screens/health-form.js')).HealthFormScreen;
+  const h = new hf({onNavigate:()=>{}});
+  h.element = h.render();
+  document.getElementById('app').appendChild(h.element);
+  if (h.mount) await h.mount();
+  await new Promise(r => setTimeout(r, 500));  // give time for async draft load
+  log('  inputs after mount: ' + document.querySelectorAll('input, select, textarea').length);
+  log('  buttons after mount: ' + document.querySelectorAll('button').length);
+  document.querySelectorAll('button').forEach((b,i) => {
+    if (i < 12) log(`  btn[${i}]: "${b.textContent.trim().slice(0,40)}"`);
+  });
+  // navegar entre seções
+  const sections = document.querySelectorAll('[data-section], .section-dot, .health-form-dot');
+  log('  navigable section markers: ' + sections.length);
+  // current section
+  log('  currentSection: ' + h.currentSection + ' / totalSections: ' + h.totalSections);
+
+  // ─── DASHBOARD V2 — drawer + cada nav item ───
+  log('\n══ DASHBOARD V2 — drawer ══');
+  document.getElementById('app').innerHTML='';
+  const dv = (await import('/assets/js/screens/dashboard-v2.js')).DashboardV2Screen;
+  const d = new dv({onNavigate:()=>{}});
+  d.element = d.render();
+  document.getElementById('app').appendChild(d.element);
+  if (d.mount) await d.mount();
+  await new Promise(r => setTimeout(r, 300));
+
+  // Tentar abrir drawer
+  const drawerBtn = document.querySelector('[data-open-drawer], .dash-drawer-toggle, button[title*="menu" i]');
+  log('  drawer toggle btn: ' + (drawerBtn ? 'FOUND ('+drawerBtn.outerHTML.slice(0,80)+')' : 'NONE'));
+  // Buscar qq botão com ☰
+  const burger = Array.from(document.querySelectorAll('button')).find(b => /☰/.test(b.textContent));
+  log('  burger: ' + (burger ? 'FOUND' : 'NONE'));
+  if (burger) { burger.click(); await new Promise(r => setTimeout(r, 200)); log('  → drawer aberto'); }
+  const drawerItems = document.querySelectorAll('[data-nav-item]');
+  log('  data-nav-item count: ' + drawerItems.length);
+  // Click each nav item
+  for (let i = 0; i < drawerItems.length; i++) {
+    const item = drawerItems[i];
+    const id = item.dataset.navItem;
+    const eb = errs.length;
+    item.click();
+    await new Promise(r => setTimeout(r, 300));
+    const ne = errs.slice(eb);
+    log(`  nav[${i}] "${id}": currentNav=${d.currentNav} ${ne.length ? '✗ '+ne[0] : '✓'}`);
+  }
+
+  log('\n══ TOTAL ERRORS: ' + errs.length + ' ══');
+  errs.forEach((e,i) => log(`  [${i}] ${e}`));
+  window.__done = true;
+})();
+</script></body></html>

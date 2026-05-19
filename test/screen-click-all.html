@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>TEST — Click all interactive elements</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+      "/assets/js/services/auth.js": "/test/mocks/auth.js",
+      "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+      "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+    }
+  }
+  </script>
+  <style>
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', system-ui, sans-serif; margin: 0; }
+    #app { width: 100%; min-height: 100vh; }
+    #log { position: fixed; right: 0; top: 0; width: 380px; max-height: 100vh; overflow: auto; font-size: 10px; background: #000c; color: #fff; padding: 6px; z-index: 99999; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="log"></div>
+  <script type="module">
+    const log = (m, kind='') => {
+      const el = document.getElementById('log');
+      const c = kind === 'err' ? '#ff5555' : kind === 'ok' ? '#55ff99' : '#aaa';
+      el.innerHTML += `<div style="color:${c}">${m}</div>`;
+      console.log(m);
+    };
+    window.__errors = [];
+    window.addEventListener('error', e => {
+      window.__errors.push(e.message);
+      log('ERR: ' + e.message, 'err');
+    });
+    window.addEventListener('unhandledrejection', e => {
+      window.__errors.push(String(e.reason));
+      log('REJ: ' + e.reason, 'err');
+    });
+
+    // Pick which screen by URL param
+    const params = new URLSearchParams(window.location.search);
+    const screen = params.get('screen') || 'awaiting';
+
+    async function clickAllButtons(root, label) {
+      const buttons = root.querySelectorAll('button:not([disabled])');
+      log(`[${label}] ${buttons.length} buttons found`);
+      for (const b of buttons) {
+        try {
+          const tag = (b.textContent || '').trim().slice(0,40);
+          b.click();
+          log('  → click: ' + tag, 'ok');
+          await new Promise(r => setTimeout(r, 30));
+        } catch (e) { log('  ERR click: ' + e.message, 'err'); }
+      }
+    }
+
+    async function testScreen(screen) {
+      const { Session, State } = await import('/assets/js/utils/helpers.js');
+      Session.set('userId', 'test-user-uid-123');
+      State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+
+      const onNavigate = (...a) => log('[NAV] ' + JSON.stringify(a));
+
+      let Screen;
+      try {
+        switch(screen) {
+          case 'login':
+            ({ LoginScreen: Screen } = await import('/assets/js/screens/login.js')); break;
+          case 'onboarding':
+            ({ OnboardingScreen: Screen } = await import('/assets/js/screens/onboarding.js')); break;
+          case 'forms':
+            ({ FormsScreen: Screen } = await import('/assets/js/screens/forms.js')); break;
+          case 'cardapio':
+            ({ CardapioScreen: Screen } = await import('/assets/js/screens/cardapio.js')); break;
+          case 'exam-upload':
+            ({ ExamUploadScreen: Screen } = await import('/assets/js/screens/exam-upload.js')); break;
+          case 'health-form':
+            ({ HealthFormScreen: Screen } = await import('/assets/js/screens/health-form.js')); break;
+          case 'dashboard':
+            ({ DashboardScreen: Screen } = await import('/assets/js/screens/dashboard.js')); break;
+          case 'dashboard-v2':
+            ({ DashboardScreen: Screen } = await import('/assets/js/screens/dashboard-v2.js')); break;
+          case 'chat':
+            ({ ChatScreen: Screen } = await import('/assets/js/screens/chat.js')); break;
+          case 'awaiting':
+          default:
+            ({ AwaitingScreen: Screen } = await import('/assets/js/screens/awaiting.js')); break;
+        }
+      } catch (e) {
+        log('IMPORT ERR: ' + e.message, 'err');
+        window.__done = true;
+        return;
+      }
+
+      try {
+        const instance = new Screen({ status: params.get('status') || 'awaiting_onboarding', onNavigate });
+        window.__instance = instance;
+        await instance.mount();
+        log('mounted: ' + screen, 'ok');
+        await new Promise(r => setTimeout(r, 300));
+        // Click everything visible
+        await clickAllButtons(document.getElementById('app'), screen);
+        await new Promise(r => setTimeout(r, 200));
+        log('DONE — errors: ' + window.__errors.length, window.__errors.length ? 'err' : 'ok');
+        window.__done = true;
+      } catch (e) {
+        log('MOUNT ERR: ' + e.message, 'err');
+        window.__done = true;
+      }
+    }
+
+    testScreen(screen);
+  </script>
+</body>
+</html>

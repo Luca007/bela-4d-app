@@ -59,6 +59,16 @@ export const UIComponents = {
     return input;
   },
 
+  dateInput(value = '', { min = '', max = '' } = {}) {
+    const input = DOM.create('input', 'input-text');
+    input.type = 'date';
+    input.value = value;
+    if (min) input.min = min;
+    if (max) input.max = max;
+    input.style.colorScheme = 'dark';
+    return input;
+  },
+
   textarea(placeholder = '', value = '') {
     const textarea = DOM.create('textarea', 'input-textarea');
     textarea.placeholder = placeholder;
