@@ -4,7 +4,7 @@ import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
-import { getLevels, getAchievementsCatalog } from '../config/constants.js';
+import { getLevels, getAchievementsCatalog, getNavItems } from '../config/constants.js';
 import { offlineQueue } from '../modules/offline-queue.js';
 import { EXAM_RESULTS, EXAM_ORDERS } from '../config/data.js';
 import { getGreeting, getStaticRecipes, getStaticRefeicoes, getStaticDicas, getStaticRanking, normalizeAvatarEmoji } from './dashboard/helpers.js';
@@ -16,16 +16,6 @@ import { render as renderConquistas } from './dashboard/conquistas.js';
 import { render as renderChat } from './dashboard/chat.js';
 import { render as renderPerfil } from './dashboard/perfil.js';
 
-const NAV_ITEMS = [
-  { id: 'inicio', label: 'Início', icon: '🏠', sub: 'Chat · Receita · Cardápio' },
-  { id: 'evolucao', label: 'Evolução', icon: '📊', sub: 'Gráficos · Progresso' },
-  { id: 'receitas', label: 'Receitas', icon: '🥗', sub: 'Cardápio personalizado' },
-  { id: 'exames', label: 'Exames', icon: '🔬', sub: 'Pedidos · Resultados' },
-  { id: 'conquistas', label: 'Conquistas', icon: '🏆', sub: 'Ranking · Comunidade' },
-  { id: 'chat', label: 'Chat IA', icon: '💬', sub: 'Dúvidas alimentares' },
-  { id: 'perfil', label: 'Meu Perfil', icon: '👤', sub: 'Avatar · Configurações' },
-];
-
 export class DashboardScreen extends BaseScreen {
   constructor(params) {
     super(params);
@@ -34,6 +24,7 @@ export class DashboardScreen extends BaseScreen {
     this.userProfile = State.get('userProfile') || {};
     this.recipes = State.get('recipes') || getStaticRecipes();
     this.achievements = State.get('achievements') || getAchievementsCatalog();
+    this.navItems = getNavItems();
     this.chatHistory = State.get('chatHistory') || [];
     this.dailyMeals = State.get('dailyMeals') || this.userProfile.dailyMeals || getStaticRefeicoes();
     this.mealDraft = { icon: '🍽️', nome: '', hora: '08:00', desc: '' };
@@ -72,6 +63,7 @@ export class DashboardScreen extends BaseScreen {
     this._dataLoading = false;
     this.themeMode = this.loadThemeMode();
     this.isDark = this.resolveThemeIsDark(this.themeMode);
+    this._connIndicatorInjected = false;
 
     this.setupFirestoreListeners();
     State.subscribe(data => {
@@ -222,8 +214,33 @@ export class DashboardScreen extends BaseScreen {
 
   async mount() {
     super.mount();
+    // Injeta indicador de conexão persistente no header
+    this._injectConnectionIndicator();
     if (!this._dataLoaded) {
+      // Mostra skeleton enquanto carrega
+      this._showSkeletonForCurrentTab();
       await this._loadFirestoreData();
+    }
+  }
+
+  _injectConnectionIndicator() {
+    if (this._connIndicatorInjected) return;
+    const anchor = this.element?.querySelector('#conn-indicator-anchor');
+    if (anchor && !anchor.hasChildNodes()) {
+      const indicator = ConnectionIndicator.create();
+      anchor.appendChild(indicator);
+      this._connIndicatorInjected = true;
+    }
+  }
+
+  _showSkeletonForCurrentTab() {
+    const contentEl = this.element?.querySelector('.dash-content');
+    if (!contentEl) return;
+    // Só mostra skeleton se o conteúdo atual for placeholder de loading
+    const loadingEl = contentEl.querySelector('[data-loading]');
+    if (loadingEl) {
+      const skel = dashSkeleton(this.currentNav);
+      loadingEl.replaceWith(skel);
     }
   }
 
@@ -323,6 +340,8 @@ export class DashboardScreen extends BaseScreen {
     this.recipeUnsubscribe?.();
     this.achievementsUnsubscribe?.();
     this.chatUnsubscribe?.();
+    ConnectionIndicator.destroy();
+    this._connIndicatorInjected = false;
     if (this._outsideClickHandler) { document.removeEventListener('mousedown', this._outsideClickHandler); this._outsideClickHandler = null; }
     if (this._escHandler) { document.removeEventListener('keydown', this._escHandler); this._escHandler = null; }
     super.destroy();
@@ -745,11 +764,13 @@ export class DashboardScreen extends BaseScreen {
     return `
       <div class="dash-header">
         <button class="dash-btn-icon" data-open-drawer title="Abrir menu">☰</button>
+        <button class="dash-btn-icon" data-toggle-theme title="Alternar tema" style="font-size:18px;">${this.isDark ? '☀️' : '🌙'}</button>
         <div class="dash-title">
           <div class="top">Guia Metabólico</div>
           <div class="bottom">Personalizado</div>
         </div>
         <div class="dash-streak" style="cursor:pointer;" title="Ver conquistas"><span>🔥</span><span>${this.streak}</span></div>
+        <div id="conn-indicator-anchor" style="display:flex;align-items:center"></div>
         <button class="dash-bell-btn" data-toggle-notifications aria-label="Notificações" style="position:relative;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,255,255,0.07);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;flex-shrink:0;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:rgba(255,255,255,0.85)">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -773,7 +794,7 @@ export class DashboardScreen extends BaseScreen {
       `;
     }
 
-    const current = NAV_ITEMS.find(item => item.id === this.currentNav) || NAV_ITEMS[0];
+    const current = this.navItems.find(item => item.id === this.currentNav) || this.navItems[0];
     const badge = this.currentNav === 'conquistas' ? '<span class="pill">Você está em #8</span>' : this.currentNav === 'chat' ? '<span class="pill">IA Online ✓</span>' : '';
     return `
       <div class="dash-subheader">
@@ -800,7 +821,7 @@ export class DashboardScreen extends BaseScreen {
           ${this.renderXpBar()}
         </div>
         <div class="dash-drawer-nav">
-          ${NAV_ITEMS.map(item => `
+          ${this.navItems.map(item => `
             <button class="dash-drawer-item ${this.currentNav === item.id ? 'active' : ''}" data-nav-item="${item.id}" style="position:relative;">
               <div class="row">
                 <span class="icon">${item.icon}</span>
@@ -894,6 +915,10 @@ export class DashboardScreen extends BaseScreen {
     return getLevels().find(level => level.level === levelNumber + 1) || null;
   }
   renderContent() {
+    // Se dados ainda não carregaram do Firestore, mostra skeleton
+    if (!this._dataLoaded) {
+      return `<div data-loading="${this.currentNav}" class="loading-skeleton-container"></div>`;
+    }
     switch (this.currentNav) {
       case 'inicio': return renderInicio(this);
       case 'evolucao': return renderEvolucao(this);
