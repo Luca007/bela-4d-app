@@ -35,8 +35,6 @@ const lazyScreens = {
   'cardapio':     () => import('./screens/cardapio.js').then(m => m.CardapioScreen),
   'dashboard':    () => import('./screens/dashboard-v2.js').then(m => m.DashboardScreen),
   'chat':         () => import('./screens/chat.js').then(m => m.ChatScreen),
-  'recipes':      () => import('./screens/recipes.js').then(m => m.RecipesScreen),
-  'food-search':  () => import('./screens/food-search.js').then(m => m.FoodSearchScreen),
   'forms':        () => import('./screens/forms.js').then(m => m.FormsScreen),
 };
 
