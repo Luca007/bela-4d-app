@@ -717,7 +717,7 @@ export class DashboardScreen extends BaseScreen {
         .dash-recipe-card:hover { transform: translateY(-2px); border-color: #f0059a; }
         .dash-lock-panel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,0.02); }
         .dash-lock-card { max-width: 340px; width: 100%; text-align: center; padding: 32px 28px; background: rgba(10,10,15,0.88); border: 1px solid rgba(240,5,154,0.2); border-radius: 24px; box-shadow: 0 8px 60px rgba(0,0,0,0.7); }
-        .dash-notification-panel { position: absolute; top: 48px; right: 8px; width: min(380px, calc(100vw - 28px)); z-index: 30; opacity: 0; transform: translateY(-8px) scale(0.97); pointer-events: none; transition: opacity 180ms ease, transform 180ms ease; }
+        .dash-notification-panel { position: fixed; top: 64px; right: 16px; width: min(380px, 92vw); max-width: 400px; z-index: 1001; opacity: 0; transform: translateY(-8px) scale(0.97); pointer-events: none; transition: opacity 200ms ease, transform 200ms ease; max-height: calc(100vh - 80px); overflow-y: auto; box-shadow: 0 18px 40px rgba(0,0,0,0.28); border-radius: 12px; }
         .dash-notification-panel.is-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
         .dash-notification-card { background: ${this.isDark ? 'rgba(15,15,20,0.98)' : 'rgba(255,255,255,0.97)'}; border: 1px solid var(--dash-border); border-radius: 18px; box-shadow: 0 18px 40px rgba(0,0,0,0.28); overflow: hidden; backdrop-filter: blur(18px); }
         .dash-notification-item { display:flex; gap:10px; padding:14px 16px; border-bottom:1px solid var(--dash-border); position: relative; cursor: pointer; transition: background 0.15s; }
@@ -852,7 +852,7 @@ export class DashboardScreen extends BaseScreen {
   renderNotificationPanel() {
     const notifications = Array.isArray(this.notifications) ? this.notifications.slice(0, 8) : [];
     return `
-      <div class="dash-notification-panel">
+      <div class="dash-notification-panel" role="dialog" aria-label="Notificações">
         <div class="dash-notification-card">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--dash-border);">
             <div>
@@ -861,7 +861,7 @@ export class DashboardScreen extends BaseScreen {
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <button class="dash-ghost-btn" data-mark-notifications-read style="min-height:34px;padding:8px 10px;border-radius:10px;font-size:12px;">Marcar todas como lidas</button>
-              <button data-close-notification-panel aria-label="Fechar notificações" style="width:32px;height:32px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--dash-muted);font-size:16px;line-height:1;">✕</button>
+              <button data-close-notification-panel aria-label="Fechar notificações" style="width:44px;height:44px;min-width:44px;min-height:44px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:10px;color:var(--dash-muted);font-size:18px;line-height:1;padding:8px;transition:background 0.15s;">✕</button>
             </div>
           </div>
           <div style="max-height:360px;overflow:auto;">
@@ -1048,6 +1048,13 @@ export class DashboardScreen extends BaseScreen {
       if (panel) {
         const isOpen = panel.classList.toggle('is-open');
         if (bell) bell.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        if (isOpen) {
+          // focus close button when panel opens
+          requestAnimationFrame(() => {
+            const closeBtn = panel.querySelector('[data-close-notification-panel]');
+            if (closeBtn) closeBtn.focus();
+          });
+        }
       }
     });
 
@@ -1056,7 +1063,10 @@ export class DashboardScreen extends BaseScreen {
       const bell = this.element.querySelector('[data-toggle-notifications]');
       if (panel) {
         panel.classList.remove('is-open');
-        if (bell) bell.setAttribute('aria-expanded', 'false');
+        if (bell) {
+          bell.setAttribute('aria-expanded', 'false');
+          bell.focus();
+        }
       }
     });
 
@@ -1070,6 +1080,7 @@ export class DashboardScreen extends BaseScreen {
         if (isPanelOpen && isClickOutside) {
           panel.classList.remove('is-open');
           bell.setAttribute('aria-expanded', 'false');
+          bell.focus();
         }
       };
       document.addEventListener('mousedown', this._outsideClickHandler);
@@ -1078,8 +1089,13 @@ export class DashboardScreen extends BaseScreen {
       this._escHandler = (e) => {
         if (e.key === 'Escape') {
           const panel = this.element.querySelector('.dash-notification-panel');
+          const bell = this.element.querySelector('[data-toggle-notifications]');
           if (panel && panel.classList.contains('is-open')) {
             panel.classList.remove('is-open');
+            if (bell) {
+              bell.setAttribute('aria-expanded', 'false');
+              bell.focus();
+            }
           }
         }
       };
