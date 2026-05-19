@@ -3,6 +3,7 @@
 /firebase
 4d-mentoria.jsx.backup
 
+# Legacy/sensitive docs (live outside git)
 DEPLOYMENT_GUIDE.md
 FIREBASE_FUNCTIONS.md
 FIREBASE_INTEGRATION.md
@@ -10,3 +11,13 @@ FIRESTORE_SCHEMA.md
 SECURITY_GUIDE.md
 
 test-forms.html
+
+# Hardening preventivo — se esses artefatos aparecerem, não vazam
+node_modules/
+package-lock.json
+**/.env
+**/.env.*
+**/serviceAccountKey*.json
+**/firebase-adminsdk*.json
+**/*-private-key.json
+test-admin.js

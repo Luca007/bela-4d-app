@@ -153,19 +153,19 @@ export class DashboardScreen extends BaseScreen {
     });
   }
 
-  async persistProfileFields(fields = {}) {
+  async persistProfileFields(fields = {}, { silent = false } = {}) {
     if (!this.currentUser?.uid) return;
     const nextProfile = { ...(this.userProfile || {}), ...fields };
     this.userProfile = nextProfile;
-    const loader = UIComponents.loaderOverlay({ message: 'Salvando alterações...', color: '#f0059a' });
-    document.body.appendChild(loader);
+    const loader = silent ? null : UIComponents.loaderOverlay({ message: 'Salvando alterações...', color: '#f0059a' });
+    if (loader) document.body.appendChild(loader);
     try {
       await firestoreService.saveUserProfile(this.currentUser.uid, nextProfile);
       State.set('userProfile', nextProfile);
     } catch (error) {
       console.error('[DashboardV2] persistProfileFields failed:', error);
     } finally {
-      loader.remove();
+      if (loader) loader.remove();
     }
   }
 
@@ -1283,7 +1283,7 @@ export class DashboardScreen extends BaseScreen {
         this.dailyMeals = this.dailyMeals.filter(meal => meal.id !== id);
         this.homeChecked.delete(id);
         State.set('dailyMeals', this.dailyMeals);
-        this.persistProfileFields({ dailyMeals: this.dailyMeals });
+        this.persistProfileFields({ dailyMeals: this.dailyMeals }, { silent: true });
         this.mountPreservingScroll();
       });
     });
@@ -1474,7 +1474,7 @@ export class DashboardScreen extends BaseScreen {
       button.addEventListener('click', () => {
         const feedId = button.getAttribute('data-community-like');
         this.communityFeed = this.communityFeed.map(item => item.id === feedId ? { ...item, lk: item.liked ? item.lk - 1 : item.lk + 1, liked: !item.liked } : item);
-        this.persistProfileFields({ communityFeed: this.communityFeed });
+        this.persistProfileFields({ communityFeed: this.communityFeed }, { silent: true });
         this.mountPreservingScroll();
       });
     });
@@ -1528,7 +1528,7 @@ export class DashboardScreen extends BaseScreen {
           return { ...item, likes, dislikes, myVote: vote };
         });
         State.set('belaTips', this.dicas);
-        this.persistProfileFields({ belaTips: this.dicas });
+        this.persistProfileFields({ belaTips: this.dicas }, { silent: true });
         this.mountPreservingScroll();
       });
     });
