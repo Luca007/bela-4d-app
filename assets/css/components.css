@@ -700,9 +700,16 @@ input[type='range']::-moz-range-thumb {
   background: linear-gradient(180deg, #1fcc74, #15a85e);
   color: #fff;
 }
-.connection-banner.offline {
+.connection-banner.reconnecting {
   background: linear-gradient(180deg, #f59e0b, #d97706);
   color: #1a1500;
+}
+.connection-banner.offline {
+  background: linear-gradient(180deg, #dc2626, #b91c1c);
+  color: #fff;
+}
+.connection-banner.anim-pulse {
+  animation: bannerSlideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1), bannerPulse 1.5s ease-in-out infinite;
 }
 @keyframes bannerSlideDown {
   from { transform: translateY(-100%); opacity: 0; }
@@ -710,6 +717,10 @@ input[type='range']::-moz-range-thumb {
 }
 @keyframes bannerSlideUp {
   to { transform: translateY(-100%); opacity: 0; }
+}
+@keyframes bannerPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
 }
 .connection-banner.fade-out {
   animation: bannerSlideUp 0.3s ease forwards;
@@ -865,4 +876,98 @@ input[type='range']::-moz-range-thumb {
 .xp-popup-close:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(240, 5, 154, 0.5);
+}
+
+/* ============================================================
+   Connection Indicator (persistent dot in header)
+   ============================================================ */
+.conn-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+  padding: 4px;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+.conn-indicator:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.conn-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: background 0.35s ease, box-shadow 0.35s ease;
+}
+
+.conn-dot.online {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+}
+
+.conn-dot.offline {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+
+.conn-dot.reconnecting {
+  background: #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.7);
+  animation: connPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes connPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+}
+
+.conn-queue-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #f59e0b;
+  color: #1a1500;
+  font-size: 10px;
+  font-weight: 800;
+  align-items: center;
+  justify-content: center;
+  display: none;
+  line-height: 16px;
+}
+
+/* ============================================================
+   Loading skeleton container (dashboard sections)
+   ============================================================ */
+.loading-skeleton-container {
+  padding: var(--spacing-md, 12px) 0;
+}
+
+.skel-greeting {
+  margin-bottom: 8px;
+}
+
+/* Transition suave ao trocar skeleton → conteúdo real */
+.loading-skeleton-container + .dash-tab-content,
+.dash-tab-content > .loading-skeleton-container {
+  animation: fadeInContent 0.25s ease;
+}
+
+@keyframes fadeInContent {
+  from { opacity: 0.5; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Inline spinner used by loading-states.js */
+.inline-loading-spinner {
+  display: inline-block;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
 }

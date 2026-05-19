@@ -396,6 +396,7 @@ class App {
     if (this._offlineHandlersRegistered) return;
     this._offlineHandlersRegistered = true;
 
+    // Notificações
     offlineQueue.registerHandler('mark_notification_read', async ({ uid: u, notificationId }) => {
       await firestoreService.markNotificationRead(u || uid, notificationId);
     });
@@ -405,48 +406,97 @@ class App {
     offlineQueue.registerHandler('delete_notification', async ({ uid: u, notificationId }) => {
       await firestoreService.deleteNotification?.(u || uid, notificationId);
     });
+
+    // Chat
     offlineQueue.registerHandler('chat_send', async ({ uid: u, message, sessionId }) => {
       await firestoreService.saveChatMessage(u || uid, { role: 'user', content: message, type: 'text', conversationId: sessionId });
     });
+
+    // AI / n8n — ações enfileiradas quando offline
+    offlineQueue.registerHandler('generate_recipe', async ({ uid: u, preferences }) => {
+      const { n8nService } = await import('../services/n8n.js');
+      await n8nService.generateRecipe(u || uid, preferences || {});
+    });
+    offlineQueue.registerHandler('agent_chat_message', async ({ uid: u, message, sessionId }) => {
+      const { n8nService } = await import('../services/n8n.js');
+      await n8nService.sendChatMessage(u || uid, message, sessionId);
+    });
+    offlineQueue.registerHandler('evaluate_food', async ({ uid: u, foodName, quantity }) => {
+      const { n8nService } = await import('../services/n8n.js');
+      await n8nService.evaluateFood(u || uid, foodName, quantity);
+    });
+    offlineQueue.registerHandler('process_blood_test', async ({ uid: u, bloodTestId, driveFileUrl }) => {
+      const { n8nService } = await import('../services/n8n.js');
+      await n8nService.processBloodTest(u || uid, bloodTestId, driveFileUrl);
+    });
+
+    // Comunidade
     offlineQueue.registerHandler('community_like', async ({ uid: u, postId, liked }) => {
       await firestoreService.toggleCommunityLike?.(u || uid, postId, liked);
     });
   }
 
   /**
-   * Configura listeners de online/offline e exibe banners discretos.
+   * Configura listeners de online/offline e exibe banners de status.
+   *
+   * Estados do banner:
+   *   🟢 online        → "Conectado à internet" (desaparece em 3s)
+   *   🔄 reconnecting  → "Reestabelecendo conexão..." (animado, persiste)
+   *   🔴 offline       → "Conexão perdida — suas ações serão salvas localmente" (persiste)
    */
   _setupConnectionListeners() {
     if (this._connectionListenersSetup) return;
     this._connectionListenersSetup = true;
 
     window.addEventListener('online', () => {
-      this._showConnectionBanner('online', '✓ Você está online novamente');
-      offlineQueue.flush().catch(() => {});
+      // Mostra estado de reconexão brevemente e dispara flush da fila
+      this._showConnectionBanner('reconnecting', '🔄 Reestabelecendo conexão...', { sticky: true, animated: true });
+      offlineQueue.flush()
+        .then(() => {
+          // Transição para online após flush
+          this._showConnectionBanner('online', '🟢 Conectado à internet', { sticky: false, dismissAfter: 3000 });
+        })
+        .catch(() => {
+          this._showConnectionBanner('online', '🟢 Conectado à internet', { sticky: false, dismissAfter: 3000 });
+        });
     });
+
     window.addEventListener('offline', () => {
-      this._showConnectionBanner('offline', '⚠ Você está offline — suas ações serão sincronizadas quando reconectar', { sticky: true });
+      this._showConnectionBanner('offline', '🔴 Conexão perdida — suas ações serão salvas localmente', { sticky: true });
     });
 
     // Estado inicial: se já estiver offline ao carregar, mostra
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      this._showConnectionBanner('offline', '⚠ Você está offline — suas ações serão sincronizadas quando reconectar', { sticky: true });
+      this._showConnectionBanner('offline', '🔴 Conexão perdida — suas ações serão salvas localmente', { sticky: true });
     }
   }
 
-  _showConnectionBanner(kind, text, { sticky = false } = {}) {
-    // Remove banner existente
-    document.querySelectorAll('.connection-banner').forEach(b => b.remove());
+  /**
+   * Exibe banner de status de conexão no topo da página.
+   * @param {'online'|'offline'|'reconnecting'} kind
+   * @param {string} text
+   * @param {{ sticky?: boolean, animated?: boolean, dismissAfter?: number }} options
+   */
+  _showConnectionBanner(kind, text, { sticky = false, animated = false, dismissAfter = 0 } = {}) {
+    // Substitui banner existente (transição suave)
+    const existing = document.querySelector('.connection-banner');
+    if (existing) {
+      existing.classList.add('fade-out');
+      setTimeout(() => existing.remove(), 320);
+    }
 
-    const banner = DOM.create('div', `connection-banner ${kind}`);
+    const banner = DOM.create('div', `connection-banner ${kind}${animated ? ' anim-pulse' : ''}`);
     banner.textContent = text;
+    banner.setAttribute('role', 'status');
+    banner.setAttribute('aria-live', 'polite');
     document.body.appendChild(banner);
 
     if (!sticky) {
+      const delay = dismissAfter || 3000;
       setTimeout(() => {
         banner.classList.add('fade-out');
         setTimeout(() => banner.remove(), 320);
-      }, 2400);
+      }, delay);
     }
   }
 }

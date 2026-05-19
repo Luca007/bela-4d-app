@@ -66,11 +66,69 @@ export class FirestoreService {
     this.db = null;
     this.initialized = false;
     this._cache = new Map();
+    this._localPrefix = '_bela_fs_';
   }
 
   _cacheGet(key) { return this._cache.get(key); }
   _cacheSet(key, value) { this._cache.set(key, value); }
   _cacheDelete(key) { this._cache.delete(key); }
+
+  // ── localStorage fallback ─────────────────────────────────
+
+  /** Gera chave localStorage para um Firestore path. */
+  _localKey(uid, sub, docId) {
+    const parts = [this._localPrefix, uid];
+    if (sub) parts.push(sub);
+    if (docId) parts.push(docId);
+    return parts.join('/');
+  }
+
+  /** Salva no localStorage como fallback offline. */
+  _localSet(uid, sub, docId, data) {
+    try {
+      const key = this._localKey(uid, sub, docId);
+      const wrapped = { _ts: Date.now(), data };
+      localStorage.setItem(key, JSON.stringify(wrapped));
+    } catch (e) {
+      console.warn('[Firestore] localStorage set fallback failed:', e);
+    }
+  }
+
+  /** Lê do localStorage (fallback offline). */
+  _localGet(uid, sub, docId) {
+    try {
+      const key = this._localKey(uid, sub, docId);
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const wrapped = JSON.parse(raw);
+      return wrapped.data || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Remove do localStorage. */
+  _localDelete(uid, sub, docId) {
+    try {
+      const key = this._localKey(uid, sub, docId);
+      localStorage.removeItem(key);
+    } catch {}
+  }
+
+  /**
+   * Detecta se o erro é relacionado a offline/Firestore indisponível.
+   * Firebase Firestore lança erro com code 'unavailable' ou mensagem de rede.
+   */
+  _isOfflineError(e) {
+    if (!e) return false;
+    const msg = (e.message || e.code || '').toLowerCase();
+    return msg.includes('unavailable')
+      || msg.includes('network')
+      || msg.includes('offline')
+      || msg.includes('timeout')
+      || msg.includes('failed to get document')
+      || (typeof navigator !== 'undefined' && navigator.onLine === false);
+  }
 
   async _run(fn, label, fallback = null) {
     try {
@@ -113,12 +171,21 @@ export class FirestoreService {
       const snap = await getDoc(this.userRef(uid));
       const value = snap.exists() ? snap.data() : null;
       this._cacheSet(cacheKey, value);
+      // Salva no localStorage para fallback offline
+      if (value) this._localSet(uid, null, 'profile', value);
       return value;
-    }, 'getUserProfile');
+    }, 'getUserProfile', async () => {
+      // Fallback offline: tenta localStorage
+      const local = this._localGet(uid, null, 'profile');
+      if (local) { this._cacheSet(cacheKey, local); return local; }
+      return null;
+    });
   }
 
   async saveUserProfile(uid, data) {
     this._cacheDelete(`profile_${uid}`);
+    // Sempre salva no localStorage como fallback
+    this._localSet(uid, null, 'profile', data);
     return this._run(async () => {
       const toSave = { ...data, updatedAt: serverTimestamp() };
       const existing = await getDoc(this.userRef(uid));
@@ -279,8 +346,14 @@ export class FirestoreService {
       const snap = await getDoc(this.subDoc(uid, 'healthForm', 'data'));
       const value = snap.exists() ? snap.data() : null;
       this._cacheSet(cacheKey, value);
+      if (value) this._localSet(uid, 'healthForm', 'data', value);
       return value;
-    }, 'getHealthForm');
+    }, 'getHealthForm', async () => {
+      // Fallback offline
+      const local = this._localGet(uid, 'healthForm', 'data');
+      if (local) { this._cacheSet(cacheKey, local); return local; }
+      return null;
+    });
   }
 
   /**
@@ -293,6 +366,8 @@ export class FirestoreService {
   async saveHealthForm(uid, formData, { aiPrefilled = false, completed = false } = {}) {
     if (!uid) return false;
     this._cacheDelete(`healthForm_${uid}`);
+    // Salva no localStorage como fallback offline
+    this._localSet(uid, 'healthForm', 'data', { ...formData, aiPrefilled, completed });
     return this._run(async () => {
       const ref = this.subDoc(uid, 'healthForm', 'data');
       const existing = await getDoc(ref);
@@ -400,12 +475,20 @@ export class FirestoreService {
       const snap = await getDoc(this.subDoc(uid, 'menuForm', 'data'));
       const value = snap.exists() ? snap.data() : null;
       this._cacheSet(cacheKey, value);
+      if (value) this._localSet(uid, 'menuForm', 'data', value);
       return value;
-    }, 'getMenuForm');
+    }, 'getMenuForm', async () => {
+      // Fallback offline
+      const local = this._localGet(uid, 'menuForm', 'data');
+      if (local) { this._cacheSet(cacheKey, local); return local; }
+      return null;
+    });
   }
 
   async saveMenuForm(uid, formData, completed = false) {
     this._cacheDelete(`menuForm_${uid}`);
+    // Salva no localStorage como fallback offline
+    this._localSet(uid, 'menuForm', 'data', { ...formData, completed });
     return this._run(async () => {
       const ref = this.subDoc(uid, 'menuForm', 'data');
       const existing = await getDoc(ref);

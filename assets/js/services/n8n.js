@@ -83,7 +83,18 @@ class N8nService {
    * @param {string} driveFileUrl   — URL do arquivo no Google Drive
    */
   async processBloodTest(uid, bloodTestId, driveFileUrl) {
-    return this._callAndUnpack('processBloodTest', { uid, bloodTestId, driveFileUrl }, 'processBloodTest');
+    // Se offline, enfileira para sincronização posterior
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const { offlineQueue } = await import('../modules/offline-queue.js');
+      offlineQueue.enqueue('process_blood_test', { uid, bloodTestId, driveFileUrl });
+      throw new Error('Você está offline. O exame será processado quando a conexão retornar.');
+    }
+
+    // Loader transparente
+    const { aiLoading } = await import('../modules/loading-states.js');
+    return aiLoading('processBloodTest', () =>
+      this._callAndUnpack('processBloodTest', { uid, bloodTestId, driveFileUrl }, 'processBloodTest')
+    );
   }
 
   // ──────────────────────────────────────────────────────────
@@ -123,6 +134,13 @@ class N8nService {
    * @param {string} sessionId   — ID da conversa (para contexto)
    */
   async sendChatMessage(uid, message, sessionId) {
+    // Se offline, enfileira para sincronização posterior
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const { offlineQueue } = await import('../modules/offline-queue.js');
+      offlineQueue.enqueue('agent_chat_message', { uid, message, sessionId });
+      throw new Error('Você está offline. Sua mensagem será enviada quando a conexão retornar.');
+    }
+
     return this._callAndUnpack('agentChatMessage', { uid, message, sessionId }, 'sendChatMessage');
   }
 
@@ -137,7 +155,18 @@ class N8nService {
    * @param {Object} preferences — { mealType, maxPrepTime, avoidIngredients, preferIngredients }
    */
   async generateRecipe(uid, preferences = {}) {
-    return this._callAndUnpack('generateRecipe', { uid, preferences }, 'generateRecipe');
+    // Se offline, enfileira para sincronização posterior
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const { offlineQueue } = await import('../modules/offline-queue.js');
+      offlineQueue.enqueue('generate_recipe', { uid, preferences });
+      throw new Error('Você está offline. A receita será gerada quando a conexão retornar.');
+    }
+
+    // Loader transparente
+    const { aiLoading } = await import('../modules/loading-states.js');
+    return aiLoading('generateRecipe', () =>
+      this._callAndUnpack('generateRecipe', { uid, preferences }, 'generateRecipe')
+    );
   }
 
   async deleteRecipe(uid, recipeId) {
@@ -156,7 +185,18 @@ class N8nService {
    * @param {number|null} quantity — em gramas (opcional)
    */
   async evaluateFood(uid, foodName, quantity = null) {
-    return this._callAndUnpack('evaluateFood', { uid, foodName, quantity }, 'evaluateFood');
+    // Se offline, enfileira para sincronização posterior
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const { offlineQueue } = await import('../modules/offline-queue.js');
+      offlineQueue.enqueue('evaluate_food', { uid, foodName, quantity });
+      throw new Error('Você está offline. A avaliação será processada quando a conexão retornar.');
+    }
+
+    // Loader transparente
+    const { aiLoading } = await import('../modules/loading-states.js');
+    return aiLoading('evaluateFood', () =>
+      this._callAndUnpack('evaluateFood', { uid, foodName, quantity }, 'evaluateFood')
+    );
   }
 }
 
