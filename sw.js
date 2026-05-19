@@ -9,7 +9,7 @@
  * Atualize CACHE_VERSION para forçar recache de todos os assets.
  */
 
-const CACHE_VERSION = 'bela-4d-v2';
+const CACHE_VERSION = 'bela-4d-v3';
 const CACHE_STATIC = `${CACHE_VERSION}-static`;
 const CACHE_NAV = `${CACHE_VERSION}-nav`;
 const CACHE_DYNAMIC = `${CACHE_VERSION}-dynamic`;

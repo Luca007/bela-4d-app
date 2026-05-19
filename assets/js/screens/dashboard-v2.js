@@ -6,6 +6,7 @@ import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
 import { getLevels, getAchievementsCatalog, getNavItems } from '../config/constants.js';
 import { offlineQueue } from '../modules/offline-queue.js';
+import { ConnectionIndicator } from '../modules/connection-indicator.js';
 import { EXAM_RESULTS, EXAM_ORDERS } from '../config/data.js';
 import { getGreeting, getStaticRecipes, getStaticRefeicoes, getStaticDicas, getStaticRanking, normalizeAvatarEmoji } from './dashboard/helpers.js';
 import { render as renderInicio } from './dashboard/inicio.js';
