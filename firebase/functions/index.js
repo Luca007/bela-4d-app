@@ -125,7 +125,7 @@ function getN8nBaseUrl() {
   return process.env.N8N_BASE_URL || 'https://n8n.attoltda.com/webhook';
 }
 function getN8nWebhookSecret() {
-  return process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO';
+  return (process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO').trim();
 }
 function getN8nHeaders() {
   return { 'Content-Type': 'application/json', 'X-Webhook-Secret': getN8nWebhookSecret() };
