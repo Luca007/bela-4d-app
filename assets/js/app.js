@@ -56,6 +56,8 @@ class App {
         // Se onboarding NÃO foi completado → formulário primeiro
         const profile = State.get('userProfile');
         if (!profile?.onboardingCompleted) {
+          // Trava: se já estamos no onboarding, NÃO re-rotear
+          if (this._currentScreenId === SCREENS.ONBOARDING) return;
           this.navigate(SCREENS.ONBOARDING);
         } else {
           // Onboarding já feito → agendar reunião
@@ -131,6 +133,7 @@ class App {
       console.error(`[App] Screen not found: ${screenId}`);
       return;
     }
+    this._currentScreenId = screenId;
     this._activateScreen(ScreenClass, screenId, params);
   }
 
