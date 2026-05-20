@@ -12,6 +12,8 @@ export class AuthService {
     this.currentUser = null;
     this.authListeners = [];
     this.initialized = false;
+    this.pendingLoginPromise = null;
+    this.pendingLoginKey = null;
   }
 
   /**
@@ -55,21 +57,36 @@ export class AuthService {
       return { success: false, error: 'Senha deve ter pelo menos 6 caracteres' };
     }
 
-    try {
-      const auth = getAuth();
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      return {
-        success: true,
-        user: result.user,
-        uid: result.user.uid
-      };
-    } catch (error) {
-      console.error('Login error:', error);
-      return {
-        success: false,
-        error: this.getErrorMessage(error)
-      };
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const requestKey = `${normalizedEmail}|${password}`;
+
+    if (this.pendingLoginPromise && this.pendingLoginKey === requestKey) {
+      return this.pendingLoginPromise;
     }
+
+    this.pendingLoginKey = requestKey;
+    this.pendingLoginPromise = (async () => {
+      try {
+        const auth = getAuth();
+        const result = await signInWithEmailAndPassword(auth, email, password);
+        return {
+          success: true,
+          user: result.user,
+          uid: result.user.uid
+        };
+      } catch (error) {
+        console.error('Login error:', error);
+        return {
+          success: false,
+          error: this.getErrorMessage(error)
+        };
+      } finally {
+        this.pendingLoginPromise = null;
+        this.pendingLoginKey = null;
+      }
+    })();
+
+    return this.pendingLoginPromise;
   }
 
   /**

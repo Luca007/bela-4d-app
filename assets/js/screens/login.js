@@ -14,6 +14,7 @@ export class LoginScreen extends BaseScreen {
     this.email = '';
     this.password = '';
     this.isLoading = false;
+    this.lastLoginAttemptAt = 0;
   }
 
   render() {
@@ -347,9 +348,11 @@ export class LoginScreen extends BaseScreen {
   }
 
   async handleLogin() {
-    if (this.isLoading) return;
+    const now = Date.now();
+    if (this.isLoading || now - this.lastLoginAttemptAt < 1500) return;
     if (!this._validateLoginForm()) return;
 
+    this.lastLoginAttemptAt = now;
     this.isLoading = true;
     this.loginBtn.disabled = true;
     this.loginBtn.innerHTML = '<span class="spinner" style="margin-right: 8px;"></span>Entrando…';
