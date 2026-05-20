@@ -1,5 +1,5 @@
 {
-  "name": "4D Food Classifier",
+  "name": "4D - Evaluate Food",
   "nodes": [
     {
       "parameters": {
@@ -13,7 +13,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [240, 300],
-      "webhookId": "4d-evaluate-food"
+      "webhookId": "4d-evaluate-food",
+      "notes": "Caller: Firebase Functions evaluateFood (callN8nWithRetry, sync). Payload: {uid, foodName, quantity, userDiagnostics, userMedications, userProfile}."
     },
     {
       "parameters": {
@@ -49,25 +50,51 @@
     },
     {
       "parameters": {
+        "values": {
+          "string": [
+            { "name": "uid", "value": "={{ $json.body.uid }}" },
+            { "name": "foodName", "value": "={{ $json.body.foodName }}" },
+            { "name": "quantity", "value": "={{ $json.body.quantity || '' }}" }
+          ],
+          "object": [
+            { "name": "userDiagnostics", "value": "={{ $json.body.userDiagnostics || [] }}" },
+            { "name": "userMedications", "value": "={{ $json.body.userMedications || [] }}" },
+            { "name": "userProfile", "value": "={{ $json.body.userProfile || {} }}" }
+          ]
+        },
+        "options": { "dotNotation": false }
+      },
+      "id": "set-context-5",
+      "name": "Set: Normaliza Contexto",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
         "model": "gpt-4o-mini",
+        "options": {
+          "responseFormat": "json_object",
+          "temperature": 0.3
+        },
         "messages": {
           "values": [
             {
-              "content": "Classifique alimentos para dieta de diabético. Retorne JSON com a estrutura exata: {score: 0-100, verdict: 'verde'|'amarelo'|'vermelho', glycemicImpact: 'baixo'|'moderado'|'alto', alternatives: ['alimento1', 'alimento2'], whenOk: 'descrição de quando consumir', explanation: 'explicação detalhada'}. Responda APENAS com JSON válido.",
+              "content": "Você é Belinha, nutricionista virtual especializada em diabetes. Avalie a compatibilidade do alimento (nome + quantidade) com o perfil do paciente.\n\nResponda APENAS em JSON com este schema EXATO: {\"score\": number (0-100), \"verdict\": \"verde\"|\"amarelo\"|\"vermelho\", \"glycemicImpact\": \"baixo\"|\"moderado\"|\"alto\", \"alternatives\": string[], \"whenOk\": string, \"explanation\": string, \"macros\": {\"calories\": number, \"carbs\": number, \"protein\": number, \"fat\": number}, \"compatibility\": {\"diagnostics\": string, \"medications\": string}, \"alerts\": string[]}.\n\nRegras:\n- verde (score 70-100): consumo livre dentro do plano\n- amarelo (score 40-69): consumo ocasional, atenção a quantidade\n- vermelho (score 0-39): evitar ou substituir\n- alerts: lista interações com medicações e contra-indicações por diagnóstico\n\nContexto:\n- Diagnósticos: {{ JSON.stringify($json.userDiagnostics) }}\n- Medicações: {{ JSON.stringify($json.userMedications) }}",
               "role": "system"
             },
             {
-              "content": "={{ $json.body.foodName }}",
+              "content": "Alimento: {{ $json.foodName }}\nQuantidade: {{ $json.quantity || 'não informada' }}",
               "role": "user"
             }
           ]
         }
       },
       "id": "openai-classify-5",
-      "name": "OpenAI: Classifica Alimento",
+      "name": "OpenAI: Avalia Alimento",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1,
-      "position": [680, 300],
+      "position": [900, 300],
       "credentials": {
         "openAiApi": {
           "id": "openAiApi",
@@ -77,18 +104,24 @@
     },
     {
       "parameters": {
-        "jsCode": "const response = $json.choices?.[0]?.message?.content || '{}';\nlet classification;\ntry {\n  classification = JSON.parse(response);\n} catch (e) {\n  throw new Error('Invalid JSON response from OpenAI');\n}\n\nif (!classification.score || !classification.verdict || !classification.glycemicImpact) {\n  throw new Error('Missing required fields in classification');\n}\n\nreturn [{ json: classification }];"
+        "values": {
+          "object": [
+            { "name": "evaluation", "value": "={{ Object.assign(JSON.parse($json.choices?.[0]?.message?.content || '{}'), { foodName: $('Set: Normaliza Contexto').item.json.foodName, quantity: $('Set: Normaliza Contexto').item.json.quantity, evaluatedAt: $now.toISO() }) }}" }
+          ]
+        },
+        "options": { "dotNotation": false }
       },
-      "id": "code-validate-5",
-      "name": "Code: Validate & Parse",
-      "type": "n8n-nodes-base.code",
+      "id": "set-parse-5",
+      "name": "Set: Monta Evaluation",
+      "type": "n8n-nodes-base.set",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [1120, 300],
+      "notes": "Substitui Code de validação. Parse único + carimba foodName/quantity/evaluatedAt."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { success: true, classification: $json, timestamp: $now.toISO() } }}",
+        "responseBody": "={{ { success: true, evaluation: $json.evaluation, timestamp: $now.toISO() } }}",
         "options": {
           "responseCode": 200
         }
@@ -97,7 +130,8 @@
       "name": "Resposta: Sucesso",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1120, 300]
+      "position": [1340, 300],
+      "notes": "Caller (evaluateFood Cloud Function) lê result.evaluation — contract: {evaluation: {...}}."
     }
   ],
   "connections": {
@@ -108,16 +142,21 @@
     },
     "Valida Webhook Secret": {
       "main": [
-        [{ "node": "OpenAI: Classifica Alimento", "type": "main", "index": 0 }],
+        [{ "node": "Set: Normaliza Contexto", "type": "main", "index": 0 }],
         [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
       ]
     },
-    "OpenAI: Classifica Alimento": {
+    "Set: Normaliza Contexto": {
       "main": [
-        [{ "node": "Code: Validate & Parse", "type": "main", "index": 0 }]
+        [{ "node": "OpenAI: Avalia Alimento", "type": "main", "index": 0 }]
       ]
     },
-    "Code: Validate & Parse": {
+    "OpenAI: Avalia Alimento": {
+      "main": [
+        [{ "node": "Set: Monta Evaluation", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set: Monta Evaluation": {
       "main": [
         [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
       ]
@@ -130,18 +169,30 @@
     "errorWorkflow": ""
   },
   "staticData": null,
-  "tags": ["programa-4d", "food", "classificação"],
+  "tags": ["programa-4d", "food", "belinha"],
   "pinData": {},
   "versionId": "e5f6a7b8-c9d0-e1f2-a3b4-c5d6e7f8a9b0",
   "id": "food-classifier-005",
   "_meta": {
-    "description": "Classificador de alimentos para compatibilidade com dieta diabética. Avalia cada alimento com score (0-100), verdict (verde/amarelo/vermelho), impacto glicêmico, alternativas e quando consumir.",
+    "description": "Avalia alimento (foodName + quantity) para paciente diabético considerando diagnósticos e medicações. Retorna {evaluation: {score, verdict, glycemicImpact, macros, compatibility, alerts, ...}}.",
     "envVars": {
       "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions"
     },
     "credentials": {
       "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
     },
-    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+    "changelog_2026_05_20": [
+      "BUG FIX: response key alinhada com o caller. Antes retornava {classification: ...}, agora {evaluation: ...} (evaluateFood Cloud Function lê result.evaluation)",
+      "BUG FIX: payload agora respeita {uid, foodName, quantity, userDiagnostics, userMedications, userProfile} (antes lia só $json.body.foodName)",
+      "REFACTOR: nó Code substituído por Set (parse + carimbos)",
+      "REFACTOR: response_format=json_object + schema rico (macros, compatibility, alerts)",
+      "FEATURE: prompt agora considera diagnostics e medications (antes ignorava o contexto)",
+      "NAMING: workflow renomeado para '4D - Evaluate Food'"
+    ],
+    "follow_ups": [
+      "Adicionar Qdrant Vector Store consultando 'Semaforo De Alimentos.docx' e 'Substituicoes para intolerantes a lactose.docx' antes da IA",
+      "Cache de avaliações repetidas por foodName+diagnostics em Redis (TTL 7d)"
+    ],
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir env WEBHOOK_SECRET. 4. NÃO ATIVAR — usuário ativa após verificar credenciais."
   }
 }

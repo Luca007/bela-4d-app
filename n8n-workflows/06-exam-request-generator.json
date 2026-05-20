@@ -1,5 +1,5 @@
 {
-  "name": "4D Exam Request Generator",
+  "name": "4D - Generate Exam Request",
   "nodes": [
     {
       "parameters": {
@@ -13,7 +13,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [240, 300],
-      "webhookId": "4d-generate-exam-request"
+      "webhookId": "4d-generate-exam-request",
+      "notes": "Caller: Firebase Functions generateExamRequest (callN8nWithRetry, sync). Payload: {uid, clientData{name,age,gender,diagnostics,medications,...}}. Resposta esperada: {driveFileUrl, fileName}."
     },
     {
       "parameters": {
@@ -49,15 +50,44 @@
     },
     {
       "parameters": {
+        "values": {
+          "string": [
+            { "name": "uid", "value": "={{ $json.body.uid }}" },
+            { "name": "clientName", "value": "={{ $json.body.clientData?.name || 'paciente' }}" },
+            { "name": "clientGender", "value": "={{ $json.body.clientData?.gender || '' }}" }
+          ],
+          "number": [
+            { "name": "clientAge", "value": "={{ Number($json.body.clientData?.age) || 0 }}" }
+          ],
+          "object": [
+            { "name": "clientData", "value": "={{ $json.body.clientData || {} }}" },
+            { "name": "diagnostics", "value": "={{ $json.body.clientData?.diagnostics || [] }}" },
+            { "name": "medications", "value": "={{ $json.body.clientData?.medications || [] }}" }
+          ]
+        },
+        "options": { "dotNotation": false }
+      },
+      "id": "set-context-6",
+      "name": "Set: Normaliza ClientData",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
         "model": "gpt-4o-mini",
+        "options": {
+          "responseFormat": "json_object",
+          "temperature": 0.2
+        },
         "messages": {
           "values": [
             {
-              "content": "Você é médico especialista em endocrinologia e diabetes. Gere uma lista de exames para paciente diabético baseado nos dados de saúde fornecidos. Retorne JSON com a estrutura: {exams: [{name: 'nome do exame', code: 'código TUSS', justification: 'motivo clínico'}], priority: 'routine'|'urgent', notes: 'observações'}. Responda APENAS com JSON válido.",
+              "content": "Você é médico especialista em endocrinologia. Gere uma lista de exames laboratoriais para paciente diabético/pré-diabético baseado nos dados clínicos. Considere: diagnósticos, medicações em uso, faixa etária, sexo.\n\nResponda APENAS em JSON com este schema: {\"exams\": [{\"name\": string, \"code\": string (TUSS/AMB), \"justification\": string}], \"priority\": \"routine\"|\"urgent\", \"notes\": string}.\n\nDiretrizes:\n- Mínimo: glicemia jejum, HbA1c, perfil lipídico, função renal (creatinina + ureia), TSH, hepatograma\n- Se diagnóstico inclui retinopatia/neuropatia: adicionar exames específicos\n- Se uso de metformina: incluir vitamina B12\n- Se uso de estatina: incluir CPK\n- priority='urgent' apenas se sintomas agudos descritos",
               "role": "system"
             },
             {
-              "content": "={{ $json.body.healthContext }}",
+              "content": "Paciente: {{ $json.clientName }}, {{ $json.clientAge }} anos, {{ $json.clientGender }}\nDiagnósticos: {{ JSON.stringify($json.diagnostics) }}\nMedicações: {{ JSON.stringify($json.medications) }}\nContexto completo: {{ JSON.stringify($json.clientData) }}",
               "role": "user"
             }
           ]
@@ -67,7 +97,7 @@
       "name": "OpenAI: Gera Lista de Exames",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1,
-      "position": [680, 300],
+      "position": [900, 300],
       "credentials": {
         "openAiApi": {
           "id": "openAiApi",
@@ -77,27 +107,52 @@
     },
     {
       "parameters": {
-        "jsCode": "const response = $json.choices?.[0]?.message?.content || '{}';\nlet examRequest;\ntry {\n  examRequest = JSON.parse(response);\n} catch (e) {\n  throw new Error('Invalid JSON response from OpenAI');\n}\n\nif (!Array.isArray(examRequest.exams) || !examRequest.priority) {\n  throw new Error('Missing required fields in exam request');\n}\n\nexamRequest.generatedAt = new Date().toISOString();\nexamRequest.patientId = $json.body.patientId || null;\n\nreturn [{ json: examRequest }];"
+        "values": {
+          "string": [
+            { "name": "fileName", "value": "=pedido-exames-{{ $('Set: Normaliza ClientData').item.json.clientName.replace(/[^a-zA-Z0-9-]/g, '_') }}-{{ $now.toFormat('yyyy-MM-dd') }}.pdf" }
+          ],
+          "object": [
+            { "name": "examRequest", "value": "={{ JSON.parse($json.choices?.[0]?.message?.content || '{}') }}" }
+          ]
+        },
+        "options": { "dotNotation": false }
       },
-      "id": "code-exam-6",
-      "name": "Code: Format & Validate",
-      "type": "n8n-nodes-base.code",
+      "id": "set-parse-6",
+      "name": "Set: Parse Exames",
+      "type": "n8n-nodes-base.set",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [1120, 300],
+      "notes": "Substitui o Code antigo. Parse + monta fileName padronizado."
+    },
+    {
+      "parameters": {
+        "operation": "createBinaryFile",
+        "name": "={{ $json.fileName }}",
+        "dataPropertyName": "data",
+        "rawData": true,
+        "stringContent": "=PEDIDO DE EXAMES — Programa 4D\\n\\nPaciente: {{ $('Set: Normaliza ClientData').item.json.clientName }}\\nIdade: {{ $('Set: Normaliza ClientData').item.json.clientAge }} anos\\nSexo: {{ $('Set: Normaliza ClientData').item.json.clientGender }}\\n\\nPrioridade: {{ $json.examRequest.priority }}\\n\\nEXAMES SOLICITADOS:\\n{{ ($json.examRequest.exams || []).map(e => '- ' + e.name + ' (' + e.code + ') — ' + e.justification).join('\\n') }}\\n\\nObservações: {{ $json.examRequest.notes }}\\n\\nGerado em: {{ $now.toISO() }}"
+      },
+      "id": "convert-pdf-6",
+      "name": "(FALLBACK) Gera Conteúdo Texto",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "notes": "FALLBACK temporário enquanto integração Google Docs/Drive não está configurada. Idealmente substituir por: Google Docs (createFromTemplate) → Google Drive (download as PDF) → resposta com driveFileUrl real. Ver follow_ups."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { success: true, exams: $json.exams, priority: $json.priority, notes: $json.notes, driveFileUrl: null, fileName: 'exam-request.json', timestamp: $now.toISO() } }}",
+        "responseBody": "={{ { success: true, driveFileUrl: null, fileName: $('Set: Parse Exames').item.json.fileName, examRequest: $('Set: Parse Exames').item.json.examRequest, _warning: 'driveFileUrl=null porque integração Google Drive ainda não configurada neste workflow. Caller (generateExamRequest) gravará fileUrl=null no Firestore — downloadExamPdf falhará. Implementar Google Docs + Drive nodes antes de ativar.' } }}",
         "options": {
           "responseCode": 200
         }
       },
       "id": "success-response-6",
-      "name": "Resposta: Sucesso",
+      "name": "Resposta: Sucesso (com warning)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1120, 300]
+      "position": [1560, 300],
+      "notes": "Resposta inclui campo _warning explicitando que driveFileUrl=null (caller esperava URL real)."
     }
   ],
   "connections": {
@@ -108,18 +163,28 @@
     },
     "Valida Webhook Secret": {
       "main": [
-        [{ "node": "OpenAI: Gera Lista de Exames", "type": "main", "index": 0 }],
+        [{ "node": "Set: Normaliza ClientData", "type": "main", "index": 0 }],
         [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set: Normaliza ClientData": {
+      "main": [
+        [{ "node": "OpenAI: Gera Lista de Exames", "type": "main", "index": 0 }]
       ]
     },
     "OpenAI: Gera Lista de Exames": {
       "main": [
-        [{ "node": "Code: Format & Validate", "type": "main", "index": 0 }]
+        [{ "node": "Set: Parse Exames", "type": "main", "index": 0 }]
       ]
     },
-    "Code: Format & Validate": {
+    "Set: Parse Exames": {
       "main": [
-        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
+        [{ "node": "(FALLBACK) Gera Conteúdo Texto", "type": "main", "index": 0 }]
+      ]
+    },
+    "(FALLBACK) Gera Conteúdo Texto": {
+      "main": [
+        [{ "node": "Resposta: Sucesso (com warning)", "type": "main", "index": 0 }]
       ]
     }
   },
@@ -130,18 +195,32 @@
     "errorWorkflow": ""
   },
   "staticData": null,
-  "tags": ["programa-4d", "exames", "gerador"],
+  "tags": ["programa-4d", "exames", "pendente-drive"],
   "pinData": {},
   "versionId": "f6a7b8c9-d0e1-f2a3-b4c5-d6e7f8a9b0c1",
   "id": "exam-request-generator-006",
   "_meta": {
-    "description": "Gerador de solicitações de exames para pacientes diabéticos. Baseado em contexto de saúde do paciente, gera lista estruturada de exames com códigos TUSS, justificativas clínicas e prioridade (rotina ou urgente).",
+    "description": "Gera lista estruturada de exames laboratoriais para paciente diabético. PENDENTE: geração de PDF via Google Docs+Drive ainda não implementada (atualmente retorna driveFileUrl=null, o que faz downloadExamPdf falhar no front).",
     "envVars": {
       "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions"
     },
     "credentials": {
-      "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
+      "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API",
+      "googleDocs": "TODO — necessário para geração de PDF (template + merge + export)",
+      "googleDrive": "TODO — necessário para hospedar o PDF e obter driveFileUrl público"
     },
-    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+    "changelog_2026_05_20": [
+      "BUG FIX: payload usava $json.body.healthContext (não enviado pelo caller). Real é $json.body.clientData",
+      "REFACTOR: nó Code substituído por Set (parse + fileName)",
+      "REFACTOR: response_format=json_object + diretrizes clínicas no prompt (vitamina B12 se metformina, CPK se estatina, etc.)",
+      "FEATURE: prompt usa clientData completo (name/age/gender/diagnostics/medications)",
+      "WARNING: driveFileUrl=null e _warning incluso na resposta. Caller (Cloud Function generateExamRequest) gravará fileUrl=null no Firestore",
+      "NAMING: workflow renomeado para '4D - Generate Exam Request'"
+    ],
+    "follow_ups": [
+      "CRÍTICO: substituir nó (FALLBACK) por chain Google Docs createFromTemplate → Google Drive uploadFile → setPermissions(anyoneWithLink) → retornar driveFileUrl real. Sem isso o caller grava fileUrl=null e o front quebra em downloadExamPdf.",
+      "Avaliar se o template do pedido deve ficar em uma pasta padrão do Drive (env var EXAM_REQUEST_TEMPLATE_ID) ou se vamos renderizar HTML→PDF com nó nativo (n8n não tem nó HTML→PDF nativo na versão atual; HTTP raw para serviço como pdfshift seria a alternativa justificada)."
+    ],
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir env WEBHOOK_SECRET. 4. ⚠️ NÃO ATIVAR — gera resposta com driveFileUrl=null. Implementar integração Google Drive primeiro (ver follow_ups)."
   }
 }
