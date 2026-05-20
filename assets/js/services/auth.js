@@ -68,14 +68,18 @@ export class AuthService {
     this.pendingLoginPromise = (async () => {
       try {
         const auth = getAuth();
-        const result = await signInWithEmailAndPassword(auth, email, password);
+        const result = await signInWithEmailAndPassword(auth, normalizedEmail, password);
         return {
           success: true,
           user: result.user,
           uid: result.user.uid
         };
       } catch (error) {
-        console.error('Login error:', error);
+        const code = error?.code || '';
+        const isExpectedAuthFailure = code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found' || code === 'auth/invalid-email';
+        if (!isExpectedAuthFailure) {
+          console.error('Login error:', error);
+        }
         return {
           success: false,
           error: this.getErrorMessage(error)
