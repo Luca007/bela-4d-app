@@ -15,7 +15,7 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
-// defineSecret removido temporariamente para deploy (Secret Manager sem permissão)
+const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const axios = require('axios');
@@ -114,11 +114,12 @@ const VALID_EVENTS = new Set([
 // secretN8nWebhookSecret — em runtime usa process.env direto
 
 const REGION = 'southamerica-east1';
-// SECRETS array removido temporariamente para deploy
+const N8N_WEBHOOK_SECRET = defineSecret('N8N_WEBHOOK_SECRET');
+const SECRETS = [N8N_WEBHOOK_SECRET];
 
 // Resolvidos em runtime (dentro das funções, não no topo do módulo)
 function getN8nBaseUrl() {
-  return process.env.N8N_BASE_URL || 'https://SEU-N8N.cloud/webhook';
+  return process.env.N8N_BASE_URL || 'https://n8n.attoltda.com/webhook';
 }
 function getN8nWebhookSecret() {
   return process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO';

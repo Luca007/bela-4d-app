@@ -52,8 +52,15 @@ class App {
     ]);
 
     this.statusRoutes = {
-      [USER_STATUS.AWAITING_ONBOARDING]: async () => {
-        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_ONBOARDING });
+      [USER_STATUS.AWAITING_ONBOARDING]: async (uid) => {
+        // Se onboarding NÃO foi completado → formulário primeiro
+        const profile = State.get('userProfile');
+        if (!profile?.onboardingCompleted) {
+          this.navigate(SCREENS.ONBOARDING);
+        } else {
+          // Onboarding já feito → agendar reunião
+          this.navigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_ONBOARDING });
+        }
       },
       [USER_STATUS.PENDING_BLOOD_TEST]: async () => {
         this.navigate(SCREENS.AWAITING, { status: USER_STATUS.PENDING_BLOOD_TEST });
@@ -130,6 +137,7 @@ class App {
   _pageTitle(screenId) {
     return {
       [SCREENS.LOGIN]:       'Login | Programa 4D',
+      [SCREENS.ONBOARDING]:  'Onboarding | Programa 4D',
       [SCREENS.AWAITING]:    'Aguardando | Programa 4D',
       [SCREENS.EXAM_UPLOAD]: 'Enviar Exame | Programa 4D',
       [SCREENS.HEALTH_FORM]: 'Formulário de Saúde | Programa 4D',
