@@ -79,10 +79,106 @@ export class FormsScreen extends BaseScreen {
   }
 
   createProgressIndicator() {
-    const container = DOM.create('div', 'progress-steps'); container.style.padding = '0 24px 24px 24px'; container.style.display = 'flex'; container.style.gap = '8px'; container.style.alignItems = 'center';
-    for (let i = 0; i < 5; i++) {
-      const step = DOM.create('div'); step.style.flex = '1'; step.style.height = '4px'; step.style.borderRadius = '2px'; step.style.background = i <= this.currentFormStep ? Colors.pink : Colors.border; step.style.transition = 'background 0.3s ease'; container.appendChild(step);
-    }
+    const labels = [
+      { full: 'Saúde e Histórico', short: 'Saúde' },
+      { full: 'Exames', short: 'Exames' },
+      { full: 'Alimentos Liberados', short: 'Liberados' },
+      { full: 'Com Moderação', short: 'Moderação' },
+      { full: 'Alimentos Proibidos', short: 'Proibidos' }
+    ];
+
+    const container = DOM.create('div', 'form-progress-steps');
+    DOM.setStyle(container, {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+      gap: '0',
+      marginBottom: '20px',
+      flexWrap: 'nowrap',
+      padding: '0',
+    });
+
+    labels.forEach((label, index) => {
+      const stepEl = DOM.create('div', 'fp-step');
+      DOM.setStyle(stepEl, {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        flex: '1',
+        minWidth: '0',
+        position: 'relative',
+      });
+      if (index === this.currentFormStep) stepEl.classList.add('active');
+      if (index < this.currentFormStep) stepEl.classList.add('completed');
+
+      // Circle
+      const circle = DOM.create('div', 'fp-step-circle');
+      DOM.setStyle(circle, {
+        width: '32px', height: '32px',
+        borderRadius: '50%',
+        background: index <= this.currentFormStep
+          ? `linear-gradient(135deg, ${Colors.pink}, #c0027c)`
+          : 'rgba(255,255,255,0.06)',
+        border: `2px solid ${index <= this.currentFormStep ? Colors.pink : Colors.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: index <= this.currentFormStep ? '#fff' : Colors.muted,
+        fontWeight: '700', fontSize: '13px',
+        flexShrink: '0',
+        marginBottom: '6px',
+        boxShadow: index <= this.currentFormStep ? `0 0 12px ${Colors.pinkGlow}` : 'none',
+        zIndex: '1',
+      });
+      if (index < this.currentFormStep) {
+        circle.innerHTML = '✓';
+        circle.style.fontSize = '14px';
+      } else {
+        circle.textContent = index + 1;
+      }
+
+      // Label (full text hidden on mobile via CSS)
+      const labelEl = DOM.create('span', 'fp-step-label');
+      labelEl.setAttribute('data-full', label.full);
+      labelEl.setAttribute('data-short', label.short);
+      labelEl.textContent = label.full;
+      DOM.setStyle(labelEl, {
+        color: index === this.currentFormStep ? Colors.pinkLight : Colors.muted,
+        fontSize: '11px',
+        fontWeight: index === this.currentFormStep ? '700' : '500',
+        textAlign: 'center',
+        lineHeight: '1.3',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        padding: '0 2px',
+      });
+
+      stepEl.appendChild(circle);
+      stepEl.appendChild(labelEl);
+      container.appendChild(stepEl);
+
+      // Connector line between steps
+      if (index < labels.length - 1) {
+        const lineWrapper = DOM.create('div', 'fp-step-line-wrapper');
+        DOM.setStyle(lineWrapper, {
+          display: 'flex', alignItems: 'center',
+          flex: '1',
+          minWidth: '16px',
+          maxWidth: '40px',
+          margin: '0 2px',
+        });
+        const line = DOM.create('div', 'fp-step-line');
+        DOM.setStyle(line, {
+          width: '100%', height: '2px',
+          background: index < this.currentFormStep ? Colors.pink : Colors.border,
+          borderRadius: '1px',
+          marginBottom: '22px',
+        });
+        lineWrapper.appendChild(line);
+        container.appendChild(lineWrapper);
+      }
+    });
+
     return container;
   }
 

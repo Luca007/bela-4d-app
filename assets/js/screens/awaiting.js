@@ -146,10 +146,89 @@ export class AwaitingScreen extends BaseScreen {
   }
 
   // ─────────────────────────────────────────────
-  // Formulário de agendamento
+  // Link de agendamento (Google Calendar)
+  // TODO: implementar integração nativa com Google Calendar API
   // ─────────────────────────────────────────────
 
   _buildScheduleForm() {
+    const wrap = DOM.create('div');
+
+    const emoji = DOM.create('div');
+    emoji.style.cssText = 'font-size: 56px; margin-bottom: 16px; line-height: 1;';
+    emoji.textContent = '🗓️';
+    wrap.appendChild(emoji);
+
+    const subtitle = DOM.create('span');
+    subtitle.style.cssText = `
+      display: inline-block;
+      background: rgba(240,5,154,0.12);
+      color: #f0059a;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 12px;
+    `;
+    subtitle.textContent = 'Bem-vinda ao Programa 4D!';
+    wrap.appendChild(subtitle);
+
+    const title = DOM.create('h1');
+    title.style.cssText = `
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--color-text);
+      margin: 0 0 12px;
+      line-height: 1.3;
+    `;
+    title.textContent = 'Agende sua reunião inicial';
+    wrap.appendChild(title);
+
+    const desc = DOM.create('p');
+    desc.style.cssText = `
+      font-size: 14px;
+      color: var(--color-muted);
+      line-height: 1.6;
+      margin: 0 0 24px;
+    `;
+    desc.textContent = 'Escolha o melhor dia e horário para conversar com sua Guardiã. A reunião dura cerca de 40 minutos pelo Google Meet.';
+    wrap.appendChild(desc);
+
+    // Link do Google Calendar Appointment Schedule
+    const btn = DOM.create('a');
+    btn.href = 'https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ02JVehFmAnxao0t64iHn9zEsG0F2NObfIANAiOk-1lzWJvWq8q4pm6rlNYxP2UJP4C6tGuO9ed';
+    btn.target = '_blank';
+    btn.rel = 'noopener noreferrer';
+    btn.style.cssText = `
+      display: inline-block;
+      width: 100%;
+      padding: 16px 24px;
+      box-sizing: border-box;
+      background: linear-gradient(135deg, #f0059a, #c0027c);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 20px rgba(240,5,154,0.3);
+    `;
+    btn.textContent = '🗓️ Agendar horário no Google Calendar';
+    wrap.appendChild(btn);
+
+    const hint = DOM.create('p');
+    hint.style.cssText = 'font-size: 11px; color: var(--color-muted); margin-top: 8px; line-height: 1.5;';
+    hint.textContent = 'Você será redirecionada para o Google Calendar. Após agendar, volte ao app para continuar.';
+    wrap.appendChild(hint);
+
+    return wrap;
+  }
+
+  /*
     const wrap = DOM.create('div');
 
     const emoji = DOM.create('div');
@@ -933,7 +1012,7 @@ export class AwaitingScreen extends BaseScreen {
       this.isSchedulingMeeting = false;
       if (restoreBtn) restoreBtn();
     }
-  }
+  */
 
   // ─────────────────────────────────────────────
   // Tela de confirmação / aguardando

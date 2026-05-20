@@ -12,6 +12,7 @@
  * Região: southamerica-east1 (São Paulo)
  */
 
+const { setGlobalOptions } = require('firebase-functions/v2');
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
@@ -117,12 +118,14 @@ const REGION = 'southamerica-east1';
 const N8N_WEBHOOK_SECRET = defineSecret('N8N_WEBHOOK_SECRET');
 const SECRETS = [N8N_WEBHOOK_SECRET];
 
+setGlobalOptions({ region: REGION, secrets: SECRETS });
+
 // Resolvidos em runtime (dentro das funções, não no topo do módulo)
 function getN8nBaseUrl() {
   return process.env.N8N_BASE_URL || 'https://n8n.attoltda.com/webhook';
 }
 function getN8nWebhookSecret() {
-  return process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO';
+  return (process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO').trim();
 }
 function getN8nHeaders() {
   return { 'Content-Type': 'application/json', 'X-Webhook-Secret': getN8nWebhookSecret() };
