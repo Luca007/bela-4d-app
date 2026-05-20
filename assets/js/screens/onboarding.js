@@ -108,33 +108,92 @@ export class OnboardingScreen extends BaseScreen {
 
   createProgressSteps() {
     const container = DOM.create('div', 'progress-steps');
+    DOM.setStyle(container, {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+      gap: '0',
+      marginBottom: '20px',
+      flexWrap: 'nowrap',
+      padding: '0',
+    });
     
     ONBOARDING_STEPS.forEach((step, index) => {
       const stepEl = DOM.create('div', 'step');
+      DOM.setStyle(stepEl, {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        flex: '1',
+        minWidth: '0',
+        position: 'relative',
+      });
       if (index === this.currentStep) stepEl.classList.add('active');
       if (index < this.currentStep) stepEl.classList.add('completed');
       
       const circle = DOM.create('div', 'step-circle');
+      DOM.setStyle(circle, {
+        width: '32px', height: '32px',
+        borderRadius: '50%',
+        background: index <= this.currentStep
+          ? `linear-gradient(135deg, ${Colors.pink}, #c0027c)`
+          : 'rgba(255,255,255,0.06)',
+        border: `2px solid ${index <= this.currentStep ? Colors.pink : Colors.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: index <= this.currentStep ? '#fff' : Colors.muted,
+        fontWeight: '700', fontSize: '13px',
+        flexShrink: '0',
+        marginBottom: '6px',
+        boxShadow: index <= this.currentStep ? `0 0 12px ${Colors.pinkGlow}` : 'none',
+        zIndex: '1',
+      });
       if (index < this.currentStep) {
         circle.innerHTML = '✓';
-        circle.style.display = 'flex';
-        circle.style.alignItems = 'center';
-        circle.style.justifyContent = 'center';
+        circle.style.fontSize = '14px';
       } else {
         circle.textContent = index + 1;
       }
       
       const label = DOM.create('span', 'step-label');
       label.textContent = step;
+      DOM.setStyle(label, {
+        color: index === this.currentStep ? Colors.pinkLight : Colors.muted,
+        fontSize: '11px',
+        fontWeight: index === this.currentStep ? '700' : '500',
+        textAlign: 'center',
+        lineHeight: '1.3',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        padding: '0 2px',
+      });
+      
+      // Linha conectora entre steps
+      const lineWrapper = DOM.create('div');
+      DOM.setStyle(lineWrapper, {
+        display: 'flex', alignItems: 'center',
+        flex: index < ONBOARDING_STEPS.length - 1 ? '1' : '0',
+        minWidth: index < ONBOARDING_STEPS.length - 1 ? '16px' : '0',
+        maxWidth: index < ONBOARDING_STEPS.length - 1 ? '40px' : '0',
+        margin: '0 2px',
+      });
+      if (index < ONBOARDING_STEPS.length - 1) {
+        const line = DOM.create('div', 'step-line');
+        DOM.setStyle(line, {
+          width: '100%', height: '2px',
+          background: index < this.currentStep ? Colors.pink : Colors.border,
+          borderRadius: '1px',
+          marginBottom: '22px',
+        });
+        lineWrapper.appendChild(line);
+      }
       
       stepEl.appendChild(circle);
       stepEl.appendChild(label);
       container.appendChild(stepEl);
-      
       if (index < ONBOARDING_STEPS.length - 1) {
-        const line = DOM.create('div', 'step-line');
-        if (index < this.currentStep) line.style.background = Colors.pink;
-        container.appendChild(line);
+        container.appendChild(lineWrapper);
       }
     });
     
