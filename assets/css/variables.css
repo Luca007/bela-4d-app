@@ -9,6 +9,7 @@
   --color-pink: #f0059a;
   --color-pink-glow: rgba(240, 5, 154, 0.28);
   --color-pink-light: #ff4dc4;
+  --gradient-primary: linear-gradient(135deg, #f0059a, #c0027c);
   
   /* Status colors */
   --color-success: #1fcc74;
