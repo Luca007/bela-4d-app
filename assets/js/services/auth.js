@@ -104,7 +104,10 @@ export class AuthService {
     }
     try {
       const auth = getAuth();
-      await sendPasswordResetEmail(auth, email.trim());
+      await sendPasswordResetEmail(auth, email.trim(), {
+        url: 'https://luca007.github.io/bela-4d-app/reset-password.html',
+        handleCodeInApp: false,
+      });
       return { success: true };
     } catch (error) {
       console.error('Password reset error:', error);
