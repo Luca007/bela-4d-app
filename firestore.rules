@@ -75,6 +75,9 @@ service cloud.firestore {
       match /formProgress/{docId} {
         allow read, write: if isOwner(uid);
       }
+      match /onboardingDraft/{docId} {
+        allow read, write: if isOwner(uid);
+      }
       match /bloodTests/{docId} {
         allow read, write: if isOwner(uid);
       }

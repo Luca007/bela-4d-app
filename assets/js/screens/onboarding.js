@@ -723,13 +723,16 @@ export class OnboardingScreen extends BaseScreen {
       weight: 'Peso',
       height: 'Altura',
       diagnostics: 'Diagnóstico',
+      sleep: 'Qualidade do Sono',
+      stress: 'Nível de Estresse',
+      activity: 'Atividade Física',
     };
 
     const requiredByStep = [
       ['name', 'birthDate', 'gender', 'weight', 'height'], // step 0
       ['diagnostics'],                                       // step 1
-      [],                                                    // step 2 — optional
-      [],                                                    // step 3 — optional
+      [],                                                    // step 2 — opcional
+      ['sleep', 'stress', 'activity'],                       // step 3 — obrigatório
     ];
 
     const required = requiredByStep[this.currentStep] || [];
