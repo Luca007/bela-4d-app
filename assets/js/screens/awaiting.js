@@ -9,7 +9,7 @@
  * um seletor de data e horário. Após agendar, exibe a confirmação.
  */
 
-import { DOM, State, Session } from '../utils/helpers.js';
+import { DOM, State, Session, welcomeWord } from '../utils/helpers.js';
 import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
@@ -171,7 +171,7 @@ export class AwaitingScreen extends BaseScreen {
       border-radius: 20px;
       margin-bottom: 12px;
     `;
-    subtitle.textContent = 'Bem-vinda ao Programa 4D!';
+    subtitle.textContent = `${welcomeWord(State.get?.('userProfile')?.gender)} ao Programa 4D!`;
     wrap.appendChild(subtitle);
 
     const title = DOM.create('h1');
@@ -249,7 +249,7 @@ export class AwaitingScreen extends BaseScreen {
       border-radius: 20px;
       margin-bottom: 12px;
     `;
-    subtitle.textContent = 'Bem-vinda ao Programa 4D!';
+    subtitle.textContent = `${welcomeWord(State.get?.('userProfile')?.gender)} ao Programa 4D!`;
     wrap.appendChild(subtitle);
 
     const title = DOM.create('h1');
