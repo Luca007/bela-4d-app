@@ -1,5 +1,5 @@
 // Login Screen
-import { DOM } from '../utils/helpers.js';
+import { DOM, welcomeWord } from '../utils/helpers.js';
 import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
@@ -361,8 +361,16 @@ export class LoginScreen extends BaseScreen {
       const result = await authService.login(this.email, this.password);
 
       if (result.success) {
-        // Toast efêmero de boas-vindas (não persistir)
-        notificationService.toast('Bem-vinda! 🌸', { type: 'success' });
+        // Toast efêmero de boas-vindas (não persistir).
+        // Busca o profile para resolver gênero. getUserProfile é cacheado em
+        // firestoreService — chamada subsequente em handleAuthStateChange reusa o cache.
+        // Em caso de falha (offline / primeiro login), cai no default "Bem-vindo".
+        let welcome = 'Bem-vindo';
+        try {
+          const profile = await firestoreService.getUserProfile(result.uid);
+          welcome = welcomeWord(profile?.gender);
+        } catch (_) { /* mantém default */ }
+        notificationService.toast(`${welcome}! 🌸`, { type: 'success' });
 
         // ─────────────────────────────────────────────────────────────────
         // NÃO navegamos manualmente daqui. O app.handleAuthStateChange()

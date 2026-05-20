@@ -258,10 +258,12 @@ export class FirestoreService {
       await setDoc(ref, initialData);
       this._cacheDelete(`profile_${uid}`);
 
-      // Notificação de boas-vindas
+      // Notificação de boas-vindas. Usa default "Bem-vindo" (masculino) porque
+      // ensureUserDocument roda no signUp, antes do onboarding — nesse momento o
+      // gender ainda não foi preenchido. A notificação fica persistida assim.
       try {
         await this.createNotification(uid, {
-          title: '🌸 Bem-vinda ao Programa 4D!',
+          title: '🌸 Bem-vindo ao Programa 4D!',
           message: 'Sua jornada de saúde começa agora. Explore o app e fale com sua Guardiã.',
           type: 'welcome',
           priority: 'high',

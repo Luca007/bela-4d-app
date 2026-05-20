@@ -171,3 +171,14 @@ export const Session = {
     Storage.clear();
   },
 };
+
+// Saudação adequada ao gênero. Default = "Bem-vindo" (masculino) quando o
+// gender é ausente, "Outro", desconhecido ou ainda não preenchido (ex.: toast
+// pós-login antes do onboarding, notificação welcome criada em ensureUserDocument).
+export function welcomeWord(gender) {
+  const normalized = String(gender || '').trim().toLowerCase();
+  if (normalized === 'feminino' || normalized === 'f' || normalized === 'mulher') {
+    return 'Bem-vinda';
+  }
+  return 'Bem-vindo';
+}

@@ -1,5 +1,5 @@
 // Dashboard Screen - Main Application Interface
-import { DOM, State } from '../utils/helpers.js';
+import { DOM, State, welcomeWord } from '../utils/helpers.js';
 import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
@@ -320,7 +320,8 @@ export class DashboardScreen extends BaseScreen {
   }
 
   renderHomeScreen(container) {
-    container.appendChild(this.createScreenHeader('Bem-vinda ao seu dashboard! 🎉', 'Acompanhe seu progresso e gerencie seu programa personalizado'));
+    const welcome = welcomeWord(State.get?.('userProfile')?.gender);
+    container.appendChild(this.createScreenHeader(`${welcome} ao seu dashboard! 🎉`, 'Acompanhe seu progresso e gerencie seu programa personalizado'));
     container.appendChild(this.createStatsGrid());
     container.appendChild(this.createTipsCard());
   }
