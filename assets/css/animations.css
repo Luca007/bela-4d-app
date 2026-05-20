@@ -195,3 +195,24 @@
 .transition-slow {
   transition: all var(--transition-slow);
 }
+
+/* ================================================================
+   Breadcrumb / Progress Step Animations
+   ================================================================ */
+
+/* Pulse sutil no círculo ativo — respira com o rosa */
+@keyframes stepPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px var(--color-pink-glow), 0 4px 16px var(--color-pink-glow);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(240, 5, 154, 0.15), 0 6px 24px var(--color-pink-glow);
+  }
+}
+
+/* Bounce do checkmark ao completar etapa */
+@keyframes stepCheckBounce {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}

@@ -83,11 +83,11 @@ export class FormsScreen extends BaseScreen {
     // (.form-progress-steps / .fp-step* em forms.css), consumindo tokens --color-* do variables.css.
 
     const labels = [
-      { full: 'Saúde e Histórico', short: 'Saúde' },
-      { full: 'Exames', short: 'Exames' },
-      { full: 'Alimentos Liberados', short: 'Liberados' },
-      { full: 'Com Moderação', short: 'Moderação' },
-      { full: 'Alimentos Proibidos', short: 'Proibidos' }
+      { full: 'Saúde e Histórico', short: 'Saúde', icon: '📋' },
+      { full: 'Exames', short: 'Exames', icon: '🩺' },
+      { full: 'Alimentos Liberados', short: 'Liberados', icon: '🟢' },
+      { full: 'Com Moderação', short: 'Moderação', icon: '🟡' },
+      { full: 'Alimentos Proibidos', short: 'Proibidos', icon: '🔴' }
     ];
 
     const wrapper = DOM.create('div');
@@ -115,11 +115,11 @@ export class FormsScreen extends BaseScreen {
         circle.textContent = String(index + 1);
       }
 
-      // Label (full/short — CSS escolhe via media query)
+      // Label (full/short + ícone — CSS escolhe via media query)
       const labelEl = DOM.create('span', 'fp-step-label');
-      labelEl.setAttribute('data-full', label.full);
-      labelEl.setAttribute('data-short', label.short);
-      labelEl.textContent = label.full;
+      labelEl.setAttribute('data-full', `${label.icon} ${label.full}`);
+      labelEl.setAttribute('data-short', `${label.icon} ${label.short}`);
+      labelEl.textContent = `${label.icon} ${label.full}`;
 
       // a11y: descrição completa de cada etapa (lida pelo screen reader)
       const srStatus = isCompleted ? 'concluída' : (isActive ? 'em andamento' : 'pendente');

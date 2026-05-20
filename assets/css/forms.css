@@ -88,6 +88,8 @@
   --fp-circle-bg: var(--color-glass);
   --fp-circle-fg: var(--color-muted);
   --fp-circle-border: var(--color-border);
+  --fp-circle-bg-inactive-dark: rgba(255, 255, 255, 0.055);
+  --fp-circle-bg-inactive-light: rgba(0, 0, 0, 0.06);
   --fp-label: var(--color-muted);
   --fp-label-active: var(--color-text);
   --fp-success: var(--color-success, #1fcc74);
@@ -120,8 +122,8 @@
 }
 
 .fp-step-circle {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -131,8 +133,9 @@
   line-height: 1;
   flex-shrink: 0;
   margin-bottom: 8px;
+  /* Tema escuro: glass sutil. Tema claro: bg levemente visível */
   background: var(--fp-circle-bg);
-  border: 1.5px solid var(--fp-circle-border);
+  border: 2px solid var(--fp-circle-border);
   color: var(--fp-circle-fg);
   box-shadow: none;
   transition:
@@ -140,23 +143,37 @@
     border-color var(--transition-base, 0.22s ease),
     color var(--transition-base, 0.22s ease),
     box-shadow var(--transition-base, 0.22s ease),
-    transform var(--transition-base, 0.22s ease);
+    transform var(--transition-base, 0.22s ease),
+    width 0.25s ease,
+    height 0.25s ease;
 }
 
-/* Estado: ativo — destaque rosa, leve glow, escala sutil */
+/* Tema claro: borda mais visível nos círculos inativos */
+[data-theme='light'] .fp-step-circle {
+  border-color: rgba(0, 0, 0, 0.16);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.5);
+}
+
+/* Estado: ativo — destaque rosa, glow animado (pulse), escala sutil */
 .fp-step.active .fp-step-circle {
   background: linear-gradient(135deg, var(--color-pink), #c0027c);
   border-color: var(--color-pink);
   color: #fff;
   box-shadow: 0 0 0 4px var(--color-pink-glow), 0 4px 14px var(--color-pink-glow);
-  transform: scale(1.06);
+  transform: scale(1.07);
+  animation: stepPulse 2.4s ease-in-out infinite;
 }
 
-/* Estado: completo — check verde, sem brilho excessivo */
+/* Estado: completo — verde + check com bounce */
 .fp-step.completed .fp-step-circle {
   background: var(--fp-success);
   border-color: var(--fp-success);
   color: #fff;
+}
+
+.fp-step.completed .fp-step-circle svg {
+  animation: stepCheckBounce 0.35s ease-out;
 }
 
 /* Foco acessível (teclado) */
@@ -189,14 +206,14 @@
   font-weight: 700;
 }
 
-/* Connector — track cinza + fill rosa quando completed */
+/* Connector — track neutral + fill rosa animado quando completed */
 .fp-step-line-wrapper {
   display: flex;
   align-items: center;
   flex: 1 1 0;
   min-width: 14px;
-  max-width: 64px;
-  margin: 15px 4px 0; /* alinha com o centro do círculo (32/2 - 1 = 15) */
+  max-width: 48px;
+  margin: 16px 4px 0; /* alinha com o centro do círculo (34/2-1 = 16) */
 }
 
 .fp-step-line {
@@ -208,6 +225,11 @@
   overflow: hidden;
 }
 
+/* Tema claro: track mais visível */
+[data-theme='light'] .fp-step-line {
+  background: rgba(0, 0, 0, 0.1);
+}
+
 /* O fill: barra que cresce de 0 a 100% quando a etapa anterior está completed */
 .fp-step-line::after {
   content: '';
@@ -215,7 +237,7 @@
   inset: 0 100% 0 0;
   background: linear-gradient(90deg, var(--color-pink), var(--color-pink-light, #ff4dc4));
   border-radius: 1px;
-  transition: right 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: right 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .fp-step-line.is-filled::after {
@@ -259,16 +281,16 @@
   }
 
   .fp-step-line-wrapper {
-    min-width: 10px;
-    max-width: 48px;
-    margin: 14px 2px 0;
+    min-width: 8px;
+    max-width: 40px;
+    margin: 16px 2px 0;
   }
 }
 
 /* ---------- Mobile (<480px): só círculos + caption da etapa atual ---------- */
 @media (max-width: 479px) {
   .form-progress-steps {
-    padding: 8px 8px 0;
+    padding: 8px 6px 0;
     gap: 0;
   }
 
@@ -283,12 +305,18 @@
     transform: scale(1.08);
   }
 
+  .fp-step.active .fp-step-circle,
+  .fp-step.completed .fp-step-circle {
+    width: 28px;
+    height: 28px;
+  }
+
   .fp-step-label {
     display: none;
   }
 
   .fp-step-line-wrapper {
-    min-width: 6px;
+    min-width: 4px;
     max-width: none;
     margin: 13px 2px 0;
   }
@@ -306,19 +334,26 @@
     transition: none;
   }
   .fp-step.active .fp-step-circle {
+    animation: none;
     transform: none;
+  }
+  .fp-step.completed .fp-step-circle svg {
+    animation: none;
   }
 }
 
-/* Progress steps (legacy dot style) — mantido para compatibilidade */
-.progress-steps {
+/* Progress steps (legacy dot bar style) — NÃO conflita com layout.css.
+   Escopo restrito: apenas quando usada como barra de dots (div children diretos). */
+.forms-content .progress-steps,
+.progress-bar-dots {
   display: flex;
   gap: 8px;
   align-items: center;
   padding: 0 24px 24px;
 }
 
-.progress-steps div {
+.forms-content .progress-steps div,
+.progress-bar-dots div {
   flex: 1;
   height: 4px;
   border-radius: 2px;
@@ -326,8 +361,10 @@
   transition: background 0.3s ease;
 }
 
-.progress-steps div[style*="pink"],
-.progress-steps div[style*="rgb(240, 5, 154)"] {
+.forms-content .progress-steps div[style*="pink"],
+.forms-content .progress-steps div[style*="rgb(240, 5, 154)"],
+.progress-bar-dots div[style*="pink"],
+.progress-bar-dots div[style*="rgb(240, 5, 154)"] {
   background: var(--color-pink);
 }
 
@@ -353,32 +390,43 @@
   overflow: hidden;
 }
 
+/* OLD: gradiente e shadow hard-coded em pink, sem tokens
+.form-progress-bar-fill {
+  background: linear-gradient(90deg, #f0059a, #9b02c8);
+  box-shadow: 0 0 8px rgba(240,5,154,0.35);
+}
+*/
 .form-progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #f0059a, #9b02c8);
+  background: linear-gradient(90deg, var(--color-pink), var(--color-pink-light, #ff4dc4));
   border-radius: 3px;
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 8px rgba(240,5,154,0.35);
+  box-shadow: 0 0 8px var(--color-pink-glow);
 }
 
 /* Required field indicator */
+/* OLD: color: #f0059a; — agora via token */
 .field-required-label::after {
   content: ' *';
-  color: #f0059a;
+  color: var(--color-pink);
   font-weight: 800;
 }
 
 /* Field validation error states */
+/* OLD: cores hard-coded em vermelho — agora via tokens
+.field-error { border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,0.15) !important; }
+.field-error-message { color: #f87171; }
+*/
 .field-error,
 input.field-error,
 select.field-error,
 textarea.field-error {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 3px rgba(239,68,68,0.15) !important;
+  border-color: var(--color-danger) !important;
+  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.18) !important;
 }
 
 .field-error-message {
-  color: #f87171;
+  color: var(--color-danger);
   font-size: 12px;
   margin-top: 5px;
   font-weight: 600;
@@ -636,7 +684,7 @@ textarea.field-error {
     font-size: 13px;
   }
 
-  .progress-steps {
+  .progress-bar-dots {
     padding: 0 16px 16px;
   }
 
