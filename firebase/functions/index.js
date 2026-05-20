@@ -1226,12 +1226,12 @@ exports.awardXp = onCall({ region: REGION }, async (request) => {
     throw new HttpsError('invalid-argument', `amount deve ser inteiro entre 1 e 2000, recebido: ${amount}`);
   }
 
-  // Validação do amount vs XP_EVENTS_MAP (impede XP inflation via DevTools)
+  // Validação do amount vs XP_EVENTS_MAP (permite múltiplos para bônus de milestone)
   const expectedAmount = XP_EVENTS_MAP[event];
-  if (expectedAmount !== undefined && xp !== expectedAmount) {
+  if (expectedAmount !== undefined && (xp < expectedAmount || xp % expectedAmount !== 0)) {
     throw new HttpsError(
       'invalid-argument',
-      `Amount ${xp} não confere com evento ${event} (esperado: ${expectedAmount})`
+      `Amount ${xp} não confere com evento ${event} (esperado múltiplo de: ${expectedAmount})`
     );
   }
 
