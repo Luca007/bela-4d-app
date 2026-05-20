@@ -14,6 +14,7 @@ export class LoginScreen extends BaseScreen {
     this.email = '';
     this.password = '';
     this.isLoading = false;
+    this.lastLoginAttemptAt = 0;
   }
 
   render() {
@@ -144,6 +145,7 @@ export class LoginScreen extends BaseScreen {
 
   renderLoginButton() {
     const loginBtn = UIComponents.primaryButton('Entrar na plataforma');
+    loginBtn.type = 'button';
     DOM.setStyle(loginBtn, {
       width: '100%',
       marginBottom: '18px',
@@ -346,8 +348,11 @@ export class LoginScreen extends BaseScreen {
   }
 
   async handleLogin() {
+    const now = Date.now();
+    if (this.isLoading || now - this.lastLoginAttemptAt < 1500) return;
     if (!this._validateLoginForm()) return;
 
+    this.lastLoginAttemptAt = now;
     this.isLoading = true;
     this.loginBtn.disabled = true;
     this.loginBtn.innerHTML = '<span class="spinner" style="margin-right: 8px;"></span>Entrando…';
@@ -416,7 +421,10 @@ export class LoginScreen extends BaseScreen {
   setupEventListeners() {
     this.element.querySelectorAll('input[type="password"], input[type="email"]').forEach(input => {
       input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.handleLogin();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (!this.isLoading) this.handleLogin();
+        }
       });
     });
   }

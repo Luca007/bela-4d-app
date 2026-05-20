@@ -7,7 +7,7 @@
  * - Achievements Modal com filtros
  */
 
-import { LEVELS, ACHIEVEMENTS_CATALOG } from '../config/constants.js';
+import { getLevels, getAchievementsCatalog } from '../config/constants.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. XP PROGRESS HEADER
@@ -81,15 +81,15 @@ export class XPProgressHeader {
   }
 
   _getLevelInfo(xp) {
-    for (let i = LEVELS.length - 1; i >= 0; i--) {
-      if (xp >= LEVELS[i].minXp) return LEVELS[i];
+    for (let i = getLevels().length - 1; i >= 0; i--) {
+      if (xp >= getLevels()[i].minXp) return getLevels()[i];
     }
-    return LEVELS[0];
+    return getLevels()[0];
   }
 
   _getNextLevelInfo(xp) {
-    for (let i = 0; i < LEVELS.length; i++) {
-      if (xp < LEVELS[i].minXp) return LEVELS[i];
+    for (let i = 0; i < getLevels().length; i++) {
+      if (xp < getLevels()[i].minXp) return getLevels()[i];
     }
     return null;
   }
@@ -122,10 +122,10 @@ export class LevelBadge {
   }
 
   _getLevelInfo(xp) {
-    for (let i = LEVELS.length - 1; i >= 0; i--) {
-      if (xp >= LEVELS[i].minXp) return LEVELS[i];
+    for (let i = getLevels().length - 1; i >= 0; i--) {
+      if (xp >= getLevels()[i].minXp) return getLevels()[i];
     }
-    return LEVELS[0];
+    return getLevels()[0];
   }
 }
 
@@ -163,7 +163,7 @@ export class AchievementsModal {
     const modal = document.createElement('div');
     modal.className = 'achievements-modal-overlay';
     
-    const categories = ['Todos', ...new Set(ACHIEVEMENTS_CATALOG.map(a => a.category))];
+    const categories = ['Todos', ...new Set(getAchievementsCatalog().map(a => a.category))];
     const stats = this._calculateStats();
 
     modal.innerHTML = `
@@ -199,8 +199,8 @@ export class AchievementsModal {
 
   _renderAchievements() {
     const filtered = this.filterCategory && this.filterCategory !== 'Todos'
-      ? ACHIEVEMENTS_CATALOG.filter(a => a.category === this.filterCategory)
-      : ACHIEVEMENTS_CATALOG;
+      ? getAchievementsCatalog().filter(a => a.category === this.filterCategory)
+      : getAchievementsCatalog();
 
     return filtered.map((achievement, idx) => {
       const isUnlocked = this.unlockedIds.has(achievement.id);
@@ -278,7 +278,7 @@ export class AchievementsModal {
   }
 
   _calculateStats() {
-    const total = ACHIEVEMENTS_CATALOG.length;
+    const total = getAchievementsCatalog().length;
     const unlocked = this.unlockedIds.size;
     return { total, unlocked };
   }
@@ -373,9 +373,9 @@ export class GamificationStatsCard {
   }
 
   _getLevelInfo(xp) {
-    for (let i = LEVELS.length - 1; i >= 0; i--) {
-      if (xp >= LEVELS[i].minXp) return LEVELS[i];
+    for (let i = getLevels().length - 1; i >= 0; i--) {
+      if (xp >= getLevels()[i].minXp) return getLevels()[i];
     }
-    return LEVELS[0];
+    return getLevels()[0];
   }
 }

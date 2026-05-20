@@ -35,8 +35,6 @@ const lazyScreens = {
   'cardapio':     () => import('./screens/cardapio.js').then(m => m.CardapioScreen),
   'dashboard':    () => import('./screens/dashboard-v2.js').then(m => m.DashboardScreen),
   'chat':         () => import('./screens/chat.js').then(m => m.ChatScreen),
-  'recipes':      () => import('./screens/recipes.js').then(m => m.RecipesScreen),
-  'food-search':  () => import('./screens/food-search.js').then(m => m.FoodSearchScreen),
   'forms':        () => import('./screens/forms.js').then(m => m.FormsScreen),
 };
 
@@ -54,8 +52,17 @@ class App {
     ]);
 
     this.statusRoutes = {
-      [USER_STATUS.AWAITING_ONBOARDING]: async () => {
-        this.navigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_ONBOARDING });
+      [USER_STATUS.AWAITING_ONBOARDING]: async (uid) => {
+        // Se onboarding NÃO foi completado → formulário primeiro
+        const profile = State.get('userProfile');
+        if (!profile?.onboardingCompleted) {
+          // Trava: se já estamos no onboarding, NÃO re-rotear
+          if (this._currentScreenId === SCREENS.ONBOARDING) return;
+          this.navigate(SCREENS.ONBOARDING);
+        } else {
+          // Onboarding já feito → agendar reunião
+          this.navigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_ONBOARDING });
+        }
       },
       [USER_STATUS.PENDING_BLOOD_TEST]: async () => {
         this.navigate(SCREENS.AWAITING, { status: USER_STATUS.PENDING_BLOOD_TEST });
@@ -126,12 +133,14 @@ class App {
       console.error(`[App] Screen not found: ${screenId}`);
       return;
     }
+    this._currentScreenId = screenId;
     this._activateScreen(ScreenClass, screenId, params);
   }
 
   _pageTitle(screenId) {
     return {
       [SCREENS.LOGIN]:       'Login | Programa 4D',
+      [SCREENS.ONBOARDING]:  'Onboarding | Programa 4D',
       [SCREENS.AWAITING]:    'Aguardando | Programa 4D',
       [SCREENS.EXAM_UPLOAD]: 'Enviar Exame | Programa 4D',
       [SCREENS.HEALTH_FORM]: 'Formulário de Saúde | Programa 4D',
@@ -260,6 +269,13 @@ class App {
       // Garante que o documento do usuário existe ANTES de qualquer operação
       const profile = await firestoreService.ensureUserDocument(user.uid, user.email);
       try { State.set('userProfile', profile); } catch (error) { console.warn('[App] State.set failed', error); }
+      // Carrega appConfig do Firestore (níveis, conquistas, XP events) ANTES
+      // de qualquer operação que dependa desses dados (awardXp, unlockAchievement…)
+      const config = await firestoreService.preloadAppConfig();
+      if (config) {
+        State.set('appConfig', config);
+        console.log('[App] appConfig carregado:', Object.keys(config));
+      }
       this._registerOfflineHandlers(user.uid);
       this._setupConnectionListeners();
       await firestoreService.awardDailyLoginXp(user.uid);
@@ -391,6 +407,7 @@ class App {
     if (this._offlineHandlersRegistered) return;
     this._offlineHandlersRegistered = true;
 
+    // Notificações
     offlineQueue.registerHandler('mark_notification_read', async ({ uid: u, notificationId }) => {
       await firestoreService.markNotificationRead(u || uid, notificationId);
     });
@@ -400,48 +417,97 @@ class App {
     offlineQueue.registerHandler('delete_notification', async ({ uid: u, notificationId }) => {
       await firestoreService.deleteNotification?.(u || uid, notificationId);
     });
+
+    // Chat
     offlineQueue.registerHandler('chat_send', async ({ uid: u, message, sessionId }) => {
       await firestoreService.saveChatMessage(u || uid, { role: 'user', content: message, type: 'text', conversationId: sessionId });
     });
+
+    // AI / n8n — ações enfileiradas quando offline
+    offlineQueue.registerHandler('generate_recipe', async ({ uid: u, preferences }) => {
+      const { n8nService } = await import('../services/n8n.js');
+      await n8nService.generateRecipe(u || uid, preferences || {});
+    });
+    offlineQueue.registerHandler('agent_chat_message', async ({ uid: u, message, sessionId }) => {
+      const { n8nService } = await import('../services/n8n.js');
+      await n8nService.sendChatMessage(u || uid, message, sessionId);
+    });
+    offlineQueue.registerHandler('evaluate_food', async ({ uid: u, foodName, quantity }) => {
+      const { n8nService } = await import('../services/n8n.js');
+      await n8nService.evaluateFood(u || uid, foodName, quantity);
+    });
+    offlineQueue.registerHandler('process_blood_test', async ({ uid: u, bloodTestId, driveFileUrl }) => {
+      const { n8nService } = await import('../services/n8n.js');
+      await n8nService.processBloodTest(u || uid, bloodTestId, driveFileUrl);
+    });
+
+    // Comunidade
     offlineQueue.registerHandler('community_like', async ({ uid: u, postId, liked }) => {
       await firestoreService.toggleCommunityLike?.(u || uid, postId, liked);
     });
   }
 
   /**
-   * Configura listeners de online/offline e exibe banners discretos.
+   * Configura listeners de online/offline e exibe banners de status.
+   *
+   * Estados do banner:
+   *   🟢 online        → "Conectado à internet" (desaparece em 3s)
+   *   🔄 reconnecting  → "Reestabelecendo conexão..." (animado, persiste)
+   *   🔴 offline       → "Conexão perdida — suas ações serão salvas localmente" (persiste)
    */
   _setupConnectionListeners() {
     if (this._connectionListenersSetup) return;
     this._connectionListenersSetup = true;
 
     window.addEventListener('online', () => {
-      this._showConnectionBanner('online', '✓ Você está online novamente');
-      offlineQueue.flush().catch(() => {});
+      // Mostra estado de reconexão brevemente e dispara flush da fila
+      this._showConnectionBanner('reconnecting', '🔄 Reestabelecendo conexão...', { sticky: true, animated: true });
+      offlineQueue.flush()
+        .then(() => {
+          // Transição para online após flush
+          this._showConnectionBanner('online', '🟢 Conectado à internet', { sticky: false, dismissAfter: 3000 });
+        })
+        .catch(() => {
+          this._showConnectionBanner('online', '🟢 Conectado à internet', { sticky: false, dismissAfter: 3000 });
+        });
     });
+
     window.addEventListener('offline', () => {
-      this._showConnectionBanner('offline', '⚠ Você está offline — suas ações serão sincronizadas quando reconectar', { sticky: true });
+      this._showConnectionBanner('offline', '🔴 Conexão perdida — suas ações serão salvas localmente', { sticky: true });
     });
 
     // Estado inicial: se já estiver offline ao carregar, mostra
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      this._showConnectionBanner('offline', '⚠ Você está offline — suas ações serão sincronizadas quando reconectar', { sticky: true });
+      this._showConnectionBanner('offline', '🔴 Conexão perdida — suas ações serão salvas localmente', { sticky: true });
     }
   }
 
-  _showConnectionBanner(kind, text, { sticky = false } = {}) {
-    // Remove banner existente
-    document.querySelectorAll('.connection-banner').forEach(b => b.remove());
+  /**
+   * Exibe banner de status de conexão no topo da página.
+   * @param {'online'|'offline'|'reconnecting'} kind
+   * @param {string} text
+   * @param {{ sticky?: boolean, animated?: boolean, dismissAfter?: number }} options
+   */
+  _showConnectionBanner(kind, text, { sticky = false, animated = false, dismissAfter = 0 } = {}) {
+    // Substitui banner existente (transição suave)
+    const existing = document.querySelector('.connection-banner');
+    if (existing) {
+      existing.classList.add('fade-out');
+      setTimeout(() => existing.remove(), 320);
+    }
 
-    const banner = DOM.create('div', `connection-banner ${kind}`);
+    const banner = DOM.create('div', `connection-banner ${kind}${animated ? ' anim-pulse' : ''}`);
     banner.textContent = text;
+    banner.setAttribute('role', 'status');
+    banner.setAttribute('aria-live', 'polite');
     document.body.appendChild(banner);
 
     if (!sticky) {
+      const delay = dismissAfter || 3000;
       setTimeout(() => {
         banner.classList.add('fade-out');
         setTimeout(() => banner.remove(), 320);
-      }, 2400);
+      }, delay);
     }
   }
 }

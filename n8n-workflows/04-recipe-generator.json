@@ -1,5 +1,5 @@
 {
-  "name": "4D Recipe Generator",
+  "name": "4D - Generate Recipe",
   "nodes": [
     {
       "parameters": {
@@ -13,7 +13,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [240, 300],
-      "webhookId": "4d-generate-recipe"
+      "webhookId": "4d-generate-recipe",
+      "notes": "Caller: Firebase Functions generateRecipe (callN8nWithRetry, sync). Payload: {uid, preferences, userProfile, menuForm, healthForm}."
     },
     {
       "parameters": {
@@ -49,15 +50,43 @@
     },
     {
       "parameters": {
+        "values": {
+          "string": [
+            { "name": "uid", "value": "={{ $json.body.uid }}" },
+            { "name": "userName", "value": "={{ $json.body.userProfile?.name || 'paciente' }}" }
+          ],
+          "object": [
+            { "name": "preferences", "value": "={{ $json.body.preferences || {} }}" },
+            { "name": "menuForm", "value": "={{ $json.body.menuForm || {} }}" },
+            { "name": "healthForm", "value": "={{ $json.body.healthForm || {} }}" },
+            { "name": "userDiagnostics", "value": "={{ $json.body.healthForm?.diagnostics || [] }}" },
+            { "name": "userMedications", "value": "={{ $json.body.healthForm?.medications || [] }}" }
+          ]
+        },
+        "options": { "dotNotation": false }
+      },
+      "id": "set-context-4",
+      "name": "Set: Normaliza Contexto",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "notes": "Normaliza payload em campos planos. Diagnostics/medications vêm do healthForm."
+    },
+    {
+      "parameters": {
         "model": "gpt-4o-mini",
+        "options": {
+          "responseFormat": "json_object",
+          "temperature": 0.7
+        },
         "messages": {
           "values": [
             {
-              "content": "Gere receitas personalizadas em JSON com os campos obrigatórios: {id: 'uuid', nm: 'nome-receita', e: '👨‍🍳', desc: 'descrição', ingredients: [{name, quantity, unit}], steps: [{number, instruction}], macros: {calories, protein, carbs, fat}, prepTime: 'XX min', difficulty: 'fácil|médio|difícil', tags: ['tag1', 'tag2']}. Responda APENAS com JSON válido.",
+              "content": "Você é Belinha, nutricionista virtual especializada em diabetes e nutrição metabólica. Gere UMA receita personalizada considerando os diagnósticos, medicações e preferências alimentares do paciente. Tom: empático, em português brasileiro.\n\nResponda APENAS em JSON com este schema EXATO: {\"id\": null, \"nm\": string, \"e\": string (emoji), \"desc\": string, \"ingredients\": [{\"name\": string, \"quantity\": string, \"unit\": string}], \"steps\": [{\"number\": number, \"instruction\": string}], \"macros\": {\"calories\": number, \"protein\": number, \"carbs\": number, \"fat\": number}, \"prepTime\": string, \"difficulty\": \"fácil\"|\"médio\"|\"difícil\", \"tags\": string[], \"glycemicLoad\": \"low\"|\"medium\"|\"high\"}.\n\nContexto do paciente:\n- Nome: {{ $json.userName }}\n- Diagnósticos: {{ JSON.stringify($json.userDiagnostics) }}\n- Medicações: {{ JSON.stringify($json.userMedications) }}\n- Preferências/MenuForm: {{ JSON.stringify($json.menuForm) }}\n- Preferências da requisição: {{ JSON.stringify($json.preferences) }}",
               "role": "system"
             },
             {
-              "content": "={{ $json.body.request }}",
+              "content": "Gere uma receita adequada ao perfil acima.",
               "role": "user"
             }
           ]
@@ -67,7 +96,7 @@
       "name": "OpenAI: Gera Receita",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1,
-      "position": [680, 300],
+      "position": [900, 300],
       "credentials": {
         "openAiApi": {
           "id": "openAiApi",
@@ -77,40 +106,27 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\nconst response = $json.choices?.[0]?.message?.content || '{}';\nlet recipe;\ntry {\n  recipe = JSON.parse(response);\n} catch (e) {\n  throw new Error('Invalid JSON response from OpenAI');\n}\n\nrecipe.id = recipe.id || crypto.randomUUID();\nrecipe.uid = $json.body.uid || null;\nrecipe.createdAt = new Date().toISOString();\n\nreturn [{ json: recipe }];"
-      },
-      "id": "code-recipe-4",
-      "name": "Code: Parse & Enhance",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.FIREBASE_FUNCTIONS_URL }}/saveRecipe",
-        "authentication": "none",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "recipe",
-              "value": "={{ $json }}"
-            }
+        "values": {
+          "string": [
+            { "name": "uid", "value": "={{ $('Set: Normaliza Contexto').item.json.uid }}" }
+          ],
+          "object": [
+            { "name": "recipe", "value": "={{ Object.assign(JSON.parse($json.choices?.[0]?.message?.content || '{}'), { id: $now.toMillis().toString(), uid: $('Set: Normaliza Contexto').item.json.uid, createdAt: $now.toISO() }) }}" }
           ]
-        }
+        },
+        "options": { "dotNotation": false }
       },
-      "id": "http-firebase-4",
-      "name": "HTTP Request: Save Recipe",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1100, 300],
-      "continueOnFail": true
+      "id": "set-parse-4",
+      "name": "Set: Monta Receita",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "notes": "Substitui o nó Code antigo. Atribui id (timestamp), uid e createdAt à receita parseada."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { success: true, recipe: $json, timestamp: $now.toISO() } }}",
+        "responseBody": "={{ { success: true, recipe: $json.recipe, timestamp: $now.toISO() } }}",
         "options": {
           "responseCode": 200
         }
@@ -119,7 +135,8 @@
       "name": "Resposta: Sucesso",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1320, 300]
+      "position": [1340, 300],
+      "notes": "Caller (generateRecipe Cloud Function) extrai result.recipe — contract: {recipe: {...}}."
     }
   ],
   "connections": {
@@ -130,21 +147,21 @@
     },
     "Valida Webhook Secret": {
       "main": [
-        [{ "node": "OpenAI: Gera Receita", "type": "main", "index": 0 }],
+        [{ "node": "Set: Normaliza Contexto", "type": "main", "index": 0 }],
         [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set: Normaliza Contexto": {
+      "main": [
+        [{ "node": "OpenAI: Gera Receita", "type": "main", "index": 0 }]
       ]
     },
     "OpenAI: Gera Receita": {
       "main": [
-        [{ "node": "Code: Parse & Enhance", "type": "main", "index": 0 }]
+        [{ "node": "Set: Monta Receita", "type": "main", "index": 0 }]
       ]
     },
-    "Code: Parse & Enhance": {
-      "main": [
-        [{ "node": "HTTP Request: Save Recipe", "type": "main", "index": 0 }]
-      ]
-    },
-    "HTTP Request: Save Recipe": {
+    "Set: Monta Receita": {
       "main": [
         [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
       ]
@@ -157,19 +174,29 @@
     "errorWorkflow": ""
   },
   "staticData": null,
-  "tags": ["programa-4d", "recipes", "gerador"],
+  "tags": ["programa-4d", "recipes", "belinha"],
   "pinData": {},
   "versionId": "d4e5f6a7-b8c9-d0e1-f2a3-b4c5d6e7f8a9",
   "id": "recipe-generator-004",
   "_meta": {
-    "description": "Gerador de receitas personalizadas para dieta diabética. Utiliza OpenAI para gerar receitas em formato JSON estruturado com ingredientes, modo de preparo, macronutrientes e dificuldade. Salva receita no Firebase e retorna para o usuário.",
+    "description": "Gera receita personalizada para paciente diabético. Caller é sync (generateRecipe Cloud Function). Considera diagnósticos, medicações e menuForm. Retorna {recipe: {...}}.",
     "envVars": {
-      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions",
-      "FIREBASE_FUNCTIONS_URL": "URL base das Cloud Functions do Firebase"
+      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions"
     },
     "credentials": {
       "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
     },
-    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+    "changelog_2026_05_20": [
+      "BUG FIX: payload usava $json.body.request (não enviado pelo caller). Caller real envia {uid, preferences, userProfile, menuForm, healthForm}",
+      "REFACTOR: nó Code substituído por Set (atribuição de id/uid/createdAt)",
+      "REFACTOR: response_format=json_object + schema explícito no system prompt",
+      "FEATURE: prompt agora considera diagnostics, medications e menuForm (antes ignorava o contexto)",
+      "NAMING: workflow renomeado para '4D - Generate Recipe'"
+    ],
+    "follow_ups": [
+      "Adicionar Qdrant Vector Store (coleção belinha-kb) para RAG sobre receitas existentes em 'Documentos de apoio/'",
+      "Considerar uso de uuid v4 nativo (n8n não tem nó built-in; timestamp em ms é workaround simples)"
+    ],
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir env WEBHOOK_SECRET. 4. NÃO ATIVAR — usuário ativa após verificar credenciais."
   }
 }

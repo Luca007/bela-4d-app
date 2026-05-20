@@ -1,5 +1,5 @@
 {
-  "name": "4D Meet Processor",
+  "name": "4D - Process Transcript",
   "nodes": [
     {
       "parameters": {
@@ -13,7 +13,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [240, 300],
-      "webhookId": "4d-process-transcript"
+      "webhookId": "4d-process-transcript",
+      "notes": "Caller: Firebase Functions agentChatMessage->processOnboardingTranscript (callN8nWithRetry, sync). Payload: {uid, userProfile{name,email}, transcriptText, driveFileUrl, callbackUrl}."
     },
     {
       "parameters": {
@@ -50,14 +51,18 @@
     {
       "parameters": {
         "model": "gpt-4o-mini",
+        "options": {
+          "responseFormat": "json_object",
+          "temperature": 0.2
+        },
         "messages": {
           "values": [
             {
-              "content": "Você é um assistente especializado em extração de dados de saúde. Analise a transcrição da consulta e extraia os seguintes dados em formato JSON: {diagnoses: [], medications: [], allergies: [], suggestedStatus: 'string'}. Retorne APENAS o JSON válido.",
+              "content": "Você é um assistente especializado em extração de dados de saúde. Analise a transcrição da consulta e retorne APENAS um JSON com este schema exato: {\"diagnostics\": string[], \"medications\": string[], \"allergies\": string[], \"hasBloodTest\": boolean, \"suggestedStatus\": \"pending_blood_test\" | \"exam_request_sent\" | \"active\"}. Use hasBloodTest=true quando o paciente mencionar ter realizado exames de sangue recentes ou trouxer resultados. suggestedStatus: pending_blood_test se hasBloodTest=true, exam_request_sent caso contrário.",
               "role": "system"
             },
             {
-              "content": "={{ $json.body.transcript }}",
+              "content": "Nome: {{ $json.body.userProfile?.name || 'desconhecido' }}\n\nTranscrição:\n{{ $json.body.transcriptText }}",
               "role": "user"
             }
           ]
@@ -77,51 +82,39 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.FIREBASE_FUNCTIONS_URL }}/onTranscriptCallback",
-        "authentication": "none",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "uid",
-              "value": "={{ $json.body.uid }}"
-            },
-            {
-              "name": "hasBloodTest",
-              "value": "={{ $json.body.hasBloodTest || false }}"
-            },
-            {
-              "name": "extractedHealthData",
-              "value": "={{ JSON.parse($json.choices?.[0]?.message?.content || '{}') }}"
-            },
-            {
-              "name": "suggestedStatus",
-              "value": "={{ JSON.parse($json.choices?.[0]?.message?.content || '{}').suggestedStatus || 'pending' }}"
-            }
+        "values": {
+          "string": [
+            { "name": "uid", "value": "={{ $('Webhook: Recebe Transcrição').item.json.body.uid }}" }
+          ],
+          "object": [
+            { "name": "extractedHealthData", "value": "={{ JSON.parse($json.choices?.[0]?.message?.content || '{}') }}" }
           ]
+        },
+        "options": {
+          "dotNotation": false
         }
       },
-      "id": "http-firebase-1",
-      "name": "HTTP Request: Firebase Callback",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "id": "set-parse-1",
+      "name": "Set: Parse Extracted Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
       "position": [900, 300],
-      "continueOnFail": true
+      "notes": "Parse único do JSON da IA. extractedHealthData fica disponível como objeto."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { success: true, extractedHealthData: JSON.parse($json.choices?.[0]?.message?.content || '{}'), timestamp: $now.toISO() } }}",
+        "responseBody": "={{ { success: true, hasBloodTest: $json.extractedHealthData.hasBloodTest || false, extractedHealthData: $json.extractedHealthData, suggestedStatus: $json.extractedHealthData.suggestedStatus || (($json.extractedHealthData.hasBloodTest) ? 'pending_blood_test' : 'exam_request_sent'), timestamp: $now.toISO() } }}",
         "options": {
           "responseCode": 200
         }
       },
       "id": "success-response-1",
-      "name": "Resposta: Sucesso",
+      "name": "Resposta: Sucesso (sync)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1120, 300]
+      "position": [1120, 300],
+      "notes": "Caller é sync (processOnboardingTranscript aguarda return). Não fazemos HTTP callback aqui pra evitar dupla escrita."
     }
   ],
   "connections": {
@@ -138,12 +131,12 @@
     },
     "OpenAI: Extrai Dados de Saúde": {
       "main": [
-        [{ "node": "HTTP Request: Firebase Callback", "type": "main", "index": 0 }]
+        [{ "node": "Set: Parse Extracted Data", "type": "main", "index": 0 }]
       ]
     },
-    "HTTP Request: Firebase Callback": {
+    "Set: Parse Extracted Data": {
       "main": [
-        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
+        [{ "node": "Resposta: Sucesso (sync)", "type": "main", "index": 0 }]
       ]
     }
   },
@@ -159,14 +152,20 @@
   "versionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "id": "meet-processor-001",
   "_meta": {
-    "description": "Processa transcrições de consultas e extrair dados de saúde (diagnósticos, medicamentos, alergias, status sugerido). Valida webhook secret, envia dados para Firebase via HTTP callback e responde com dados extraídos.",
+    "description": "Recebe transcrição da consulta de onboarding (chamada sync via callN8nWithRetry), extrai dados de saúde estruturados com OpenAI (modo json_object), e retorna {hasBloodTest, extractedHealthData, suggestedStatus} para o Firebase Cloud Function processOnboardingTranscript salvar no Firestore.",
     "envVars": {
-      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions",
-      "FIREBASE_FUNCTIONS_URL": "URL base das Cloud Functions do Firebase"
+      "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions"
     },
     "credentials": {
       "openAiApi": "Criar em n8n → Credentials → OpenAI API com chave de API"
     },
-    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+    "changelog_2026_05_20": [
+      "BUG FIX: usar transcriptText (era transcript - field não enviado pelo caller)",
+      "BUG FIX: IA agora extrai hasBloodTest (era pulled erradamente de $json.body)",
+      "REFACTOR: response_format=json_object na OpenAI; parse único via Set (era 3x inline JSON.parse)",
+      "REFACTOR: removido HTTP callback duplicado (caller é sync, basta respondToWebhook)",
+      "NAMING: workflow renomeado para padrão '4D - <Função>'"
+    ],
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial OpenAI API. 3. Definir env WEBHOOK_SECRET. 4. NÃO ATIVAR — usuário ativa após verificar credenciais."
   }
 }

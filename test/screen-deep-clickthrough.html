@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>DEEP CLICKTHROUGH — Todas as telas + todos os cliques</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <script type="importmap">
+  { "imports": {
+    "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+    "/assets/js/services/auth.js": "/test/mocks/auth.js",
+    "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+    "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+  } }
+  </script>
+  <style>
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', sans-serif; margin: 0; padding: 12px; }
+    #app { min-height: 50vh; border: 1px dashed #444; padding: 8px; margin-bottom: 12px; }
+    #report { padding: 12px; font-size: 12px; line-height: 1.5; background: #111; color: #0f0; border-radius: 8px; white-space: pre-wrap; font-family: monospace; max-height: 80vh; overflow-y: auto; }
+    .ok { color: #0f0; }
+    .err { color: #f55; }
+    .warn { color: #fa0; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <pre id="report">Loading…</pre>
+  <script type="module">
+    const report = document.getElementById('report');
+    const out = [];
+    const log = (m, cls='') => { out.push(cls ? `<span class="${cls}">${m}</span>` : m); report.innerHTML = out.join('\n'); console.log(m); };
+    const allErrors = [];
+    window.addEventListener('error', e => { allErrors.push({ scope: 'global', msg: e.message, where: `${e.filename}:${e.lineno}` }); });
+    window.addEventListener('unhandledrejection', e => { allErrors.push({ scope: 'promise', msg: String(e.reason), where: e.reason?.stack?.split('\n')[1] || '' }); });
+
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+
+    // collect summary
+    const summary = { total: 0, ok: 0, errors: 0, warnings: 0, errorList: [] };
+
+    function captureClickContext(el) {
+      const tag = el.tagName.toLowerCase();
+      const text = (el.textContent || '').trim().slice(0, 40).replace(/\s+/g, ' ');
+      const id = el.id ? `#${el.id}` : '';
+      const cls = el.className ? `.${String(el.className).split(' ')[0]}` : '';
+      return `${tag}${id}${cls} "${text}"`;
+    }
+
+    async function testScreen(name, importPath, className, screenParams = {}, opts = {}) {
+      summary.total++;
+      log(`\n━━━ ${name} ━━━`);
+      const errorsBefore = allErrors.length;
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      try {
+        const mod = await import(importPath);
+        const Cls = mod[className] || mod.default;
+        if (!Cls) { log(`  FAIL: class ${className} not exported`, 'err'); summary.errors++; return; }
+
+        const navLog = [];
+        const screen = new Cls({ onNavigate: (...a) => { navLog.push(a); log(`  → nav: ${JSON.stringify(a).slice(0,80)}`, 'warn'); }, ...screenParams });
+
+        // Some screens have mount(), some have render() only
+        if (screen.mount) {
+          await screen.mount();
+        } else if (screen.render) {
+          screen.element = screen.render();
+          if (screen.element) app.appendChild(screen.element);
+        }
+        await new Promise(r => setTimeout(r, 300));
+
+        const buttons = Array.from(app.querySelectorAll('button:not([disabled])'));
+        const links = Array.from(app.querySelectorAll('a[href], [role="button"]:not(button)'));
+        const inputs = Array.from(app.querySelectorAll('input, select, textarea'));
+        const clickables = [...buttons, ...links];
+        log(`  ✓ rendered: ${app.children.length} children, ${buttons.length} btns, ${links.length} links, ${inputs.length} inputs`);
+
+        // Test up to N clicks per screen
+        const N = opts.maxClicks || 15;
+        let clickErrs = 0;
+        for (let i = 0; i < Math.min(clickables.length, N); i++) {
+          const c = clickables[i];
+          const ctx = captureClickContext(c);
+          const errBefore = allErrors.length;
+          try {
+            c.click();
+            await new Promise(r => setTimeout(r, 50));
+            const newErrs = allErrors.slice(errBefore);
+            if (newErrs.length) {
+              log(`  ✗ click[${i}] ${ctx} → ${newErrs.map(e => e.msg).join(' | ')}`, 'err');
+              clickErrs++;
+              summary.errorList.push({ screen: name, click: ctx, errs: newErrs });
+            } else {
+              log(`  ✓ click[${i}] ${ctx}`);
+            }
+          } catch (e) {
+            log(`  ✗ click[${i}] ${ctx} → ${e.message}`, 'err');
+            clickErrs++;
+            summary.errorList.push({ screen: name, click: ctx, errs: [{ scope: 'sync', msg: e.message }] });
+          }
+        }
+
+        // Test all inputs (set a value, fire change)
+        let inpErrs = 0;
+        for (let i = 0; i < Math.min(inputs.length, 5); i++) {
+          const inp = inputs[i];
+          const errBefore = allErrors.length;
+          try {
+            if (inp.type === 'date') inp.value = '2026-06-15';
+            else if (inp.type === 'time') inp.value = '10:00';
+            else if (inp.type === 'number') inp.value = '70';
+            else if (inp.type === 'checkbox') inp.checked = true;
+            else if (inp.tagName === 'SELECT' && inp.options.length > 1) inp.selectedIndex = 1;
+            else inp.value = 'teste';
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+            const newErrs = allErrors.slice(errBefore);
+            if (newErrs.length) { log(`  ✗ input[${i}] ${inp.name||inp.id||inp.type} → ${newErrs.map(e=>e.msg).join('|')}`, 'err'); inpErrs++; }
+          } catch (e) { log(`  ✗ input[${i}] FAIL: ${e.message}`, 'err'); inpErrs++; }
+        }
+
+        try { screen.destroy?.(); } catch (e) { log(`  ✗ destroy FAIL: ${e.message}`, 'err'); }
+
+        const totalErrs = allErrors.length - errorsBefore;
+        if (totalErrs === 0 && clickErrs === 0 && inpErrs === 0) {
+          log(`  ✅ PASS — 0 erros`, 'ok');
+          summary.ok++;
+        } else {
+          log(`  ❌ FAIL — ${totalErrs} JS errs, ${clickErrs} click errs, ${inpErrs} input errs`, 'err');
+          summary.errors++;
+        }
+      } catch (e) {
+        log(`  ✗ IMPORT/RENDER FAIL: ${e.message}`, 'err');
+        log(`    stack: ${e.stack?.split('\n').slice(0,2).join('\n      ')}`, 'err');
+        summary.errors++;
+        summary.errorList.push({ screen: name, click: '(load)', errs: [{ msg: e.message }] });
+      }
+    }
+
+    (async () => {
+      await testScreen('Login',          '/assets/js/screens/login.js',       'LoginScreen');
+      await testScreen('Onboarding',     '/assets/js/screens/onboarding.js',  'OnboardingScreen');
+      await testScreen('HealthForm',     '/assets/js/screens/health-form.js', 'HealthFormScreen');
+      await testScreen('Forms',          '/assets/js/screens/forms.js',       'FormsScreen');
+      await testScreen('ExamUpload',     '/assets/js/screens/exam-upload.js', 'ExamUploadScreen');
+      await testScreen('Cardapio',       '/assets/js/screens/cardapio.js',    'CardapioScreen');
+      await testScreen('Chat',           '/assets/js/screens/chat.js',        'ChatScreen');
+      await testScreen('Dashboard',      '/assets/js/screens/dashboard.js',   'DashboardScreen');
+      await testScreen('DashboardV2',    '/assets/js/screens/dashboard-v2.js','DashboardV2Screen');
+      await testScreen('Awaiting/onb',   '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'awaiting_onboarding' });
+      await testScreen('Awaiting/exam',  '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'pending_blood_test' });
+      await testScreen('Awaiting/req',   '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'exam_request_sent', examRequest: { id: 'r1', fileUrl: '#' } });
+      await testScreen('Awaiting/proc',  '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'processing_blood_test' });
+      await testScreen('Awaiting/menu',  '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'awaiting_menu_form' });
+
+      log(`\n\n══════ RESUMO ══════`);
+      log(`Total: ${summary.total} | ✅ OK: ${summary.ok} | ❌ FAIL: ${summary.errors}`);
+      if (summary.errorList.length) {
+        log(`\nERROS:`);
+        summary.errorList.forEach(e => log(`  [${e.screen}] ${e.click}: ${e.errs.map(x=>x.msg).join('; ')}`, 'err'));
+      }
+      window.__done = true;
+      window.__summary = summary;
+    })();
+  </script>
+</body>
+</html>

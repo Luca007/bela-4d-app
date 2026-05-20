@@ -49,9 +49,11 @@ export const USER_STATUS = {
   ACTIVE: "active",
 };
 
-// ============================================================
+// ════════════════════════════════════════════════════════════════════════
 // GAMIFICAÇÃO — XP por evento
-// ============================================================
+// ════════════════════════════════════════════════════════════════════════
+// ⚠️ CANONICAL FALLBACK: dados oficiais vêm do Firestore appConfig/xpEvents.
+// Use sempre getXpEvents() — que prioriza State.appConfig.
 export const XP_EVENTS = {
   DAILY_LOGIN: 10,
   HEALTH_FORM_COMPLETED: 150,
@@ -67,20 +69,34 @@ export const XP_EVENTS = {
   PROFILE_COMPLETE: 50,
   FIRST_RECIPE: 30,
   SHARE_ACHIEVEMENT: 20,
+  RECIPE_GENERATED: 15,    // alias compatibilidade (mesmo que RECIPE_SAVED)
+  FOOD_EVALUATED: 5,       // avaliação de alimento
 };
 
-// Níveis de progressão
+// ════════════════════════════════════════════════════════════════════════
+// NÍVEIS DE PROGRESSÃO — 8 tiers unificados
+// ════════════════════════════════════════════════════════════════════════
+// ⚠️ CANONICAL FALLBACK: os dados oficiais vêm do Firestore appConfig/levels.
+// Esta constante é usada apenas como fallback quando o appConfig ainda não
+// foi carregado do Firestore (ex: primeiros ms após login, modo offline).
+// Para ler os níveis, use sempre getLevels() — que prioriza State.appConfig.
+// Campos: level, title, name (alias), shortName, minXp, maxXp, color, emoji, icon (alias), rarity
 export const LEVELS = [
-  { level: 1, title: "Iniciante",          minXp: 0,     maxXp: 499,   color: "#6b7280", emoji: "🌱" },
-  { level: 2, title: "Aprendiz",           minXp: 500,   maxXp: 1499,  color: "#10b981", emoji: "🌿" },
-  { level: 3, title: "Comprometido",       minXp: 1500,  maxXp: 2999,  color: "#3b82f6", emoji: "💪" },
-  { level: 4, title: "Disciplinado",       minXp: 3000,  maxXp: 4999,  color: "#8b5cf6", emoji: "🔥" },
-  { level: 5, title: "Mestre do Programa", minXp: 5000,  maxXp: 99999, color: "#f59e0b", emoji: "⭐" },
+  { level: 1, title: "Iniciante",    name: "Iniciante",    shortName: "Inic.",     minXp: 0,    maxXp: 499,   color: "#8a8aa0", emoji: "🌱", icon: "🌱", rarity: "common" },
+  { level: 2, title: "Aprendiz",     name: "Aprendiz",     shortName: "Apr.",      minXp: 500,  maxXp: 1199,  color: "#10b981", emoji: "🌿", icon: "🌿", rarity: "common" },
+  { level: 3, title: "Comprometida", name: "Comprometida", shortName: "Comp.",     minXp: 1200, maxXp: 2199,  color: "#38bdf8", emoji: "💪", icon: "💪", rarity: "uncommon" },
+  { level: 4, title: "Disciplinada", name: "Disciplinada", shortName: "Disc.",     minXp: 2200, maxXp: 3399,  color: "#a78bfa", emoji: "🔥", icon: "🔥", rarity: "uncommon" },
+  { level: 5, title: "Consistente",  name: "Consistente",  shortName: "Consis.",   minXp: 3400, maxXp: 4799,  color: "#f59e0b", emoji: "⭐", icon: "⭐", rarity: "rare" },
+  { level: 6, title: "Referência",   name: "Referência",   shortName: "Ref.",      minXp: 4800, maxXp: 6499,  color: "#f43f5e", emoji: "🏆", icon: "🏆", rarity: "rare" },
+  { level: 7, title: "Elite 4D",     name: "Elite 4D",     shortName: "Elite",     minXp: 6500, maxXp: 8499,  color: "#14b8a6", emoji: "💎", icon: "💎", rarity: "epic" },
+  { level: 8, title: "Mestra 4D",    name: "Mestra 4D",    shortName: "Mestra",    minXp: 8500, maxXp: 99999, color: "#eab308", emoji: "👑", icon: "👑", rarity: "legendary" },
 ];
 
-// ============================================================
-// CONQUISTAS — 12 achievements com XP e descrições
-// ============================================================
+// ════════════════════════════════════════════════════════════════════════
+// CONQUISTAS — 22 achievements (12 visíveis + 10 hidden) com XP, condições e descrições
+// ════════════════════════════════════════════════════════════════════════
+// ⚠️ CANONICAL FALLBACK: os dados oficiais vêm do Firestore appConfig/achievementsCatalog.
+// Use sempre getAchievementsCatalog() — que prioriza State.appConfig.
 export const ACHIEVEMENTS_CATALOG = [
   {
     id: "first_step",
@@ -173,10 +189,10 @@ export const ACHIEVEMENTS_CATALOG = [
   {
     id: "gmp_master",
     title: "Mestre GMP",
-    description: "Atingir nível 5",
+    description: "Atingir nível 8 (Mestra 4D)",
     xp: 1000,
     icon: "👑",
-    condition: { event: "LEVEL_REACHED", level: 5 },
+    condition: { event: "LEVEL_REACHED", level: 8 },
   },
   // Hidden achievements — only revealed after unlock
   {
@@ -373,14 +389,81 @@ export const RED_LIST = [
 ];
 
 // ============================================================
-// DASHBOARD NAVIGATION
+// DASHBOARD NAVIGATION — lido do Firestore (State.appConfig.navItems)
+// com fallback para o array abaixo (mantido sincronizado com seed-app-config.js)
 // ============================================================
-export const NAV_ITEMS = [
-  { id: 'home', label: 'Início', icon: 'home' },
-  { id: 'perfil', label: 'Meu Perfil', icon: 'user' },
-  { id: 'receitas', label: 'Receitas', icon: 'book-open' },
-  { id: 'avaliador', label: 'Avaliador', icon: 'utensils' },
-  { id: 'exames', label: 'Exames', icon: 'bar-chart-2' },
-  { id: 'ranking', label: 'Ranking', icon: 'trophy' },
-  { id: 'chat', label: 'Chat', icon: 'message-circle' },
+const NAV_ITEMS_FALLBACK = [
+  { id: 'inicio',     label: 'Início',     icon: '🏠', sub: 'Chat · Receita · Cardápio' },
+  { id: 'evolucao',   label: 'Evolução',   icon: '📊', sub: 'Gráficos · Progresso' },
+  { id: 'receitas',   label: 'Receitas',   icon: '🥗', sub: 'Cardápio personalizado' },
+  { id: 'exames',     label: 'Exames',     icon: '🔬', sub: 'Pedidos · Resultados' },
+  { id: 'conquistas', label: 'Conquistas', icon: '🏆', sub: 'Ranking · Comunidade' },
+  { id: 'chat',       label: 'Chat IA',    icon: '💬', sub: 'Dúvidas alimentares' },
+  { id: 'perfil',     label: 'Meu Perfil', icon: '👤', sub: 'Avatar · Configurações' },
 ];
+
+// ════════════════════════════════════════════════════════════════════════
+// HELPERS — leem do Firestore (State.appConfig) com fallback para as
+// constantes hardcoded acima. Use SEMPRE estas funções; nunca acesse
+// LEVELS, ACHIEVEMENTS_CATALOG, XP_EVENTS ou NAV_ITEMS_FALLBACK diretamente.
+// ════════════════════════════════════════════════════════════════════════
+
+/**
+ * Retorna array de níveis. Prioriza Firestore (State.appConfig.levels);
+ * fallback para a constante LEVELS.
+ * @returns {Array}
+ */
+export function getLevels() {
+  try {
+    const appConfig = window.State?.data?.appConfig;
+    if (appConfig?.levels && Array.isArray(appConfig.levels) && appConfig.levels.length > 0) {
+      return appConfig.levels;
+    }
+  } catch (_) { /* State ainda não inicializado */ }
+  return LEVELS;
+}
+
+/**
+ * Retorna array de conquistas. Prioriza Firestore (State.appConfig.achievementsCatalog);
+ * fallback para a constante ACHIEVEMENTS_CATALOG.
+ * @returns {Array}
+ */
+export function getAchievementsCatalog() {
+  try {
+    const appConfig = window.State?.data?.appConfig;
+    if (appConfig?.achievementsCatalog && Array.isArray(appConfig.achievementsCatalog) && appConfig.achievementsCatalog.length > 0) {
+      return appConfig.achievementsCatalog;
+    }
+  } catch (_) { /* State ainda não inicializado */ }
+  return ACHIEVEMENTS_CATALOG;
+}
+
+/**
+ * Retorna objeto de eventos XP. Prioriza Firestore (State.appConfig.xpEvents);
+ * fallback para a constante XP_EVENTS.
+ * @returns {Object}
+ */
+export function getXpEvents() {
+  try {
+    const appConfig = window.State?.data?.appConfig;
+    if (appConfig?.xpEvents && typeof appConfig.xpEvents === 'object' && Object.keys(appConfig.xpEvents).length > 0) {
+      return appConfig.xpEvents;
+    }
+  } catch (_) { /* State ainda não inicializado */ }
+  return XP_EVENTS;
+}
+
+/**
+ * Retorna array de itens de navegação. Prioriza Firestore (State.appConfig.navItems);
+ * fallback para NAV_ITEMS_FALLBACK.
+ * @returns {Array}
+ */
+export function getNavItems() {
+  try {
+    const appConfig = window.State?.data?.appConfig;
+    if (appConfig?.navItems && Array.isArray(appConfig.navItems) && appConfig.navItems.length > 0) {
+      return appConfig.navItems;
+    }
+  } catch (_) { /* State ainda não inicializado */ }
+  return NAV_ITEMS_FALLBACK;
+}

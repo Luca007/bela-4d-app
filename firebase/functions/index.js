@@ -24,48 +24,105 @@ initializeApp();
 const db = getFirestore();
 
 // ─────────────────────────────────────────────
-// ACHIEVEMENTS CATALOG (mirror from constants.js)
-// ─────────────────────────────────────────────
+// ACHIEVEMENTS CATALOG — mirror from assets/js/config/constants.js
+// Keep in sync: same ids, titles, descriptions, xp, icons, hidden, condition
+// ────────────────────────────────────────────────────────────────────────
 const ACHIEVEMENTS_CATALOG = [
-  { id: 'first_step', title: 'Primeiro Passo', description: 'Completar onboarding', xp: 100, icon: '🎉' },
-  { id: 'organized', title: 'Organizado', description: 'Preencher todos os 5 formulários', xp: 200, icon: '📋' },
-  { id: 'scientist', title: 'Cientista', description: 'Upload do primeiro exame', xp: 50, icon: '🔬' },
-  { id: 'chef_formation', title: 'Chef em Formação', description: 'Gerar 3 receitas', xp: 75, icon: '👨‍🍳' },
-  { id: 'chef_confirmed', title: 'Chef Confirmado', description: 'Gerar 10 receitas', xp: 150, icon: '🍽️' },
-  { id: 'conversationalist', title: 'Conversador', description: 'Enviar 10 mensagens no chat', xp: 50, icon: '💬' },
-  { id: 'consistent', title: 'Consistente', description: 'Login por 7 dias seguidos', xp: 100, icon: '📅' },
-  { id: 'iron_fire', title: 'Ferro e Fogo', description: 'Login por 30 dias seguidos', xp: 500, icon: '🔥' },
-  { id: 'explorer', title: 'Explorador', description: 'Usar Avaliador Alimentar 5 vezes', xp: 75, icon: '🧭' },
-  { id: 'top_10', title: 'Comunidade Top 10', description: 'Entrar no top 10 do ranking', xp: 200, icon: '🏆' },
-  { id: 'veteran', title: 'Veterano', description: '90 dias de conta ativa', xp: 1000, icon: '🎖️' },
-  { id: 'gmp_master', title: 'Mestre GMP', description: 'Atingir nível 5', xp: 1000, icon: '👑' },
-  { id: 'night_owl', title: 'Coruja Noturna', description: 'Acessar entre 23h e 5h em 3 dias diferentes', xp: 75, icon: '🦉', hidden: true },
-  { id: 'early_bird', title: 'Madrugadora', description: 'Acessar entre 5h e 7h em 5 dias diferentes', xp: 75, icon: '🌅', hidden: true },
-  { id: 'recipe_curator', title: 'Curadora', description: 'Favoritar 5 receitas', xp: 100, icon: '❤️', hidden: true },
-  { id: 'food_explorer_pro', title: 'Exploradora Pro', description: 'Avaliar 25 alimentos diferentes', xp: 200, icon: '🔍', hidden: true },
-  { id: 'streak_breaker', title: 'Persistente', description: 'Retomar o app após perder um dia de streak', xp: 50, icon: '💪', hidden: true },
-  { id: 'polymath', title: 'Polivalente', description: 'Usar 5 abas diferentes do app em menos de 24 horas', xp: 80, icon: '🌐', hidden: true },
-  { id: 'chat_marathoner', title: 'Maratonista', description: 'Enviar 30 mensagens para a Guardiã em um único dia', xp: 150, icon: '🏃', hidden: true },
-  { id: 'forms_finished', title: 'Formulários em Dia', description: 'Completar o formulário de saúde e o cardápio', xp: 200, icon: '✅', hidden: true },
-  { id: 'iron_will', title: 'Vontade de Ferro', description: 'Fazer login 60 vezes no total', xp: 600, icon: '🛡️', hidden: true },
-  { id: 'gmp_legend', title: 'Lenda 4D', description: 'Acumular 5000 XP', xp: 1500, icon: '🌟', hidden: true },
+  // ── Jornada (visíveis) ──
+  { id: 'first_step',       title: 'Primeiro Passo',   description: 'Completar onboarding',                              xp: 100,  icon: '🎉',   condition: { event: 'ONBOARDING_COMPLETED' } },
+  { id: 'organized',        title: 'Organizado',       description: 'Preencher todos os 5 formulários',                xp: 200,  icon: '📋',   condition: { event: 'ALL_FORMS_COMPLETED' } },
+  { id: 'scientist',        title: 'Cientista',         description: 'Upload do primeiro exame',                        xp: 50,   icon: '🔬',   condition: { event: 'FIRST_EXAM_UPLOADED' } },
+  { id: 'chef_formation',   title: 'Chef em Formação',  description: 'Gerar 3 receitas',                                xp: 75,   icon: '👨‍🍳', condition: { event: 'RECIPES_GENERATED', count: 3 } },
+  { id: 'chef_confirmed',   title: 'Chef Confirmado',   description: 'Gerar 10 receitas',                               xp: 150,  icon: '🍽️',   condition: { event: 'RECIPES_GENERATED', count: 10 } },
+  // ── Engajamento (visíveis) ──
+  { id: 'conversationalist',title: 'Conversador',       description: 'Enviar 10 mensagens no chat',                     xp: 50,   icon: '💬',   condition: { event: 'CHAT_MESSAGES', count: 10 } },
+  { id: 'consistent',       title: 'Consistente',       description: 'Login por 7 dias seguidos',                       xp: 100,  icon: '📅',   condition: { event: 'STREAK_DAYS', count: 7 } },
+  { id: 'iron_fire',        title: 'Ferro e Fogo',      description: 'Login por 30 dias seguidos',                      xp: 500,  icon: '🔥',   condition: { event: 'STREAK_DAYS', count: 30 } },
+  { id: 'explorer',         title: 'Explorador',        description: 'Usar Avaliador Alimentar 5 vezes',                xp: 75,   icon: '🧭',   condition: { event: 'FOOD_EVALUATIONS', count: 5 } },
+  // ── Ranking + veterano ──
+  { id: 'top_10',           title: 'Comunidade Top 10', description: 'Entrar no top 10 do ranking',                     xp: 200,  icon: '🏆',   condition: { event: 'TOP_RANKING', rank: 10 } },
+  { id: 'veteran',          title: 'Veterano',          description: '90 dias de conta ativa',                          xp: 1000, icon: '🎖️',   condition: { event: 'ACCOUNT_AGE_DAYS', count: 90 } },
+  { id: 'gmp_master',       title: 'Mestre GMP',        description: 'Atingir nível 5',                                 xp: 1000, icon: '👑',   condition: { event: 'LEVEL_REACHED', level: 5 } },
+  // ── Hidden — revelados ao desbloquear ──
+  { id: 'night_owl',        title: 'Coruja Noturna',    description: 'Acessar o app entre 23h e 5h em 3 dias diferentes', xp: 75, icon: '🦉', hidden: true, condition: { event: 'NIGHT_ACCESS_DAYS', count: 3 } },
+  { id: 'early_bird',       title: 'Madrugadora',       description: 'Acessar o app entre 5h e 7h em 5 dias diferentes',  xp: 75, icon: '🌅', hidden: true, condition: { event: 'EARLY_ACCESS_DAYS', count: 5 } },
+  { id: 'recipe_curator',   title: 'Curadora',          description: 'Favoritar 5 receitas',                             xp: 100, icon: '❤️', hidden: true, condition: { event: 'RECIPES_FAVORITED', count: 5 } },
+  { id: 'food_explorer_pro',title: 'Exploradora Pro',   description: 'Avaliar 25 alimentos diferentes',                  xp: 200, icon: '🔍', hidden: true, condition: { event: 'FOOD_EVALUATIONS_UNIQUE', count: 25 } },
+  { id: 'streak_breaker',   title: 'Persistente',       description: 'Retomar o app após perder um dia de streak',      xp: 50,  icon: '💪', hidden: true, condition: { event: 'STREAK_RECOVERED' } },
+  { id: 'polymath',         title: 'Polivalente',       description: 'Usar 5 abas diferentes do app em menos de 24 horas', xp: 80, icon: '🌐', hidden: true, condition: { event: 'SECTIONS_VISITED_24H', count: 5 } },
+  { id: 'chat_marathoner',  title: 'Maratonista',       description: 'Enviar 30 mensagens para a Guardiã em um único dia', xp: 150, icon: '🏃', hidden: true, condition: { event: 'CHAT_MESSAGES_24H', count: 30 } },
+  { id: 'forms_finished',   title: 'Formulários em Dia',description: 'Completar o formulário de saúde e o cardápio',     xp: 200, icon: '✅', hidden: true, condition: { event: 'HEALTH_AND_MENU_FORMS_COMPLETE' } },
+  { id: 'iron_will',        title: 'Vontade de Ferro',  description: 'Fazer login 60 vezes no total',                   xp: 600, icon: '🛡️', hidden: true, condition: { event: 'TOTAL_LOGINS', count: 60 } },
+  { id: 'gmp_legend',       title: 'Lenda 4D',          description: 'Acumular 5000 XP',                                xp: 1500, icon: '🌟', hidden: true, condition: { event: 'TOTAL_XP', count: 5000 } },
 ];
+
+// ─────────────────────────────────────────────
+// LEVELS TABLE — mirror from seedAppConfig / constants.js
+// ─────────────────────────────────────────────
+const LEVELS = [
+  { level: 1, minXp: 0,    maxXp: 499   },
+  { level: 2, minXp: 500,  maxXp: 1199  },
+  { level: 3, minXp: 1200, maxXp: 2199  },
+  { level: 4, minXp: 2200, maxXp: 3399  },
+  { level: 5, minXp: 3400, maxXp: 4799  },
+  { level: 6, minXp: 4800, maxXp: 6499  },
+  { level: 7, minXp: 6500, maxXp: 8499  },
+  { level: 8, minXp: 8500, maxXp: 99999 },
+];
+
+function getLevelForXp(xp) {
+  for (let i = LEVELS.length - 1; i >= 0; i--) {
+    if (xp >= LEVELS[i].minXp) return LEVELS[i].level;
+  }
+  return 1;
+}
+
+// ─────────────────────────────────────────────
+// XP EVENTS MAP — mirror from seedAppConfig xpEvents
+// ─────────────────────────────────────────────
+const XP_EVENTS_MAP = {
+  DAILY_LOGIN: 10,
+  HEALTH_FORM_COMPLETED: 150,
+  MENU_FORM_COMPLETED: 100,
+  CHAT_MESSAGE_SENT: 5,
+  RECIPE_GENERATED: 30,
+  RECIPE_SAVED: 15,
+  FOOD_EVALUATED: 10,
+  BLOOD_TEST_UPLOADED: 200,
+  ONBOARDING_COMPLETED: 100,
+  STREAK_7_DAYS: 75,
+  STREAK_14_DAYS: 150,
+  STREAK_30_DAYS: 300,
+  PROFILE_COMPLETE: 50,
+  SHARE_ACHIEVEMENT: 20,
+  ACHIEVEMENT_CLAIMED: 0,
+};
+
+const ACHIEVEMENT_CONDITION_EVENTS = [
+  ...new Set(ACHIEVEMENTS_CATALOG.map(a => a.condition?.event).filter(Boolean)),
+];
+
+const VALID_EVENTS = new Set([
+  ...Object.keys(XP_EVENTS_MAP),
+  ...ACHIEVEMENT_CONDITION_EVENTS,
+]);
 
 // ─────────────────────────────────────────────
 // SECRETS — definir via: firebase functions:secrets:set N8N_BASE_URL
 // ─────────────────────────────────────────────
-const secretN8nBaseUrl = defineSecret('N8N_BASE_URL');
-const secretN8nWebhookSecret = defineSecret('N8N_WEBHOOK_SECRET');
+// secretN8nBaseUrl — em runtime usa process.env direto (definido no deploy)
+// secretN8nWebhookSecret — em runtime usa process.env direto
 
 const REGION = 'southamerica-east1';
-const SECRETS = [secretN8nBaseUrl, secretN8nWebhookSecret];
+const N8N_WEBHOOK_SECRET = defineSecret('N8N_WEBHOOK_SECRET');
+const SECRETS = [N8N_WEBHOOK_SECRET];
 
 // Resolvidos em runtime (dentro das funções, não no topo do módulo)
 function getN8nBaseUrl() {
-  return secretN8nBaseUrl.value() || process.env.N8N_BASE_URL || 'https://SEU-N8N.cloud/webhook';
+  return process.env.N8N_BASE_URL || 'https://n8n.attoltda.com/webhook';
 }
 function getN8nWebhookSecret() {
-  return secretN8nWebhookSecret.value() || process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO';
+  return process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO';
 }
 function getN8nHeaders() {
   return { 'Content-Type': 'application/json', 'X-Webhook-Secret': getN8nWebhookSecret() };
@@ -133,27 +190,32 @@ async function unlockAchievement(uid, achievementId) {
   return true;
 }
 
-// Helper: concede XP ao usuário (backend)
-async function awardXp(uid, xpAmount, eventId = null) {
+// Helper interno: concede XP ao usuário (usado por Cloud Functions existentes)
+async function awardXpInternal(uid, xpAmount, eventId = null) {
   if (!xpAmount || xpAmount <= 0) return;
   try {
     const userRef = db.collection('users').doc(uid);
-    const userSnap = await userRef.get();
-    const data = userSnap.exists ? userSnap.data() : {};
-    const newXp = (data.xp || 0) + xpAmount;
 
-    await userRef.set({ xp: newXp, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    // Use FieldValue.increment() — atomic, no race condition
+    await userRef.set({
+      xp: FieldValue.increment(xpAmount),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
 
     if (eventId) {
+      // Read back for xpLog (increment doesn't return new value)
+      const userSnap = await userRef.get();
+      const newXp = (userSnap.exists ? userSnap.data().xp : 0) || 0;
       await db.collection('users').doc(uid).collection('xpLog').add({
         eventId,
         xpAwarded: xpAmount,
         totalXp: newXp,
         timestamp: FieldValue.serverTimestamp(),
+        source: 'function',
       });
     }
   } catch (e) {
-    log('error', 'awardXp error', { error: e.message });
+    log('error', 'awardXpInternal error', { error: e.message });
   }
 }
 
@@ -194,7 +256,7 @@ function verifyWebhookSecret(req) {
 // ─────────────────────────────────────────────
 // 1. PROCESSAR TRANSCRIÇÃO DO GOOGLE MEET
 // ─────────────────────────────────────────────
-exports.processOnboardingTranscript = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.processOnboardingTranscript = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { transcriptText, driveFileUrl } = request.data;
@@ -246,7 +308,7 @@ exports.processOnboardingTranscript = onCall({ region: REGION, secrets: SECRETS 
 // ─────────────────────────────────────────────
 // 2. PROCESSAR EXAME DE SANGUE
 // ─────────────────────────────────────────────
-exports.processBloodTest = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.processBloodTest = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { bloodTestId, driveFileUrl } = request.data;
@@ -288,7 +350,7 @@ exports.processBloodTest = onCall({ region: REGION, secrets: SECRETS }, async (r
 // ─────────────────────────────────────────────
 // 3. GERAR PEDIDO DE EXAMES (sem exame disponível)
 // ─────────────────────────────────────────────
-exports.generateExamRequest = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.generateExamRequest = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
 
@@ -337,7 +399,7 @@ exports.generateExamRequest = onCall({ region: REGION, secrets: SECRETS }, async
 // ─────────────────────────────────────────────
 // 4. AGENTE DE CHAT IA (função principal do app)
 // ─────────────────────────────────────────────
-exports.agentChatMessage = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.agentChatMessage = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { message, sessionId } = request.data;
@@ -415,7 +477,7 @@ exports.agentChatMessage = onCall({ region: REGION, secrets: SECRETS }, async (r
 // ─────────────────────────────────────────────
 // 5. GERAR RECEITA (chamada direta, sem chat)
 // ─────────────────────────────────────────────
-exports.generateRecipe = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.generateRecipe = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { preferences } = request.data;
@@ -462,7 +524,7 @@ exports.generateRecipe = onCall({ region: REGION, secrets: SECRETS }, async (req
 // ─────────────────────────────────────────────
 // 5. REMOVER RECEITA
 // ─────────────────────────────────────────────
-exports.deleteRecipe = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.deleteRecipe = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { recipeId } = request.data;
@@ -476,19 +538,7 @@ exports.deleteRecipe = onCall({ region: REGION, secrets: SECRETS }, async (reque
     throw new HttpsError('not-found', 'Receita não encontrada');
   }
 
-  const recipeData = recipeDoc.data() || {};
-
   try {
-    await callN8nWithRetry('4d-delete-recipe', {
-      uid,
-      recipeId,
-      recipe: {
-        id: recipeId,
-        name: recipeData.nm || recipeData.name || '',
-        source: recipeData.source || 'manual',
-      },
-    });
-
     await recipeRef.delete();
 
     await db.doc(`users/${uid}`).set({
@@ -506,7 +556,7 @@ exports.deleteRecipe = onCall({ region: REGION, secrets: SECRETS }, async (reque
 // ─────────────────────────────────────────────
 // 5b. CLAIM ACHIEVEMENT (award XP only when user claims)
 // ─────────────────────────────────────────────
-exports.claimAchievement = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.claimAchievement = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Login required');
 
@@ -531,9 +581,9 @@ exports.claimAchievement = onCall({ region: REGION, secrets: SECRETS }, async (r
 
   if (achievement.xp > 0) {
     try {
-      await awardXp(uid, achievement.xp, `claim_${achievementId}`);
+      await awardXpInternal(uid, achievement.xp, `claim_${achievementId}`);
     } catch (e) {
-      log('error', 'awardXp on claim failed', { error: e.message });
+      log('error', 'awardXpInternal on claim failed', { error: e.message });
     }
   }
 
@@ -543,7 +593,7 @@ exports.claimAchievement = onCall({ region: REGION, secrets: SECRETS }, async (r
 // ─────────────────────────────────────────────
 // 6. AVALIADOR DE ALIMENTOS
 // ─────────────────────────────────────────────
-exports.evaluateFood = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.evaluateFood = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { foodName, quantity } = request.data;
@@ -583,7 +633,7 @@ exports.evaluateFood = onCall({ region: REGION, secrets: SECRETS }, async (reque
 // ─────────────────────────────────────────────
 // 7. DOWNLOAD PDF DE PEDIDO DE EXAME
 // ─────────────────────────────────────────────
-exports.downloadExamPdf = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.downloadExamPdf = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Login necessário');
 
@@ -603,7 +653,7 @@ exports.downloadExamPdf = onCall({ region: REGION, secrets: SECRETS }, async (re
 // ─────────────────────────────────────────────
 // 8. CALLBACKS HTTP (n8n -> Firebase)
 // ─────────────────────────────────────────────
-exports.onTranscriptCallback = onRequest({ region: REGION, secrets: SECRETS }, async (req, res) => {
+exports.onTranscriptCallback = onRequest({ region: REGION }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', getN8nBaseUrl().replace(/\/webhook.*$/, ''));
   res.set('Access-Control-Allow-Methods', 'POST');
   if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
@@ -671,7 +721,7 @@ exports.onTranscriptCallback = onRequest({ region: REGION, secrets: SECRETS }, a
   }
 });
 
-exports.onBloodTestCallback = onRequest({ region: REGION, secrets: SECRETS }, async (req, res) => {
+exports.onBloodTestCallback = onRequest({ region: REGION }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', getN8nBaseUrl().replace(/\/webhook.*$/, ''));
   res.set('Access-Control-Allow-Methods', 'POST');
   if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
@@ -801,7 +851,7 @@ async function sendWhatsAppNotification(uid, profile, notification, metadata = {
     timestamp: new Date().toISOString(),
   };
 
-  const result = await callN8n('4d-send-whatsapp-notification', payload);
+  const result = await callN8nWithRetry('4d-send-whatsapp-notification', payload);
 
   await db.collection(`users/${uid}/notifications`).add({
     channel: 'whatsapp',
@@ -818,7 +868,7 @@ async function sendWhatsAppNotification(uid, profile, notification, metadata = {
   return result;
 }
 
-exports.sendPatientNotification = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.sendPatientNotification = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { title, message, type = 'manual', priority = 'normal', metadata = {} } = request.data || {};
@@ -924,9 +974,11 @@ exports.updateGlobalRanking = onSchedule(
 // ─────────────────────────────────────────────
 // recordSectionVisit — registra visita a uma aba do dashboard
 // ─────────────────────────────────────────────
-exports.recordSectionVisit = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
-  const { uid, sectionId } = request.data;
-  if (!uid || !sectionId) throw new HttpsError('invalid-argument', 'uid and sectionId required');
+exports.recordSectionVisit = onCall({ region: REGION }, async (request) => {
+  requireAuth(request.auth);
+  const uid = request.auth.uid;
+  const { sectionId } = request.data;
+  if (!sectionId) throw new HttpsError('invalid-argument', 'sectionId required');
 
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const ref = db.collection('users').doc(uid).collection('sectionVisits').doc(today);
@@ -949,7 +1001,7 @@ exports.recordSectionVisit = onCall({ region: REGION, secrets: SECRETS }, async 
 // evaluateTimeBasedAchievements — scheduled daily
 // ─────────────────────────────────────────────
 exports.evaluateTimeBasedAchievements = onSchedule(
-  { schedule: 'every 24 hours', timeZone: 'America/Sao_Paulo', region: REGION, secrets: SECRETS },
+  { schedule: 'every 24 hours', timeZone: 'America/Sao_Paulo', region: REGION },
   async () => {
     log('info', 'Running evaluateTimeBasedAchievements');
     const usersSnap = await db.collection('users').limit(500).get();
@@ -987,3 +1039,272 @@ exports.evaluateTimeBasedAchievements = onSchedule(
     log('info', `evaluateTimeBasedAchievements done for ${usersSnap.size} users`);
   }
 );
+
+/**
+ * Seed appConfig no Firestore com dados do dashboard-v2.js.
+ * Idempotente: só insere se o documento ainda não existe.
+ * Requer header X-Webhook-Secret com o valor de N8N_WEBHOOK_SECRET.
+ * Chamar via Firebase Console ou:
+ *   curl -X POST https://southamerica-east1-bela-4d-app.cloudfunctions.net/seedAppConfig \
+ *     -H "X-Webhook-Secret: $N8N_WEBHOOK_SECRET"
+ */
+exports.seedAppConfig = onRequest({ region: REGION }, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', getN8nBaseUrl().replace(/\/webhook.*$/, ''));
+  res.set('Access-Control-Allow-Methods', 'POST');
+  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+
+  try {
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'method-not-allowed' });
+      return;
+    }
+    verifyWebhookSecret(req);
+  const now = FieldValue.serverTimestamp();
+  const configs = {
+    levels: [
+      { level: 1, title: 'Iniciante', name: 'Iniciante', shortName: 'Inic.', minXp: 0, maxXp: 499, color: '#8a8aa0', emoji: '🌱', rarity: 'common' },
+      { level: 2, title: 'Aprendiz', name: 'Aprendiz', shortName: 'Apr.', minXp: 500, maxXp: 1199, color: '#10b981', emoji: '🌿', rarity: 'common' },
+      { level: 3, title: 'Comprometida', name: 'Comprometida', shortName: 'Comp.', minXp: 1200, maxXp: 2199, color: '#38bdf8', emoji: '💪', rarity: 'uncommon' },
+      { level: 4, title: 'Disciplinada', name: 'Disciplinada', shortName: 'Disc.', minXp: 2200, maxXp: 3399, color: '#a78bfa', emoji: '🔥', rarity: 'uncommon' },
+      { level: 5, title: 'Consistente', name: 'Consistente', shortName: 'Consis.', minXp: 3400, maxXp: 4799, color: '#f59e0b', emoji: '⭐', rarity: 'rare' },
+      { level: 6, title: 'Referência', name: 'Referência', shortName: 'Ref.', minXp: 4800, maxXp: 6499, color: '#f43f5e', emoji: '🏆', rarity: 'rare' },
+      { level: 7, title: 'Elite 4D', name: 'Elite 4D', shortName: 'Elite', minXp: 6500, maxXp: 8499, color: '#14b8a6', emoji: '💎', rarity: 'epic' },
+      { level: 8, title: 'Mestra 4D', name: 'Mestra 4D', shortName: 'Mestra', minXp: 8500, maxXp: 99999, color: '#eab308', emoji: '👑', rarity: 'legendary' },
+    ],
+    // === SYNCED with ACHIEVEMENTS_CATALOG above — same IDs, titles, XPs ===
+    achievementsCatalog: ACHIEVEMENTS_CATALOG.map(a => ({
+      id: a.id,
+      emoji: a.icon,
+      name: a.title,
+      description: a.description,
+      xp: a.xp,
+      category: a.hidden ? 'Especial' : (a.condition.event?.startsWith('STREAK') ? 'Engajamento' : 'Jornada'),
+      hidden: a.hidden || false,
+      condition: a.condition,
+    })),
+    xpEvents: {
+      DAILY_LOGIN: 10,
+      HEALTH_FORM_COMPLETED: 150,
+      MENU_FORM_COMPLETED: 100,
+      CHAT_MESSAGE_SENT: 5,
+      RECIPE_GENERATED: 30,
+      RECIPE_SAVED: 15,
+      FOOD_EVALUATED: 10,
+      BLOOD_TEST_UPLOADED: 200,
+      ONBOARDING_COMPLETED: 100,
+      STREAK_7_DAYS: 75,
+      STREAK_14_DAYS: 150,
+      STREAK_30_DAYS: 300,
+      PROFILE_COMPLETE: 50,
+      SHARE_ACHIEVEMENT: 20,
+      ACHIEVEMENT_CLAIMED: 0,
+    },
+    navItems: [
+      { id: 'inicio', label: 'Início', icon: '🏠', sub: 'Chat · Receita · Cardápio' },
+      { id: 'evolucao', label: 'Evolução', icon: '📊', sub: 'Gráficos · Progresso' },
+      { id: 'receitas', label: 'Receitas', icon: '🥗', sub: 'Cardápio personalizado' },
+      { id: 'exames', label: 'Exames', icon: '🔬', sub: 'Pedidos · Resultados' },
+      { id: 'conquistas', label: 'Conquistas', icon: '🏆', sub: 'Ranking · Comunidade' },
+      { id: 'chat', label: 'Chat IA', icon: '💬', sub: 'Dúvidas alimentares' },
+      { id: 'perfil', label: 'Meu Perfil', icon: '👤', sub: 'Avatar · Configurações' },
+    ],
+    foodDatabase: {
+      frango: { status: 'g', note: 'Proteína magra ideal — base do programa' },
+      peixe: { status: 'g', note: 'Ômega-3 anti-inflamatório e proteína de alto valor' },
+      salmao: { status: 'g', note: 'Ômega-3 que melhora sensibilidade à insulina' },
+      atum: { status: 'g', note: 'Proteína sem carboidratos' },
+      sardinha: { status: 'g', note: 'Cálcio, ômega-3 e proteína' },
+      tilapia: { status: 'g', note: 'Peixe branco magro, ótimo para o programa' },
+      ovo: { status: 'g', note: 'Proteína completa, zero impacto glicêmico' },
+      ovos: { status: 'g', note: 'Proteína completa, zero impacto glicêmico' },
+      brocolis: { status: 'g', note: 'Fibras e antioxidantes que regulam a glicemia' },
+      abobrinha: { status: 'g', note: 'Vegetal de baixíssimo índice glicêmico' },
+      espinafre: { status: 'g', note: 'Magnésio melhora sensibilidade à insulina' },
+      couve: { status: 'g', note: 'Fibras reguladoras e alto valor nutricional' },
+      rucula: { status: 'g', note: 'Baixo IG, rico em nutrientes' },
+      tomate: { status: 'g', note: 'Licopeno e baixo índice glicêmico' },
+      abacate: { status: 'g', note: 'Gordura boa que suaviza picos glicêmicos' },
+      morango: { status: 'g', note: 'Fruta de baixo IG, rica em vitamina C' },
+      amendoa: { status: 'g', note: 'Gordura e proteína que estabilizam a glicose' },
+      azeite: { status: 'g', note: 'Anti-inflamatório, melhora perfil lipídico' },
+      arroz: { status: 'a', note: 'Prefira integral — máx. 2 colheres de sopa por refeição' },
+      batata_doce: { status: 'a', note: 'IG médio — 1 unidade pequena com proteína' },
+      banana: { status: 'a', note: 'IG moderado — 1 unidade pequena com oleaginosas' },
+      maca: { status: 'a', note: '1 unidade média com amêndoas' },
+      laranja: { status: 'a', note: 'Vitamina C, mas frutose — 1 unidade por vez' },
+      iogurte: { status: 'a', note: 'Preferir natural sem açúcar ou grego' },
+      queijo: { status: 'a', note: 'Laticínio — 1 a 2 fatias por refeição' },
+      feijao: { status: 'a', note: 'Fibras boas — máx. 4 colheres de sopa' },
+      lentilha: { status: 'a', note: 'Carboidrato de baixo IG em porção controlada' },
+      acucar: { status: 'r', note: 'Eleva a glicemia imediatamente. Substituir por stevia' },
+      refrigerante: { status: 'r', note: 'Alto teor de açúcar — fortemente contraindicado' },
+      pao: { status: 'r', note: 'Se branco/francês, IG altíssimo. Use pão de sementes' },
+      farinha: { status: 'r', note: 'Carboidrato refinado — usar farinha de amêndoa' },
+      macarrao: { status: 'r', note: 'Carboidrato refinado de alto IG' },
+      bolo: { status: 'r', note: 'Açúcar + farinha refinada = pico glicêmico elevado' },
+      biscoito: { status: 'r', note: 'Ultra processado com açúcar oculto' },
+      sorvete: { status: 'r', note: 'Açúcar + gordura = pico de insulina' },
+      chocolate: { status: 'r', note: 'Se ao leite ou branco, alto açúcar. Use 70%+ cacau' },
+      margarina: { status: 'r', note: 'Gordura trans — substituir por manteiga ou azeite' },
+      salsicha: { status: 'r', note: 'Ultra processado com conservantes inflamatórios' },
+      mel: { status: 'r', note: 'Açúcar natural de alto IG — substituir por stevia' },
+      suco: { status: 'r', note: 'Remove fibras e concentra o açúcar da fruta' },
+      cerveja: { status: 'r', note: 'Carboidrato líquido + álcool que interferem na glicose' },
+      tapioca: { status: 'r', note: 'Amido puro com IG altíssimo — evitar' },
+      pizza: { status: 'r', note: 'Farinha refinada + gordura elevam glicemia' },
+      fritura: { status: 'r', note: 'Gordura trans e oxidação aumentam inflamação' },
+      miojo: { status: 'r', note: 'Ultra processado — sódio alto e carboidrato refinado' },
+    },
+    recipes: [
+      { id: 'r1', emoji: '🥚', name: 'Omelete de Legumes', time: '15 min', kcal: 280, category: 'Café da manhã', difficulty: 'Fácil', ingredients: ['3 ovos', 'Abobrinha', 'Tomate', 'Sal e ervas'], steps: ['Bata os ovos com sal.', 'Refogue legumes no azeite.', 'Despeje e tampe 3 min.', 'Sirva com folhas verdes.'] },
+      { id: 'r2', emoji: '🐟', name: 'Salmão com Aspargos', time: '20 min', kcal: 380, category: 'Almoço', difficulty: 'Médio', ingredients: ['200g salmão', 'Aspargos', 'Azeite', 'Limão'], steps: ['Tempere o salmão.', 'Grelhe 4 min/lado.', 'Refogue aspargos.', 'Sirva com limão.'] },
+      { id: 'r3', emoji: '🥗', name: 'Bowl Low-Carb Frango', time: '25 min', kcal: 320, category: 'Almoço', difficulty: 'Fácil', ingredients: ['150g frango', 'Rúcula', 'Abacate', 'Azeite'], steps: ['Grelhe o frango.', 'Monte bowl com rúcula.', 'Adicione abacate.', 'Regue com azeite.'] },
+      { id: 'r4', emoji: '🍳', name: 'Frittata de Espinafre', time: '20 min', kcal: 260, category: 'Jantar', difficulty: 'Fácil', ingredients: ['4 ovos', 'Espinafre', 'Queijo minas', 'Alho'], steps: ['Refogue espinafre.', 'Bata ovos com queijo.', 'Combine na frigideira.', 'Forno 10 min 180°C.'] },
+      { id: 'r5', emoji: '🥑', name: 'Mousse de Abacate', time: '10 min', kcal: 200, category: 'Lanche', difficulty: 'Fácil', ingredients: ['1 abacate', 'Cacau em pó', 'Stevia'], steps: ['Amasse o abacate.', 'Adicione cacau e stevia.', 'Misture bem.', 'Sirva gelado.'] },
+      { id: 'r6', emoji: '🍲', name: 'Caldo de Frango', time: '40 min', kcal: 180, category: 'Ceia', difficulty: 'Médio', ingredients: ['Frango', 'Chuchu', 'Cenoura', 'Ervas'], steps: ['Cozinhe frango 30 min.', 'Adicione legumes.', 'Tempere.', 'Coe e sirva.'] },
+    ],
+    ranking: [
+      { position: 1, name: 'Ana Beatriz', nick: '@anabea', emoji: '👑', color: '#eab308', xp: 1420, streak: 45 },
+      { position: 2, name: 'Carla Mendes', nick: '@carlinha', emoji: '🔥', color: '#f0059a', xp: 1180, streak: 38 },
+      { position: 3, name: 'Priscila S.', nick: '@prisilva', emoji: '💎', color: '#a78bfa', xp: 980, streak: 31 },
+      { position: 4, name: 'Fernanda L.', nick: '@ferlima', emoji: '🌺', color: '#1fcc74', xp: 820, streak: 28 },
+      { position: 5, name: 'Juliana C.', nick: '@juju', emoji: '⭐', color: '#38bdf8', xp: 710, streak: 22 },
+      { position: 6, name: 'Mariana A.', nick: '@mari', emoji: '🌸', color: '#fb7185', xp: 640, streak: 19 },
+      { position: 7, name: 'Tatiane R.', nick: '@tati', emoji: '🦋', color: '#34d399', xp: 580, streak: 17 },
+      { position: 8, name: 'Você', nick: '@voce', emoji: '🌙', color: '#f0059a', xp: 520, streak: 14, isMe: true },
+      { position: 9, name: 'Roberta D.', nick: '@robi', emoji: '🍀', color: '#fbbf24', xp: 480, streak: 12 },
+      { position: 10, name: 'Simone N.', nick: '@sisi', emoji: '🌿', color: '#6ee7b7', xp: 410, streak: 10 },
+    ],
+  };
+
+  const results = [];
+  for (const [docId, data] of Object.entries(configs)) {
+    const ref = db.collection('appConfig').doc(docId);
+    const existing = await ref.get();
+    if (existing.exists) {
+      results.push(`${docId}: skipped (exists)`);
+      continue;
+    }
+    await ref.set({
+      docId, data,
+      description: 'Auto seed from dashboard-v2.js',
+      version: 1, source: 'dashboard-v2.js',
+      createdAt: now, updatedAt: now,
+    });
+    results.push(`${docId}: created`);
+  }
+
+  res.json({ success: true, results });
+  } catch (error) {
+    console.error('[Functions] seedAppConfig error:', error.message || error);
+    res.status(500).json({ success: false, error: 'internal-error' });
+  }
+});
+
+// ─────────────────────────────────────────────
+// awardXp — Cloud Function onCall (chamada pelo frontend)
+//
+// Substitui o write direto a users/{uid}/xpLog pelo cliente.
+// Valida event + amount server-side, executa transação atômica.
+// Retorna: { ok: true, xp, level, leveledUp }
+// ─────────────────────────────────────────────
+exports.awardXp = onCall({ region: REGION }, async (request) => {
+  const { auth, data } = request;
+  if (!auth?.uid) throw new HttpsError('unauthenticated', 'Login obrigatório');
+  const uid = auth.uid;
+
+  const { event, amount, reason, meta, idempotencyKey } = data || {};
+
+  // Validação do evento
+  if (!event || typeof event !== 'string' || !VALID_EVENTS.has(event)) {
+    throw new HttpsError('invalid-argument', `Evento inválido: ${event}`);
+  }
+
+  // Validação do amount
+  const xp = Math.floor(Number(amount));
+  if (!Number.isFinite(xp) || xp < 1 || xp > 2000) {
+    throw new HttpsError('invalid-argument', `amount deve ser inteiro entre 1 e 2000, recebido: ${amount}`);
+  }
+
+  // Validação do amount vs XP_EVENTS_MAP (permite múltiplos para bônus de milestone)
+  const expectedAmount = XP_EVENTS_MAP[event];
+  if (expectedAmount !== undefined && (xp < expectedAmount || xp % expectedAmount !== 0)) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Amount ${xp} não confere com evento ${event} (esperado múltiplo de: ${expectedAmount})`
+    );
+  }
+
+  // Validação do reason (opcional)
+  if (reason !== undefined && (typeof reason !== 'string' || reason.length > 200)) {
+    throw new HttpsError('invalid-argument', 'reason deve ser string <= 200 chars');
+  }
+
+  const userRef = db.collection('users').doc(uid);
+  const rankingRef = db.collection('globalRanking').doc(uid);
+
+  // Se idempotencyKey fornecido, usá-lo como doc ID para evitar duplicata
+  const xpLogRef = idempotencyKey
+    ? db.collection('users').doc(uid).collection('xpLog').doc(String(idempotencyKey))
+    : db.collection('users').doc(uid).collection('xpLog').doc();
+
+  let newXp, newLevel, leveledUp;
+
+  try {
+    await db.runTransaction(async (tx) => {
+      const [userSnap, xpLogSnap] = await Promise.all([
+        tx.get(userRef),
+        idempotencyKey ? tx.get(xpLogRef) : Promise.resolve({ exists: false }),
+      ]);
+
+      // Idempotência: se já existe, retorna sem modificar
+      if (xpLogSnap.exists) {
+        const existing = xpLogSnap.data();
+        newXp = existing.totalXp;
+        newLevel = existing.level || getLevelForXp(newXp);
+        leveledUp = false;
+        return;
+      }
+
+      const userData = userSnap.exists ? userSnap.data() : {};
+      const prevXp = userData.xp || 0;
+      const prevLevel = userData.level || getLevelForXp(prevXp);
+      newXp = prevXp + xp;
+      newLevel = getLevelForXp(newXp);
+      leveledUp = newLevel > prevLevel;
+
+      const userUpdate = { xp: newXp, updatedAt: FieldValue.serverTimestamp() };
+      if (leveledUp) userUpdate.level = newLevel;
+
+      tx.set(userRef, userUpdate, { merge: true });
+
+      tx.set(xpLogRef, {
+        event,
+        amount: xp,
+        totalXp: newXp,
+        level: newLevel,
+        reason: reason || null,
+        meta: meta || null,
+        source: 'function',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      tx.set(rankingRef, {
+        uid,
+        xp: newXp,
+        level: newLevel,
+        name: userData.name || null,
+        avatar: userData.avatar || null,
+        avatarColor: userData.avatarColor || null,
+        streak: Number(userData.streak || 0),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
+  } catch (e) {
+    log('error', 'awardXp onCall transaction error', { uid, event, error: e.message });
+    throw new HttpsError('internal', 'Erro ao registrar XP');
+  }
+
+  log('info', 'awardXp onCall ok', { uid, event, xp, newXp, newLevel, leveledUp });
+  return { ok: true, xp: newXp, level: newLevel, leveledUp: !!leveledUp };
+});

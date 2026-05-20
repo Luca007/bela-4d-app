@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TEST — Dashboard (legacy)</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/dashboard.css">
+  <link rel="stylesheet" href="/assets/css/chat.css">
+  <link rel="stylesheet" href="/assets/css/recipes.css">
+  <link rel="stylesheet" href="/assets/css/food-search.css">
+  <link rel="stylesheet" href="/assets/css/gamification.css">
+  <link rel="stylesheet" href="/assets/css/forms.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+      "/assets/js/services/auth.js": "/test/mocks/auth.js",
+      "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+      "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+    }
+  }
+  </script>
+  <style>
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', system-ui, sans-serif; margin: 0; }
+    #app { width: 100%; min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+    State.set('userProfile', {
+      name: 'Maria Teste', avatar: '🌸', avatarColor: '#f0059a',
+      xp: 520, level: 3, streak: 5, totalRecipes: 8, totalChatMessages: 22,
+      status: 'active', onboardingCompleted: true,
+    });
+    State.set('recipes', [
+      { id: 'r1', title: 'Salmão grelhado', tags:['low-carb'], calories: 420 },
+      { id: 'r2', title: 'Bowl frango brócolis', tags:['almoço'], calories: 380 },
+    ]);
+    State.set('achievements', []);
+    try {
+      const { DashboardScreen } = await import('/assets/js/screens/dashboard.js');
+      window.__screen = new DashboardScreen({ onNavigate: (...a) => console.log('[NAV]', a) });
+      await window.__screen.mount();
+      window.__ready = true;
+    } catch (e) {
+      console.error('[TEST] dashboard failed', e);
+      document.getElementById('app').innerHTML = '<pre style="color:#fff;padding:20px;font-size:11px;">ERROR: ' + (e.message || e) + '</pre>';
+      window.__ready = true;
+    }
+  </script>
+</body>
+</html>

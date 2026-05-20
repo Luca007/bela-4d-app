@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>TEST — Quick flow</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <script type="importmap">
+  { "imports": {
+    "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+    "/assets/js/services/auth.js": "/test/mocks/auth.js",
+    "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+    "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+  } }
+  </script>
+  <style>body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', sans-serif; margin: 0; } #app { min-height: 100vh; } #log { position: fixed; bottom: 0; right: 0; max-height: 200px; overflow: auto; font-size: 11px; background: #000d; padding: 6px; max-width: 320px; z-index: 99999; color: #0f0; }</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="log"></div>
+  <script type="module">
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    import { AwaitingScreen } from '/assets/js/screens/awaiting.js';
+    const log = (m) => { document.getElementById('log').innerHTML += m + '<br>'; console.log(m); };
+    window.__errors = [];
+    window.addEventListener('error', e => { window.__errors.push(e.message); log('ERR: ' + e.message); });
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123' });
+    window.__screen = new AwaitingScreen({ status: 'awaiting_onboarding', onNavigate: () => {} });
+    (async () => {
+      await window.__screen.mount();
+      await new Promise(r => setTimeout(r, 100));
+
+      // Test 1: Quick entry inputs exist
+      const dateInput = document.getElementById('meeting-date-input');
+      const timeInput = document.getElementById('meeting-time-input');
+      log('date input: ' + (dateInput ? 'OK' : 'MISSING'));
+      log('time input: ' + (timeInput ? 'OK' : 'MISSING'));
+      log('date min: ' + dateInput.min + ' max: ' + dateInput.max);
+      log('time min: ' + timeInput.min + ' max: ' + timeInput.max + ' step: ' + timeInput.step);
+
+      // Test 2: Type date in quick entry → sync with calendar
+      const futureDate = new Date(); futureDate.setDate(futureDate.getDate() + 7);
+      while (futureDate.getDay() === 0 || futureDate.getDay() === 6) futureDate.setDate(futureDate.getDate() + 1);
+      const iso = futureDate.toISOString().slice(0, 10);
+      dateInput.value = iso;
+      dateInput.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 50));
+      log('After date change: selectedDate=' + window.__screen.selectedDate);
+      const calCell = document.querySelector(`#meeting-calendar button[data-date="${iso}"]`);
+      log('Cal cell selected: ' + (calCell && calCell.style.background.includes('240, 5, 154') ? 'YES' : 'NO — ' + (calCell ? calCell.style.background : 'missing')));
+
+      // Test 3: Set time via quick input
+      timeInput.value = '10:30';
+      timeInput.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 50));
+      log('After time change: selectedTime=' + window.__screen.selectedTime);
+      const slot = document.querySelector('#meeting-times button[data-time="10:30"]');
+      log('Slot 10:30 selected: ' + (slot && slot.style.background.includes('240, 5, 154') ? 'YES' : 'NO'));
+
+      // Test 4: Type bogus time outside slot
+      timeInput.value = '06:00';
+      timeInput.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 50));
+      const qErr = document.getElementById('meeting-quick-error');
+      log('Bogus time err: ' + (qErr && qErr.style.display !== 'none' ? 'SHOWN: ' + qErr.textContent : 'NOT SHOWN'));
+
+      // Test 5: Type weekend
+      const sat = new Date(); sat.setDate(sat.getDate() + 1);
+      while (sat.getDay() !== 6) sat.setDate(sat.getDate() + 1);
+      const satIso = sat.toISOString().slice(0, 10);
+      dateInput.value = satIso;
+      dateInput.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 50));
+      log('Weekend err: ' + (qErr && qErr.style.display !== 'none' ? 'SHOWN: ' + qErr.textContent : 'NOT SHOWN'));
+
+      window.__done = true;
+    })();
+  </script>
+</body>
+</html>

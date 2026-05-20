@@ -14,7 +14,7 @@
  *   users/{uid}/examTracking/{id}  → exames de acompanhamento (HbA1c, glicemia etc.)
  */
 
-import { getFirestore, firebaseConfig } from '../config/firebase.js';
+import { getFirestore, firebaseConfig, getFunctions, httpsCallable } from '../config/firebase.js';
 import {
   addDoc,
   arrayUnion,
@@ -33,23 +33,28 @@ import {
   where,
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
-import { LEVELS, ACHIEVEMENTS_CATALOG, XP_EVENTS } from '../config/constants.js';
+import { getLevels, getAchievementsCatalog, getXpEvents as getXpEventsFromConfig } from '../config/constants.js';
 
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
 
 function getLevelForXp(xp) {
-  for (let i = LEVELS.length - 1; i >= 0; i--) {
-    if (xp >= LEVELS[i].minXp) return LEVELS[i];
+  const levels = getLevels();
+  for (let i = levels.length - 1; i >= 0; i--) {
+    if (xp >= levels[i].minXp) return levels[i];
   }
-  return LEVELS[0];
+  return levels[0];
 }
 
 function xpToNextLevel(xp) {
   const current = getLevelForXp(xp);
   if (!current.maxXp) return null; // nível máximo
   return current.maxXp - xp + 1;
+}
+
+function getXpEvents() {
+  return getXpEventsFromConfig();
 }
 
 // ─────────────────────────────────────────────
@@ -61,11 +66,69 @@ export class FirestoreService {
     this.db = null;
     this.initialized = false;
     this._cache = new Map();
+    this._localPrefix = '_bela_fs_';
   }
 
   _cacheGet(key) { return this._cache.get(key); }
   _cacheSet(key, value) { this._cache.set(key, value); }
   _cacheDelete(key) { this._cache.delete(key); }
+
+  // ── localStorage fallback ─────────────────────────────────
+
+  /** Gera chave localStorage para um Firestore path. */
+  _localKey(uid, sub, docId) {
+    const parts = [this._localPrefix, uid];
+    if (sub) parts.push(sub);
+    if (docId) parts.push(docId);
+    return parts.join('/');
+  }
+
+  /** Salva no localStorage como fallback offline. */
+  _localSet(uid, sub, docId, data) {
+    try {
+      const key = this._localKey(uid, sub, docId);
+      const wrapped = { _ts: Date.now(), data };
+      localStorage.setItem(key, JSON.stringify(wrapped));
+    } catch (e) {
+      console.warn('[Firestore] localStorage set fallback failed:', e);
+    }
+  }
+
+  /** Lê do localStorage (fallback offline). */
+  _localGet(uid, sub, docId) {
+    try {
+      const key = this._localKey(uid, sub, docId);
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const wrapped = JSON.parse(raw);
+      return wrapped.data || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Remove do localStorage. */
+  _localDelete(uid, sub, docId) {
+    try {
+      const key = this._localKey(uid, sub, docId);
+      localStorage.removeItem(key);
+    } catch {}
+  }
+
+  /**
+   * Detecta se o erro é relacionado a offline/Firestore indisponível.
+   * Firebase Firestore lança erro com code 'unavailable' ou mensagem de rede.
+   */
+  _isOfflineError(e) {
+    if (!e) return false;
+    const msg = (e.message || e.code || '').toLowerCase();
+    return msg.includes('unavailable')
+      || msg.includes('network')
+      || msg.includes('offline')
+      || msg.includes('timeout')
+      || msg.includes('failed to get document')
+      || (typeof navigator !== 'undefined' && navigator.onLine === false);
+  }
 
   async _run(fn, label, fallback = null) {
     try {
@@ -108,12 +171,21 @@ export class FirestoreService {
       const snap = await getDoc(this.userRef(uid));
       const value = snap.exists() ? snap.data() : null;
       this._cacheSet(cacheKey, value);
+      // Salva no localStorage para fallback offline
+      if (value) this._localSet(uid, null, 'profile', value);
       return value;
-    }, 'getUserProfile');
+    }, 'getUserProfile', async () => {
+      // Fallback offline: tenta localStorage
+      const local = this._localGet(uid, null, 'profile');
+      if (local) { this._cacheSet(cacheKey, local); return local; }
+      return null;
+    });
   }
 
   async saveUserProfile(uid, data) {
     this._cacheDelete(`profile_${uid}`);
+    // Sempre salva no localStorage como fallback
+    this._localSet(uid, null, 'profile', data);
     return this._run(async () => {
       const toSave = { ...data, updatedAt: serverTimestamp() };
       const existing = await getDoc(this.userRef(uid));
@@ -210,6 +282,58 @@ export class FirestoreService {
     }, 'updateUserStatus', false);
   }
 
+  /**
+   * Agenda a reunião de onboarding. Grava em users/{uid}.meeting e cria
+   * notificação. Mantém o status awaiting_onboarding — a Guardiã confirma
+   * no Firestore quando a reunião acontece (mudando para pending_blood_test
+   * ou filling_health_form).
+   *
+   * @param {string} uid
+   * @param {string} isoDatetime — formato 'YYYY-MM-DDTHH:MM' (input local)
+   * @param {string} timezone   — IANA tz string (ex: 'America/Sao_Paulo')
+   */
+  async scheduleOnboardingMeeting(uid, isoDatetime, timezone = null) {
+    if (!uid || !isoDatetime) return false;
+    this._cacheDelete(`profile_${uid}`);
+    const tz = timezone || (Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo');
+    return this._run(async () => {
+      await updateDoc(this.userRef(uid), {
+        meeting: {
+          scheduledFor: isoDatetime,           // 'YYYY-MM-DDTHH:MM' (local)
+          scheduledAt: serverTimestamp(),       // quando o usuário agendou
+          timezone: tz,
+          status: 'scheduled',                  // scheduled | confirmed | done | cancelled
+        },
+        updatedAt: serverTimestamp(),
+      });
+      try {
+        const human = new Date(isoDatetime).toLocaleString('pt-BR', {
+          dateStyle: 'short', timeStyle: 'short',
+        });
+        await this.createNotification(uid, {
+          title: 'Reunião agendada',
+          message: `Sua reunião inicial foi marcada para ${human}.`,
+          type: 'meeting_scheduled',
+          priority: 'high',
+        });
+      } catch (e) { console.warn('[Firestore] schedule notification failed:', e); }
+      return true;
+    }, 'scheduleOnboardingMeeting', false);
+  }
+
+  async cancelOnboardingMeeting(uid) {
+    if (!uid) return false;
+    this._cacheDelete(`profile_${uid}`);
+    return this._run(async () => {
+      await updateDoc(this.userRef(uid), {
+        'meeting.status': 'cancelled',
+        'meeting.cancelledAt': serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return true;
+    }, 'cancelOnboardingMeeting', false);
+  }
+
   // ─────────────────────────────────────────────
   // FORMULÁRIO DE SAÚDE — Form 1
   // ─────────────────────────────────────────────
@@ -222,8 +346,14 @@ export class FirestoreService {
       const snap = await getDoc(this.subDoc(uid, 'healthForm', 'data'));
       const value = snap.exists() ? snap.data() : null;
       this._cacheSet(cacheKey, value);
+      if (value) this._localSet(uid, 'healthForm', 'data', value);
       return value;
-    }, 'getHealthForm');
+    }, 'getHealthForm', async () => {
+      // Fallback offline
+      const local = this._localGet(uid, 'healthForm', 'data');
+      if (local) { this._cacheSet(cacheKey, local); return local; }
+      return null;
+    });
   }
 
   /**
@@ -234,7 +364,10 @@ export class FirestoreService {
    * @param {boolean} completed   — se o usuário confirmou/completou
    */
   async saveHealthForm(uid, formData, { aiPrefilled = false, completed = false } = {}) {
+    if (!uid) return false;
     this._cacheDelete(`healthForm_${uid}`);
+    // Salva no localStorage como fallback offline
+    this._localSet(uid, 'healthForm', 'data', { ...formData, aiPrefilled, completed });
     return this._run(async () => {
       const ref = this.subDoc(uid, 'healthForm', 'data');
       const existing = await getDoc(ref);
@@ -249,10 +382,32 @@ export class FirestoreService {
 
       if (completed) {
         await this.updateUserStatus(uid, 'awaiting_menu_form');
-        await this.awardXp(uid, XP_EVENTS.HEALTH_FORM_COMPLETED, 'health_form_done');
+        await this.awardXp(uid, getXpEvents().HEALTH_FORM_COMPLETED, 'HEALTH_FORM_COMPLETED', { idempotencyKey: 'health_form_done' });
       }
       return true;
     }, 'saveHealthForm', false);
+  }
+
+  /**
+   * Salva rascunho do Formulário de Saúde sem disparar XP / mudança de status.
+   * Usado para auto-save por seção durante o preenchimento.
+   */
+  async saveHealthFormDraft(uid, formData, currentSection = 0) {
+    if (!uid) return false;
+    this._cacheDelete(`healthForm_${uid}`);
+    return this._run(async () => {
+      const ref = this.subDoc(uid, 'healthForm', 'data');
+      const existing = await getDoc(ref);
+      const toSave = {
+        ...formData,
+        completed: false,
+        draftSection: currentSection,
+        updatedAt: serverTimestamp(),
+      };
+      if (!existing.exists()) toSave.createdAt = serverTimestamp();
+      await setDoc(ref, toSave, { merge: true });
+      return true;
+    }, 'saveHealthFormDraft', false);
   }
 
   // ─────────────────────────────────────────────
@@ -297,6 +452,36 @@ export class FirestoreService {
     }, 'saveOnboardingData', false);
   }
 
+  /** Salva rascunho parcial do onboarding (auto-save a cada campo) */
+  async saveOnboardingDraft(uid, draft) {
+    if (!uid) return false;
+    return this._run(async () => {
+      const draftRef = doc(this.db, 'users', uid, 'onboardingDraft', 'current');
+      await setDoc(draftRef, { ...draft, updatedAt: serverTimestamp() }, { merge: true });
+      return true;
+    }, 'saveOnboardingDraft', false);
+  }
+
+  /** Recupera rascunho salvo do onboarding */
+  async getOnboardingDraft(uid) {
+    if (!uid) return null;
+    return this._run(async () => {
+      const draftRef = doc(this.db, 'users', uid, 'onboardingDraft', 'current');
+      const snap = await getDoc(draftRef);
+      return snap.exists() ? snap.data() : null;
+    }, 'getOnboardingDraft');
+  }
+
+  /** Remove rascunho após submit bem-sucedido */
+  async deleteOnboardingDraft(uid) {
+    if (!uid) return false;
+    return this._run(async () => {
+      const draftRef = doc(this.db, 'users', uid, 'onboardingDraft', 'current');
+      await deleteDoc(draftRef);
+      return true;
+    }, 'deleteOnboardingDraft', false);
+  }
+
   async saveOnboardingInterview(uid, data) {
     return this._run(async () => {
       const ref = this.subDoc(uid, 'onboardingInterview', 'data');
@@ -320,12 +505,20 @@ export class FirestoreService {
       const snap = await getDoc(this.subDoc(uid, 'menuForm', 'data'));
       const value = snap.exists() ? snap.data() : null;
       this._cacheSet(cacheKey, value);
+      if (value) this._localSet(uid, 'menuForm', 'data', value);
       return value;
-    }, 'getMenuForm');
+    }, 'getMenuForm', async () => {
+      // Fallback offline
+      const local = this._localGet(uid, 'menuForm', 'data');
+      if (local) { this._cacheSet(cacheKey, local); return local; }
+      return null;
+    });
   }
 
   async saveMenuForm(uid, formData, completed = false) {
     this._cacheDelete(`menuForm_${uid}`);
+    // Salva no localStorage como fallback offline
+    this._localSet(uid, 'menuForm', 'data', { ...formData, completed });
     return this._run(async () => {
       const ref = this.subDoc(uid, 'menuForm', 'data');
       const existing = await getDoc(ref);
@@ -335,10 +528,59 @@ export class FirestoreService {
 
       if (completed) {
         await this.updateUserStatus(uid, 'active');
-        await this.awardXp(uid, XP_EVENTS.MENU_FORM_COMPLETED, 'menu_form_done');
+        await this.awardXp(uid, getXpEvents().MENU_FORM_COMPLETED, 'MENU_FORM_COMPLETED', { idempotencyKey: 'menu_form_done' });
       }
       return true;
     }, 'saveMenuForm', false);
+  }
+
+  // ─────────────────────────────────────────────
+  // FORMULÁRIO MULTI-ETAPAS (FormsScreen)
+  // ─────────────────────────────────────────────
+
+  async getFormProgress(uid) {
+    const cacheKey = `formProgress_${uid}`;
+    const cached = this._cacheGet(cacheKey);
+    if (cached !== undefined) return cached;
+    return this._run(async () => {
+      const snap = await getDoc(this.subDoc(uid, 'formProgress', 'data'));
+      const value = snap.exists() ? snap.data() : null;
+      this._cacheSet(cacheKey, value);
+      return value;
+    }, 'getFormProgress');
+  }
+
+  async saveFormProgress(uid, data) {
+    if (!uid) return false;
+    this._cacheDelete(`formProgress_${uid}`);
+    return this._run(async () => {
+      const ref = this.subDoc(uid, 'formProgress', 'data');
+      const existing = await getDoc(ref);
+      const toSave = {
+        ...data,
+        updatedAt: serverTimestamp(),
+      };
+      if (!existing.exists()) toSave.createdAt = serverTimestamp();
+      await setDoc(ref, toSave, { merge: true });
+      return true;
+    }, 'saveFormProgress', false);
+  }
+
+  async submitFormsComplete(uid, formData) {
+    if (!uid) return false;
+    this._cacheDelete(`formProgress_${uid}`);
+    return this._run(async () => {
+      const ref = this.subDoc(uid, 'formProgress', 'data');
+      await setDoc(ref, {
+        ...formData,
+        completed: true,
+        completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      await this.updateUserStatus(uid, 'active');
+      await this.awardXp(uid, getXpEvents().MENU_FORM_COMPLETED, 'MENU_FORM_COMPLETED', { idempotencyKey: 'forms_completed' });
+      return true;
+    }, 'submitFormsComplete');
   }
 
   // ─────────────────────────────────────────────
@@ -359,7 +601,7 @@ export class FirestoreService {
 
       // Atualiza status do usuário para "processando"
       await this.updateUserStatus(uid, 'processing_blood_test');
-      await this.awardXp(uid, XP_EVENTS.BLOOD_TEST_UPLOADED, 'blood_test_uploaded');
+      await this.awardXp(uid, getXpEvents().BLOOD_TEST_UPLOADED, 'BLOOD_TEST_UPLOADED', { idempotencyKey: 'blood_test_uploaded' });
 
       return ref.id;
     }, 'saveBloodTest');
@@ -437,9 +679,9 @@ export class FirestoreService {
         await this.incrementCounter(uid, 'totalChatMessages');
         const profile = await this.getUserProfile(uid);
         const total = (profile?.totalChatMessages ?? 0) + 1;
-        if (total === 10)  await this.awardXp(uid, XP_EVENTS.CHAT_MESSAGE_SENT * 10, 'chat_10');
-        if (total === 50)  await this.awardXp(uid, XP_EVENTS.CHAT_MESSAGE_SENT * 20, 'chat_50');
-        else               await this.awardXp(uid, XP_EVENTS.CHAT_MESSAGE_SENT);
+        if (total === 10)  await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT * 10, 'CHAT_MESSAGE_SENT', { idempotencyKey: 'chat_10' });
+        if (total === 50)  await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT * 20, 'CHAT_MESSAGE_SENT', { idempotencyKey: 'chat_50' });
+        else               await this.awardXp(uid, getXpEvents().CHAT_MESSAGE_SENT, 'CHAT_MESSAGE_SENT');
       }
 
       return ref.id;
@@ -648,7 +890,7 @@ export class FirestoreService {
         createdAt: serverTimestamp(),
       });
       await this.incrementCounter(uid, 'totalRecipes');
-      await this.awardXp(uid, XP_EVENTS.RECIPE_GENERATED, 'recipe_generated');
+      await this.awardXp(uid, getXpEvents().RECIPE_SAVED, 'RECIPE_SAVED', { idempotencyKey: 'recipe_generated' });
       return ref.id;
     }, 'saveRecipe');
   }
@@ -663,7 +905,7 @@ export class FirestoreService {
         ...evaluationData,
         createdAt: serverTimestamp(),
       });
-      await this.awardXp(uid, XP_EVENTS.FOOD_EVALUATED, 'food_evaluated');
+      await this.awardXp(uid, getXpEvents().FOOD_EVALUATED, 'FOOD_EVALUATED', { idempotencyKey: 'food_evaluated' });
       return ref.id;
     }, 'saveFoodEvaluation');
   }
@@ -773,43 +1015,31 @@ export class FirestoreService {
     }
   }
 
-  async awardXp(uid, xpAmount, eventId = null) {
+  async awardXp(uid, xpAmount, event, options = {}) {
     try {
-      // Deduplicação: evitar XP duplicado por mesmo eventId em menos de 60s
-      if (eventId && eventId !== 'daily_login') {
-        const recentQuery = query(
-          collection(this.getDb(), 'users', uid, 'xpLog'),
-          where('eventId', '==', eventId),
-          where('timestamp', '>', new Date(Date.now() - 60000)),
-          limit(1)
-        );
-        const recentSnap = await getDocs(recentQuery);
-        if (!recentSnap.empty) return 0;
-      }
+      const fn = httpsCallable(getFunctions(), 'awardXp');
+      const payload = {
+        event: event || 'DAILY_LOGIN',
+        amount: xpAmount,
+      };
+      if (options.idempotencyKey) payload.idempotencyKey = options.idempotencyKey;
+      if (options.reason) payload.reason = options.reason;
+      if (options.meta) payload.meta = options.meta;
 
-      const { increment } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js');
-      const profile = await this.getUserProfile(uid);
-      const newXp = (profile?.xp || 0) + xpAmount;
-      const newLevel = getLevelForXp(newXp);
-
-      const updates = { xp: newXp };
-      if (newLevel.level !== (profile?.level || 1)) {
-        updates.level = newLevel.level;
-      }
-
-      await updateDoc(this.userRef(uid), updates);
-
-      // Log do evento
-      if (eventId) {
-        await addDoc(collection(this.getDb(), 'users', uid, 'xpLog'), {
-          eventId,
-          xpAwarded: xpAmount,
-          totalXp: newXp,
-          timestamp: serverTimestamp(),
-        });
-      }
+      const result = await fn(payload);
+      return result.data;
     } catch (e) {
-      console.error('[Firestore] awardXp:', e);
+      const code = e?.code || '';
+      if (code === 'functions/permission-denied') {
+        console.error('[Firestore] awardXp: permissão negada pela Function');
+        this._showToast?.('Não foi possível registrar XP: acesso negado.', 'error');
+      } else if (code === 'functions/invalid-argument') {
+        console.error('[Firestore] awardXp: argumento inválido', e.message);
+        this._showToast?.('Não foi possível registrar XP: evento inválido.', 'error');
+      } else {
+        console.error('[Firestore] awardXp:', e);
+      }
+      return null;
     }
   }
 
@@ -846,7 +1076,7 @@ export class FirestoreService {
         return false;
       }
 
-      await this.awardXp(uid, XP_EVENTS.DAILY_LOGIN, 'daily_login');
+      await this.awardXp(uid, getXpEvents().DAILY_LOGIN, 'DAILY_LOGIN', { idempotencyKey: 'daily_login' });
       await this._updateStreak(uid, profile);
       await updateDoc(this.userRef(uid), {
         lastLoginAt: serverTimestamp(),
@@ -905,7 +1135,8 @@ export class FirestoreService {
       const existing = await getDoc(ref);
       if (existing.exists()) return false; // idempotente
 
-      const achievement = ACHIEVEMENTS_CATALOG.find(item => item.id === achievementId);
+      const catalog = getAchievementsCatalog();
+      const achievement = catalog.find(item => item.id === achievementId);
       if (!achievement) {
         console.warn('[Firestore] unlockAchievement: id not found in catalog', achievementId);
         return false;
@@ -952,7 +1183,8 @@ export class FirestoreService {
       const data = snap.data();
       if (data.claimed) return false;
 
-      const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === achievementId);
+      const catalog = getAchievementsCatalog();
+      const achievement = catalog.find(a => a.id === achievementId);
       if (!achievement) return false;
 
       await updateDoc(ref, {
@@ -963,7 +1195,7 @@ export class FirestoreService {
 
       // Award XP only on claim
       if (achievement.xp > 0) {
-        await this.awardXp(uid, achievement.xp, `claim_${achievementId}`);
+        await this.awardXp(uid, achievement.xp, 'ACHIEVEMENT_CLAIMED', { idempotencyKey: `claim_${achievementId}`, meta: { achievementId } });
       }
 
       return true;
@@ -972,19 +1204,45 @@ export class FirestoreService {
 
   async getTopRanking(limitCount = 10) {
     return this._run(async () => {
-      const q = query(collection(this.getDb(), 'users'), orderBy('xp', 'desc'), limit(limitCount));
+      // Lê de globalRanking (firestore rules: signed-in pode ler), não de users
+      const q = query(collection(this.getDb(), 'globalRanking'), orderBy('xp', 'desc'), limit(limitCount));
       const snap = await getDocs(q);
-      return snap.docs.map((docSnap, index) => {
+
+      if (snap.empty) return [];
+
+      // Dados base do globalRanking
+      const rawList = snap.docs.map(docSnap => {
         const data = docSnap.data() || {};
         return {
-          position: index + 1,
           uid: docSnap.id,
-          name: data.name || 'Usuário',
           xp: Number(data.xp || 0),
           level: Number(data.level || 1),
           streak: Number(data.streak || 0),
-          avatar: data.avatar || '🌸',
-          avatarColor: data.avatarColor || '#f0059a',
+          name: data.name || null,
+          avatar: data.avatar || null,
+          avatarColor: data.avatarColor || null,
+        };
+      });
+
+      // Batch-fetch user docs para campos que globalRanking pode não ter
+      // (remove após cloud function escrever name/avatar/etc)
+      const userDocs = await Promise.all(
+        rawList.map(item =>
+          item.uid ? getDoc(doc(this.getDb(), 'users', item.uid)).catch(() => null) : null
+        )
+      );
+
+      return rawList.map((item, index) => {
+        const ud = userDocs[index]?.data?.() || {};
+        return {
+          position: index + 1,
+          uid: item.uid,
+          name: item.name || ud.name || 'Usuário',
+          xp: item.xp,
+          level: item.level,
+          streak: item.streak || Number(ud.streak || 0),
+          avatar: item.avatar || ud.avatar || '🌸',
+          avatarColor: item.avatarColor || ud.avatarColor || '#f0059a',
         };
       });
     }, 'getTopRanking', []);
@@ -1035,6 +1293,102 @@ export class FirestoreService {
       console.error('[Firestore] onXpLogChange:', e);
       return () => {};
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // APP CONFIG (dados de referência)
+  // ─────────────────────────────────────────────
+
+  /**
+   * Busca configuração do app no Firestore.
+   * Ex: getAppConfig('levels') → retorna array de níveis.
+   * Ex: getAppConfig('achievementsCatalog') → retorna array de conquistas.
+   * Cache em memória (só busca uma vez por sessão).
+   * @param {string} docId — 'levels', 'achievementsCatalog', 'navItems', 'recipes', 'ranking', 'dicas', 'refeicoes'
+   * @returns {Promise<Array|null>}
+   */
+  async getAppConfig(docId) {
+    const cacheKey = `appConfig_${docId}`;
+    const cached = this._cacheGet(cacheKey);
+    if (cached !== undefined) return cached;
+
+    return this._run(async () => {
+      const snap = await getDoc(doc(this.getDb(), 'appConfig', docId));
+      if (!snap.exists()) {
+        console.warn(`[Firestore] appConfig/${docId} não encontrado`);
+        return null;
+      }
+      const value = snap.data().data || null;
+      this._cacheSet(cacheKey, value);
+      return value;
+    }, `getAppConfig(${docId})`);
+  }
+
+  /**
+   * Pré-carrega todos os appConfigs e coloca no State.
+   * Chamado uma vez após login.
+   */
+  async preloadAppConfig() {
+    const configs = ['levels', 'achievementsCatalog', 'xpEvents', 'navItems', 'recipes', 'ranking', 'dicas', 'refeicoes'];
+    const results = {};
+    await Promise.all(configs.map(async (docId) => {
+      const data = await this.getAppConfig(docId);
+      if (data) results[docId] = data;
+    }));
+    return results;
+  }
+
+  // ─────────────────────────────────────────────
+  // LISTENERS EM TEMPO REAL (onSnapshot)
+  // ─────────────────────────────────────────────
+
+  /**
+   * Escuta mudanças no chat history do usuário.
+   * @returns {function} unsubscribe
+   */
+  onChatHistoryUpdate(uid, callback) {
+    const q = query(
+      collection(this.getDb(), 'users', uid, 'chatHistory'),
+      orderBy('timestamp', 'asc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(messages);
+    });
+  }
+
+  onChatHistoryChange(uid, callback) {
+    return this.onChatHistoryUpdate(uid, callback);
+  }
+
+  /**
+   * Escuta mudanças nas conquistas/achievements do usuário.
+   * @returns {function} unsubscribe
+   */
+  onAchievementsChange(uid, callback) {
+    const q = query(
+      collection(this.getDb(), 'users', uid, 'achievements'),
+      orderBy('unlockedAt', 'desc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const achievements = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(achievements);
+    });
+  }
+
+  /**
+   * Escuta mudanças nas receitas do usuário.
+   * @returns {function} unsubscribe
+   */
+  onRecipesChange(uid, callback) {
+    const q = query(
+      collection(this.getDb(), 'users', uid, 'recipes'),
+      orderBy('createdAt', 'desc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const recipes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(recipes);
+    });
   }
 }
 

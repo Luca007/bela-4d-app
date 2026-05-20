@@ -1,208 +1,22 @@
-// Dashboard Screen - JSX-inspired refactor
+// Dashboard Screen - JSX-inspired refactor (modularizado)
 import { DOM, State, Session } from '../utils/helpers.js';
-import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
-import { ACHIEVEMENTS_CATALOG, LEVELS } from '../config/constants.js';
+import { getLevels, getAchievementsCatalog, getNavItems } from '../config/constants.js';
 import { offlineQueue } from '../modules/offline-queue.js';
-
-const NAV_ITEMS = [
-  { id: 'inicio', label: 'Início', icon: '🏠', sub: 'Chat · Receita · Cardápio' },
-  { id: 'evolucao', label: 'Evolução', icon: '📊', sub: 'Gráficos · Progresso' },
-  { id: 'receitas', label: 'Receitas', icon: '🥗', sub: 'Cardápio personalizado' },
-  { id: 'exames', label: 'Exames', icon: '🔬', sub: 'Pedidos · Resultados' },
-  { id: 'conquistas', label: 'Conquistas', icon: '🏆', sub: 'Ranking · Comunidade' },
-  { id: 'chat', label: 'Chat IA', icon: '💬', sub: 'Dúvidas alimentares' },
-  { id: 'perfil', label: 'Meu Perfil', icon: '👤', sub: 'Avatar · Configurações' },
-];
-
-const REFEICOES_DIA = [
-  { id: 'r1', icon: '☀️', nome: 'Café da manhã', hora: '07:00', desc: 'Omelete de espinafre + café sem açúcar' },
-  { id: 'r2', icon: '🍎', nome: 'Lanche da manhã', hora: '10:00', desc: '10 amêndoas + queijo minas' },
-  { id: 'r3', icon: '🍽️', nome: 'Almoço', hora: '12:30', desc: 'Frango grelhado + brócolis + salada' },
-  { id: 'r4', icon: '🌤️', nome: 'Lanche da tarde', hora: '15:30', desc: 'Iogurte natural + morangos' },
-  { id: 'r5', icon: '🌙', nome: 'Jantar', hora: '19:00', desc: 'Filé de peixe + abobrinha + tomate' },
-  { id: 'r6', icon: '🌛', nome: 'Ceia', hora: '21:30', desc: 'Chá de camomila + castanhas' },
-];
-
-const DICAS = [
-  { e: '🧠', ti: 'Mastigue devagar', tx: 'Mastigar lentamente reduz picos glicêmicos e melhora a saciedade.' },
-  { e: '💧', ti: 'Beba água antes de comer', tx: 'Um copo de água 15 min antes das refeições ajuda a controlar o apetite.' },
-  { e: '🌿', ti: 'Comece pelos vegetais', tx: 'Iniciar pelo prato verde reduz a absorção rápida de açúcar.' },
-  { e: '⏰', ti: 'Respeite os horários', tx: 'Comer nos mesmos horários todos os dias estabiliza a rotina metabólica.' },
-];
-
-const RECIPES = [
-  { id: 'r1', e: '🥚', nm: 'Omelete de Legumes', tm: '15 min', kc: 280, ct: 'Café da manhã', df: 'Fácil', ig: ['3 ovos', 'Abobrinha', 'Tomate', 'Sal e ervas'], st: ['Bata os ovos com sal.', 'Refogue legumes no azeite.', 'Despeje e tampe 3 min.', 'Sirva com folhas verdes.'] },
-  { id: 'r2', e: '🐟', nm: 'Salmão com Aspargos', tm: '20 min', kc: 380, ct: 'Almoço', df: 'Médio', ig: ['200g salmão', 'Aspargos', 'Azeite', 'Limão'], st: ['Tempere o salmão.', 'Grelhe 4 min/lado.', 'Refogue aspargos.', 'Sirva com limão.'] },
-  { id: 'r3', e: '🥗', nm: 'Bowl Low-Carb Frango', tm: '25 min', kc: 320, ct: 'Almoço', df: 'Fácil', ig: ['150g frango', 'Rúcula', 'Abacate', 'Azeite'], st: ['Grelhe o frango.', 'Monte bowl com rúcula.', 'Adicione abacate.', 'Regue com azeite.'] },
-  { id: 'r4', e: '🍳', nm: 'Frittata de Espinafre', tm: '20 min', kc: 260, ct: 'Jantar', df: 'Fácil', ig: ['4 ovos', 'Espinafre', 'Queijo minas', 'Alho'], st: ['Refogue espinafre.', 'Bata ovos com queijo.', 'Combine na frigideira.', 'Forno 10 min 180°C.'] },
-  { id: 'r5', e: '🥑', nm: 'Mousse de Abacate', tm: '10 min', kc: 200, ct: 'Lanche', df: 'Fácil', ig: ['1 abacate', 'Cacau em pó', 'Stevia'], st: ['Amasse o abacate.', 'Adicione cacau e stevia.', 'Misture bem.', 'Sirva gelado.'] },
-  { id: 'r6', e: '🍲', nm: 'Caldo de Frango', tm: '40 min', kc: 180, ct: 'Ceia', df: 'Médio', ig: ['Frango', 'Chuchu', 'Cenoura', 'Ervas'], st: ['Cozinhe frango 30 min.', 'Adicione legumes.', 'Tempere.', 'Coe e sirva.'] },
-];
-
-const BADGES = [
-  { id: 'b1', e: '🌟', nm: 'Primeiro Passo', ds: 'Completou o cadastro inicial', xp: 50, ct: 'Sistema', ok: true },
-  { id: 'b2', e: '📅', nm: '7 Dias no Ritmo', ds: 'Seguiu o cardápio por 7 dias', xp: 150, ct: 'Alimentação', ok: true },
-  { id: 'b3', e: '📉', nm: 'Glicemia em Queda', ds: 'Reduziu a glicemia em 20%', xp: 200, ct: 'Saúde', ok: true },
-  { id: 'b4', e: '💬', nm: 'Curiosa', ds: 'Fez 10 perguntas ao Chat IA', xp: 80, ct: 'Sistema', ok: true },
-  { id: 'b5', e: '🔥', nm: '30 Dias Ativa', ds: 'Usou o sistema por 30 dias', xp: 300, ct: 'Sistema', ok: false },
-  { id: 'b6', e: '🏆', nm: 'Top 10', ds: 'Entrou no top 10 do ranking', xp: 250, ct: 'Ranking', ok: false },
-  { id: 'b7', e: '💪', nm: 'Semana Vencida', ds: 'Completou a primeira semana', xp: 100, ct: 'Alimentação', ok: true },
-  { id: 'b8', e: '📊', nm: 'Monitor Assídua', ds: 'Registrou glicemia por 30 dias', xp: 280, ct: 'Saúde', ok: false },
-  { id: 'b9', e: '🌙', nm: 'Sono de Qualidade', ds: 'Registrou sono 5+ por 7 noites', xp: 130, ct: 'Saúde', ok: true },
-  { id: 'b10', e: '🤝', nm: 'Comunidade', ds: 'Reagiu a 10 conquistas', xp: 90, ct: 'Social', ok: true },
-  { id: 'b11', e: '⚡', nm: 'Velocista', ds: 'Iniciou rapidamente no sistema', xp: 60, ct: 'Sistema', ok: true },
-  { id: 'b12', e: '🎯', nm: 'Meta Batida', ds: 'Atingiu primeira meta de peso', xp: 220, ct: 'Saúde', ok: false },
-  { id: 'b13', e: '🥕', nm: 'Colorida', ds: 'Completou 5 pratos com vegetais', xp: 90, ct: 'Alimentação', ok: false },
-  { id: 'b14', e: '🧊', nm: 'Hidratação em Dia', ds: 'Registrou água por 14 dias', xp: 110, ct: 'Saúde', ok: false },
-  { id: 'b15', e: '🚶', nm: 'Passos Firmes', ds: 'Manteve rotina ativa por 10 dias', xp: 130, ct: 'Saúde', ok: false },
-  { id: 'b16', e: '🍽️', nm: 'Prato Completo', ds: 'Seguiu o plano completo por 3 dias', xp: 120, ct: 'Alimentação', ok: false },
-  { id: 'b17', e: '💤', nm: 'Ritmo do Sono', ds: 'Dormiu 7h+ por 7 noites', xp: 140, ct: 'Saúde', ok: false },
-  { id: 'b18', e: '💬', nm: 'Parceira da IA', ds: 'Interagiu 50 vezes com o chat', xp: 180, ct: 'Sistema', ok: false },
-  { id: 'b19', e: '🎉', nm: 'Comunidade Ativa', ds: 'Recebeu 25 curtidas em conquistas', xp: 170, ct: 'Social', ok: false },
-  { id: 'b20', e: '🚀', nm: 'Virada 4D', ds: 'Ultrapassou 5000 XP', xp: 300, ct: 'Ranking', ok: false },
-];
-
-const RANKING = [
-  { p: 1, nm: 'Ana Beatriz', nk: '@anabea', e: '👑', col: '#eab308', xp: 1420, st: 45 },
-  { p: 2, nm: 'Carla Mendes', nk: '@carlinha', e: '🔥', col: '#f0059a', xp: 1180, st: 38 },
-  { p: 3, nm: 'Priscila S.', nk: '@prisilva', e: '💎', col: '#a78bfa', xp: 980, st: 31 },
-  { p: 4, nm: 'Fernanda L.', nk: '@ferlima', e: '🌺', col: '#1fcc74', xp: 820, st: 28 },
-  { p: 5, nm: 'Juliana C.', nk: '@juju', e: '⭐', col: '#38bdf8', xp: 710, st: 22 },
-  { p: 6, nm: 'Mariana A.', nk: '@mari', e: '🌸', col: '#fb7185', xp: 640, st: 19 },
-  { p: 7, nm: 'Tatiane R.', nk: '@tati', e: '🦋', col: '#34d399', xp: 580, st: 17 },
-  { p: 8, nm: 'Você', nk: '@voce', e: '🌙', col: '#f0059a', xp: 520, st: 14, me: true },
-  { p: 9, nm: 'Roberta D.', nk: '@robi', e: '🍀', col: '#fbbf24', xp: 480, st: 12 },
-  { p: 10, nm: 'Simone N.', nk: '@sisi', e: '🌿', col: '#6ee7b7', xp: 410, st: 10 },
-];
-
-const EXAM_RESULTS = {
-  glicemia: [{ m: 'Nov', v: 165 }, { m: 'Dez', v: 148 }, { m: 'Jan', v: 132 }, { m: 'Fev', v: 121 }, { m: 'Mar', v: 109 }, { m: 'Abr', v: 98 }],
-  hba1c: [{ m: 'Nov', v: 8.1 }, { m: 'Jan', v: 7.4 }, { m: 'Mar', v: 6.8 }, { m: 'Abr', v: 6.1 }],
-  peso: [{ m: 'Nov', v: 84.0 }, { m: 'Dez', v: 83.2 }, { m: 'Jan', v: 82.1 }, { m: 'Fev', v: 81.4 }, { m: 'Mar', v: 80.1 }, { m: 'Abr', v: 79.6 }],
-};
-
-const EXAM_ORDERS = [
-  { id: 'eo1', dt: '28/04/2026', st: 'Pendente', ex: ['Glicemia em jejum', 'HbA1c', 'Insulina em jejum', 'Peptídeo C'], ins: 'Jejum mínimo 12h. Coletar pela manhã.', fileReady: false, fileUrl: '' },
-  { id: 'eo2', dt: '15/03/2026', st: 'Realizado', ex: ['Perfil lipídico', 'TSH', 'T4 livre', 'Ferritina', 'Vitamina D'], ins: 'Jejum de 12 horas.', fileReady: true, fileUrl: '' },
-  { id: 'eo3', dt: '10/01/2026', st: 'Realizado', ex: ['Glicemia', 'HbA1c', 'Urina tipo 1', 'Creatinina'], ins: 'Coleta em laboratório credenciado.', fileReady: false, fileUrl: '' },
-];
-
-const CHAT_RESP = [
-  'Com frango, abobrinha e ovos você pode fazer uma fritata proteica! Refogue a abobrinha, cubra com os ovos batidos e tampe. Pronto em 15 min e mantém a glicemia estável 🍳',
-  'Sua glicemia está em queda consistente - parabéns! Continue focada no cardápio 📊✨',
-  'Esse alimento está liberado para você! Quer sugestão de preparo? 🥗',
-  'Para o seu lanche: 10 amêndoas + queijo minas + água com limão 💪',
-  'Sua HbA1c caiu de 8,1% para 6,1% - resultado extraordinário! Continue assim 💕',
-  'Ótima pergunta! Para controle glicêmico, sempre combine proteína com fibras. Isso retarda a absorção do açúcar e reduz os picos 🌿',
-];
-
-const PROFILE_AVATARS = ['🌸', '⚡', '🦋', '🌺', '💎', '🔥', '🌙', '⭐', '🌿', '🦁', '🌊', '🍀'];
-const PROFILE_COLORS = ['#f0059a', '#a78bfa', '#1fcc74', '#f59e0b', '#38bdf8', '#fb7185', '#34d399', '#fbbf24'];
-const XP_LEVELS = [
-  { level: 1, title: 'Iniciante', minXp: 0, color: '#8a8aa0' },
-  { level: 2, title: 'Aprendiz', minXp: 500, color: '#10b981' },
-  { level: 3, title: 'Comprometida', minXp: 1200, color: '#38bdf8' },
-  { level: 4, title: 'Disciplinada', minXp: 2200, color: '#a78bfa' },
-  { level: 5, title: 'Consistente', minXp: 3400, color: '#f59e0b' },
-  { level: 6, title: 'Referência', minXp: 4800, color: '#f43f5e' },
-  { level: 7, title: 'Elite 4D', minXp: 6500, color: '#14b8a6' },
-  { level: 8, title: 'Mestre 4D', minXp: 8500, color: '#eab308' },
-];
-
-function normalizeAvatarEmoji(value, fallback = '🌙') {
-  if (typeof value !== 'string') return fallback;
-  const trimmed = value.trim();
-  const isInvalidEmoji = !trimmed || trimmed === '??' || trimmed.includes('?');
-  if (isInvalidEmoji) return fallback;
-  return trimmed;
-}
-
-function normalizeAchievement(item) {
-  if (!item) return null;
-  const unlocked = item.ok ?? Boolean(item.unlockedAt || item.completedAt || item.unlocked);
-  return {
-    id: item.id || item.slug || item.title || item.nm,
-    e: item.e || item.icon || '🏅',
-    nm: item.nm || item.title || 'Conquista',
-    ds: item.ds || item.description || '',
-    xp: Number(item.xp ?? item.xpReward ?? 0),
-    ct: item.ct || item.category || 'Sistema',
-    ok: unlocked,
-    unlockedAt: item.unlockedAt || item.completedAt || null,
-  };
-}
-
-function escapeHTML(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function parseRecipeEditMarker(content = '') {
-  const text = String(content || '');
-  const match = text.match(/^\[\[RECIPE_EDIT:([^\]]+)\]\]\s*/);
-  if (!match) return { text, recipeId: null };
-  return {
-    text: text.replace(match[0], ''),
-    recipeId: match[1],
-  };
-}
-
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Bom dia';
-  if (h < 18) return 'Boa tarde';
-  return 'Boa noite';
-}
-
-function getRecipeOfHour(recipes) {
-  const pool = Array.isArray(recipes) && recipes.length ? recipes : RECIPES;
-  const h = new Date().getHours();
-  const idx = h < 10 ? 0 : h < 12 ? Math.min(4, pool.length - 1) : h < 15 ? Math.min(2, pool.length - 1) : h < 18 ? Math.min(4, pool.length - 1) : h < 21 ? Math.min(3, pool.length - 1) : Math.min(5, pool.length - 1);
-  return pool[idx] || pool[0] || RECIPES[0];
-}
-
-function renderSparkline(points, color, height = 110, labelColor = 'var(--dash-muted)') {
-  if (!points || points.length < 2) return '';
-  const width = 300;
-  const viewHeight = height + 18;
-  const values = points.map(point => point.v);
-  const min = Math.min(...values) - 4;
-  const max = Math.max(...values) + 4;
-  const px = index => (index / (points.length - 1)) * (width - 24) + 12;
-  const py = value => height - ((value - min) / (max - min)) * (height - 16) - 4;
-  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${px(index)} ${py(point.v)}`).join(' ');
-  const gid = `spark-${color.replace('#', '')}-${height}`;
-
-  return `
-    <svg viewBox="0 0 ${width} ${viewHeight}" class="dash-sparkline" style="color:${labelColor};">
-      <defs>
-        <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${color}" stop-opacity="0.3"></stop>
-          <stop offset="100%" stop-color="${color}" stop-opacity="0.02"></stop>
-        </linearGradient>
-      </defs>
-      <path d="${path} L ${px(points.length - 1)} ${height} L ${px(0)} ${height} Z" fill="url(#${gid})"></path>
-      <path d="${path}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
-      ${points.map((point, index) => `<g><circle cx="${px(index)}" cy="${py(point.v)}" r="${index === points.length - 1 ? 5 : 3}" fill="${color}" opacity="${index === points.length - 1 ? 1 : 0.5}"></circle><text x="${px(index)}" y="${height + 12}" text-anchor="middle" fill="currentColor" font-size="10">${point.m}</text></g>`).join('')}
-    </svg>
-  `;
-}
-
-function _achCategory(id) {
-  const journey = ['first_step', 'organized', 'scientist', 'forms_finished', 'veteran', 'iron_will', 'gmp_master', 'gmp_legend'];
-  const engagement = ['conversationalist', 'chat_marathoner', 'explorer', 'food_explorer_pro', 'chef_formation', 'chef_confirmed', 'recipe_curator', 'consistent', 'iron_fire', 'streak_breaker', 'night_owl', 'early_bird', 'polymath'];
-  if (journey.includes(id)) return 'jornada';
-  if (engagement.includes(id)) return 'engajamento';
-  return 'social';
-}
+import { ConnectionIndicator } from '../modules/connection-indicator.js';
+import { dashSkeleton } from '../modules/loading-states.js';
+import { EXAM_RESULTS, EXAM_ORDERS } from '../config/data.js';
+import { getGreeting, getStaticRecipes, getStaticRefeicoes, getStaticDicas, getStaticRanking, normalizeAvatarEmoji } from './dashboard/helpers.js';
+import { render as renderInicio } from './dashboard/inicio.js';
+import { render as renderEvolucao } from './dashboard/evolucao.js';
+import { renderRecipes } from './dashboard/receitas.js';
+import { render as renderExames } from './dashboard/exames.js';
+import { render as renderConquistas } from './dashboard/conquistas.js';
+import { render as renderChat } from './dashboard/chat.js';
+import { render as renderPerfil } from './dashboard/perfil.js';
 
 export class DashboardScreen extends BaseScreen {
   constructor(params) {
@@ -210,10 +24,11 @@ export class DashboardScreen extends BaseScreen {
     this.currentNav = params.initialNav || 'inicio';
     this.currentUser = authService.getCurrentUser();
     this.userProfile = State.get('userProfile') || {};
-    this.recipes = State.get('recipes') || RECIPES;
-    this.achievements = State.get('achievements') || BADGES;
+    this.recipes = State.get('recipes') || getStaticRecipes();
+    this.achievements = State.get('achievements') || getAchievementsCatalog();
+    this.navItems = getNavItems();
     this.chatHistory = State.get('chatHistory') || [];
-    this.dailyMeals = State.get('dailyMeals') || this.userProfile.dailyMeals || REFEICOES_DIA;
+    this.dailyMeals = State.get('dailyMeals') || this.userProfile.dailyMeals || getStaticRefeicoes();
     this.mealDraft = { icon: '🍽️', nome: '', hora: '08:00', desc: '' };
     this.recipesView = 'catalogo';
     this.sideOpen = false;
@@ -239,17 +54,18 @@ export class DashboardScreen extends BaseScreen {
     this.notificationPanelOpen = false;
     this.recipeFilter = 'Todas';
     const initialRecipeId = params.recipeId || null;
-    this.selectedRecipe = initialRecipeId ? RECIPES.find(recipe => recipe.id === initialRecipeId) || null : null;
+    this.selectedRecipe = initialRecipeId ? getStaticRecipes().find(recipe => recipe.id === initialRecipeId) || null : null;
     this.recipeOriginNav = null;
     this.themeToggleLocked = false;
     this.examOrders = Array.isArray(this.userProfile?.examOrders) && this.userProfile.examOrders.length ? this.userProfile.examOrders : EXAM_ORDERS;
-    this.dicas = State.get('belaTips') || this.userProfile.belaTips || DICAS.map((dica, index) => ({ ...dica, id: `dica-${index + 1}`, likes: 0, dislikes: 0, myVote: null }));
-    this.ranking = State.get('ranking') || RANKING;
+    this.dicas = State.get('belaTips') || this.userProfile.belaTips || getStaticDicas().map((dica, index) => ({ ...dica, id: `dica-${index + 1}`, likes: 0, dislikes: 0, myVote: null }));
+    this.ranking = State.get('ranking') || getStaticRanking();
     this.examResults = State.get('examResults') || EXAM_RESULTS;
     this._dataLoaded = false;
     this._dataLoading = false;
     this.themeMode = this.loadThemeMode();
     this.isDark = this.resolveThemeIsDark(this.themeMode);
+    this._connIndicatorInjected = false;
 
     this.setupFirestoreListeners();
     State.subscribe(data => {
@@ -331,19 +147,19 @@ export class DashboardScreen extends BaseScreen {
     });
   }
 
-  async persistProfileFields(fields = {}) {
+  async persistProfileFields(fields = {}, { silent = false } = {}) {
     if (!this.currentUser?.uid) return;
     const nextProfile = { ...(this.userProfile || {}), ...fields };
     this.userProfile = nextProfile;
-    const loader = UIComponents.loaderOverlay({ message: 'Salvando alterações...', color: '#f0059a' });
-    document.body.appendChild(loader);
+    const loader = silent ? null : UIComponents.loaderOverlay({ message: 'Salvando alterações...', color: '#f0059a' });
+    if (loader) document.body.appendChild(loader);
     try {
       await firestoreService.saveUserProfile(this.currentUser.uid, nextProfile);
       State.set('userProfile', nextProfile);
     } catch (error) {
       console.error('[DashboardV2] persistProfileFields failed:', error);
     } finally {
-      loader.remove();
+      if (loader) loader.remove();
     }
   }
 
@@ -400,8 +216,33 @@ export class DashboardScreen extends BaseScreen {
 
   async mount() {
     super.mount();
+    // Injeta indicador de conexão persistente no header
+    this._injectConnectionIndicator();
     if (!this._dataLoaded) {
+      // Mostra skeleton enquanto carrega
+      this._showSkeletonForCurrentTab();
       await this._loadFirestoreData();
+    }
+  }
+
+  _injectConnectionIndicator() {
+    if (this._connIndicatorInjected) return;
+    const anchor = this.element?.querySelector('#conn-indicator-anchor');
+    if (anchor && !anchor.hasChildNodes()) {
+      const indicator = ConnectionIndicator.create();
+      anchor.appendChild(indicator);
+      this._connIndicatorInjected = true;
+    }
+  }
+
+  _showSkeletonForCurrentTab() {
+    const contentEl = this.element?.querySelector('.dash-content');
+    if (!contentEl) return;
+    // Só mostra skeleton se o conteúdo atual for placeholder de loading
+    const loadingEl = contentEl.querySelector('[data-loading]');
+    if (loadingEl) {
+      const skel = dashSkeleton(this.currentNav);
+      loadingEl.replaceWith(skel);
     }
   }
 
@@ -501,6 +342,8 @@ export class DashboardScreen extends BaseScreen {
     this.recipeUnsubscribe?.();
     this.achievementsUnsubscribe?.();
     this.chatUnsubscribe?.();
+    ConnectionIndicator.destroy();
+    this._connIndicatorInjected = false;
     if (this._outsideClickHandler) { document.removeEventListener('mousedown', this._outsideClickHandler); this._outsideClickHandler = null; }
     if (this._escHandler) { document.removeEventListener('keydown', this._escHandler); this._escHandler = null; }
     super.destroy();
@@ -644,16 +487,16 @@ export class DashboardScreen extends BaseScreen {
   }
 
   _getLevelForXp(xp) {
-    for (let i = LEVELS.length - 1; i >= 0; i--) {
-      if (xp >= LEVELS[i].minXp) return LEVELS[i].level;
+    for (let i = getLevels().length - 1; i >= 0; i--) {
+      if (xp >= getLevels()[i].minXp) return getLevels()[i].level;
     }
     return 1;
   }
 
   _showXpPopup({ xpBefore, xpAfter, xpGained, levelBefore, levelAfter }) {
     const leveledUp = levelAfter > levelBefore;
-    const levelData = LEVELS.find(l => l.level === levelAfter) || LEVELS[0];
-    const nextLevel = LEVELS.find(l => l.level === levelAfter + 1);
+    const levelData = getLevels().find(l => l.level === levelAfter) || getLevels()[0];
+    const nextLevel = getLevels().find(l => l.level === levelAfter + 1);
     const rangeMin = levelData.minXp;
     const rangeMax = nextLevel ? nextLevel.minXp : levelData.minXp + 500;
     const pctBefore = Math.min(100, Math.max(0, Math.round(((xpBefore - rangeMin) / (rangeMax - rangeMin)) * 100)));
@@ -708,7 +551,7 @@ export class DashboardScreen extends BaseScreen {
   openRecipeEditChat(recipe) {
     this.params?.onNavigate?.('chat', {
       recipeId: recipe.id,
-      recipeName: recipe.nm || recipe.name,
+      recipeName: recipe.name || recipe.nm,
       recipeEmoji: recipe.e || recipe.emoji || '🍽️',
     });
   }
@@ -721,7 +564,7 @@ export class DashboardScreen extends BaseScreen {
       notificationService.toast('Faça login para remover receitas.', { type: 'warning' });
       return;
     }
-    const confirmed = window.confirm(`Remover a receita "${recipe.nm}" do seu cardápio?`);
+    const confirmed = window.confirm(`Remover a receita "${recipe.name || recipe.nm}" do seu cardápio?`);
     if (!confirmed) return;
     const loader = UIComponents.loaderOverlay({ message: 'Removendo receita...', color: '#f0059a' });
     document.body.appendChild(loader);
@@ -756,7 +599,7 @@ export class DashboardScreen extends BaseScreen {
 
     if (!uid) {
       window.setTimeout(() => {
-        this.chatHistory = [...this.chatHistory, { role: 'ai', content: CHAT_RESP[this.chatHistory.length % CHAT_RESP.length] }];
+        this.chatHistory = [...this.chatHistory, { role: 'system', content: 'Faça login para conversar com a Guardiã 💬' }];
         this.mountPreservingScroll();
       }, 900);
       return;
@@ -874,7 +717,7 @@ export class DashboardScreen extends BaseScreen {
         .dash-recipe-card:hover { transform: translateY(-2px); border-color: #f0059a; }
         .dash-lock-panel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,0.02); }
         .dash-lock-card { max-width: 340px; width: 100%; text-align: center; padding: 32px 28px; background: rgba(10,10,15,0.88); border: 1px solid rgba(240,5,154,0.2); border-radius: 24px; box-shadow: 0 8px 60px rgba(0,0,0,0.7); }
-        .dash-notification-panel { position: absolute; top: 48px; right: 8px; width: min(380px, calc(100vw - 28px)); z-index: 30; opacity: 0; transform: translateY(-8px) scale(0.97); pointer-events: none; transition: opacity 180ms ease, transform 180ms ease; }
+        .dash-notification-panel { position: fixed; top: 64px; right: 16px; width: min(380px, 92vw); max-width: 400px; z-index: 1001; opacity: 0; transform: translateY(-8px) scale(0.97); pointer-events: none; transition: opacity 200ms ease, transform 200ms ease; max-height: calc(100vh - 80px); overflow-y: auto; box-shadow: 0 18px 40px rgba(0,0,0,0.28); border-radius: 12px; }
         .dash-notification-panel.is-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
         .dash-notification-card { background: ${this.isDark ? 'rgba(15,15,20,0.98)' : 'rgba(255,255,255,0.97)'}; border: 1px solid var(--dash-border); border-radius: 18px; box-shadow: 0 18px 40px rgba(0,0,0,0.28); overflow: hidden; backdrop-filter: blur(18px); }
         .dash-notification-item { display:flex; gap:10px; padding:14px 16px; border-bottom:1px solid var(--dash-border); position: relative; cursor: pointer; transition: background 0.15s; }
@@ -923,11 +766,13 @@ export class DashboardScreen extends BaseScreen {
     return `
       <div class="dash-header">
         <button class="dash-btn-icon" data-open-drawer title="Abrir menu">☰</button>
+        <button class="dash-btn-icon" data-toggle-theme title="Alternar tema" style="font-size:18px;">${this.isDark ? '☀️' : '🌙'}</button>
         <div class="dash-title">
           <div class="top">Guia Metabólico</div>
           <div class="bottom">Personalizado</div>
         </div>
         <div class="dash-streak" style="cursor:pointer;" title="Ver conquistas"><span>🔥</span><span>${this.streak}</span></div>
+        <div id="conn-indicator-anchor" style="display:flex;align-items:center"></div>
         <button class="dash-bell-btn" data-toggle-notifications aria-label="Notificações" style="position:relative;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,255,255,0.07);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;flex-shrink:0;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:rgba(255,255,255,0.85)">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -951,7 +796,7 @@ export class DashboardScreen extends BaseScreen {
       `;
     }
 
-    const current = NAV_ITEMS.find(item => item.id === this.currentNav) || NAV_ITEMS[0];
+    const current = this.navItems.find(item => item.id === this.currentNav) || this.navItems[0];
     const badge = this.currentNav === 'conquistas' ? '<span class="pill">Você está em #8</span>' : this.currentNav === 'chat' ? '<span class="pill">IA Online ✓</span>' : '';
     return `
       <div class="dash-subheader">
@@ -978,7 +823,7 @@ export class DashboardScreen extends BaseScreen {
           ${this.renderXpBar()}
         </div>
         <div class="dash-drawer-nav">
-          ${NAV_ITEMS.map(item => `
+          ${this.navItems.map(item => `
             <button class="dash-drawer-item ${this.currentNav === item.id ? 'active' : ''}" data-nav-item="${item.id}" style="position:relative;">
               <div class="row">
                 <span class="icon">${item.icon}</span>
@@ -1007,7 +852,7 @@ export class DashboardScreen extends BaseScreen {
   renderNotificationPanel() {
     const notifications = Array.isArray(this.notifications) ? this.notifications.slice(0, 8) : [];
     return `
-      <div class="dash-notification-panel">
+      <div class="dash-notification-panel" role="dialog" aria-label="Notificações">
         <div class="dash-notification-card">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--dash-border);">
             <div>
@@ -1016,7 +861,7 @@ export class DashboardScreen extends BaseScreen {
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <button class="dash-ghost-btn" data-mark-notifications-read style="min-height:34px;padding:8px 10px;border-radius:10px;font-size:12px;">Marcar todas como lidas</button>
-              <button data-close-notification-panel aria-label="Fechar notificações" style="width:32px;height:32px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--dash-muted);font-size:16px;line-height:1;">✕</button>
+              <button data-close-notification-panel aria-label="Fechar notificações" style="width:44px;height:44px;min-width:44px;min-height:44px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:10px;color:var(--dash-muted);font-size:18px;line-height:1;padding:8px;transition:background 0.15s;">✕</button>
             </div>
           </div>
           <div style="max-height:360px;overflow:auto;">
@@ -1065,714 +910,27 @@ export class DashboardScreen extends BaseScreen {
   }
 
   getLevel(xp) {
-    return [...XP_LEVELS].reverse().find(level => xp >= level.minXp) || XP_LEVELS[0];
+    return [...getLevels()].reverse().find(level => xp >= level.minXp) || getLevels()[0];
   }
 
   getNextLevel(levelNumber) {
-    return XP_LEVELS.find(level => level.level === levelNumber + 1) || null;
+    return getLevels().find(level => level.level === levelNumber + 1) || null;
   }
-
   renderContent() {
+    // Se dados ainda não carregaram do Firestore, mostra skeleton
+    if (!this._dataLoaded) {
+      return `<div data-loading="${this.currentNav}" class="loading-skeleton-container"></div>`;
+    }
     switch (this.currentNav) {
-      case 'inicio': return this.renderHome();
-      case 'evolucao': return this.renderEvolution();
-      case 'receitas': return this.renderRecipes();
-      case 'exames': return this.renderExams();
-      case 'conquistas': return this.renderConquests();
-      case 'chat': return this.renderChat();
-      case 'perfil': return this.renderProfile();
-      default: return this.renderHome();
+      case 'inicio': return renderInicio(this);
+      case 'evolucao': return renderEvolucao(this);
+      case 'receitas': return renderRecipes(this);
+      case 'exames': return renderExames(this);
+      case 'conquistas': return renderConquistas(this);
+      case 'chat': return renderChat(this);
+      case 'perfil': return renderPerfil(this);
+      default: return renderInicio(this);
     }
-  }
-
-  renderHome() {
-    const recipe = getRecipeOfHour(this.recipes);
-    const meals = Array.isArray(this.dailyMeals) && this.dailyMeals.length ? this.dailyMeals : REFEICOES_DIA;
-    const checkedCount = [...this.homeChecked].filter(id => meals.some(meal => meal.id === id)).length;
-    const checkPct = meals.length ? Math.round((checkedCount / meals.length) * 100) : 0;
-
-    return `
-      <section>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-          <div style="width:38px;height:38px;border-radius:12px;background:${Colors.pinkGlow};border:1px solid ${Colors.pink}33;display:flex;align-items:center;justify-content:center;">💬</div>
-          <div>
-            <div style="color:var(--dash-text);font-weight:700;font-size:17px;">Chat com a IA</div>
-            <div style="color:var(--dash-muted);font-size:13px;">Peça uma receita ou tire dúvidas</div>
-          </div>
-        </div>
-        <div class="dash-card pad">
-          <div style="max-height:220px;overflow-y:auto;padding:4px 0 14px;display:flex;flex-direction:column;gap:10px;" data-home-chat-list>
-            ${this.homeChatMessages.map(msg => `
-              <div style="display:flex;justify-content:${msg.r === 'user' ? 'flex-end' : 'flex-start'};gap:8px;">
-                ${msg.r === 'ai' ? '<div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#f0059a,#c0027c);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">✨</div>' : ''}
-                <div style="max-width:78%;padding:11px 15px;border-radius:${msg.r === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};background:${msg.r === 'user' ? 'linear-gradient(135deg,#f0059a,#c0027c)' : 'rgba(255,255,255,0.05)'};border:${msg.r === 'ai' ? `1px solid var(--dash-border)` : 'none'};color:var(--dash-text);font-size:15px;line-height:1.5;">${msg.t}</div>
-              </div>
-            `).join('')}
-          </div>
-          <div style="display:flex;gap:10px;border-top:1px solid var(--dash-border);padding-top:12px;">
-            <input class="dash-input" data-home-chat-input value="${this.homeChatInput.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}" placeholder="Ex: Me sugira uma receita com frango e brócolis..." style="flex:1;padding:12px 16px;font-size:15px;" />
-            <button class="dash-primary-btn" data-home-send style="border-radius:12px;padding:12px 16px;min-height:46px;box-shadow:none;font-size:14px;">➤</button>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div style="display:flex;align-items:center;gap:10px;margin:18px 0 14px;">
-          <div style="width:38px;height:38px;border-radius:12px;background:rgba(31,204,116,0.12);border:1px solid rgba(31,204,116,0.25);display:flex;align-items:center;justify-content:center;">⏱</div>
-          <div>
-            <div style="color:var(--dash-text);font-weight:700;font-size:17px;">Receita indicada agora</div>
-            <div style="color:var(--dash-muted);font-size:13px;">Baseada no horário atual</div>
-          </div>
-        </div>
-        <div class="dash-card pad" data-recipe-of-hour="${recipe.id}" style="border-color: rgba(31,204,116,0.2); background: rgba(31,204,116,0.04); display:flex; gap:16px; align-items:flex-start; cursor:pointer;">
-          <div style="font-size:44px;line-height:1;flex-shrink:0;">${recipe.e}</div>
-          <div style="flex:1;">
-            <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:4px;">${recipe.nm}</div>
-            <div style="color:var(--dash-muted);font-size:14px;margin-bottom:10px;">${recipe.ct}</div>
-            <div class="dash-chip-row">
-              <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${recipe.tm}</span>
-              <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${recipe.kc} kcal</span>
-              <span class="dash-chip">${recipe.df}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div style="display:flex;align-items:center;gap:10px;margin:18px 0 14px;">
-          <div style="width:38px;height:38px;border-radius:12px;background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.25);display:flex;align-items:center;justify-content:center;">✅</div>
-          <div>
-            <div style="color:var(--dash-text);font-weight:700;font-size:17px;">Cardápio de hoje</div>
-            <div style="color:var(--dash-muted);font-size:13px;">${checkedCount}/${meals.length} refeições realizadas</div>
-          </div>
-          <div style="margin-left:auto;background:rgba(234,179,8,0.2);border:1px solid rgba(234,179,8,0.44);border-radius:8px;padding:4px 10px;color:#eab308;font-size:13px;font-weight:700;">${checkPct}%</div>
-        </div>
-        <div class="dash-card" style="overflow:hidden;">
-          ${meals.map((meal, index) => {
-            const done = this.homeChecked.has(meal.id);
-            const [h, m] = meal.hora.split(':').map(Number);
-            const minutes = h * 60 + m;
-            const now = new Date();
-            const currentMinutes = now.getHours() * 60 + now.getMinutes();
-            const isCurrent = Math.abs(currentMinutes - minutes) < 90;
-            return `
-              <div class="dash-meal ${done ? 'done' : ''} ${isCurrent ? 'current' : ''}" data-meal-toggle="${meal.id}" style="background:${isCurrent && !done ? 'rgba(240,5,154,0.06)' : 'transparent'};">
-                <div class="dash-meal-icon" style="background:${done ? 'rgba(31,204,116,0.15)' : isCurrent ? 'rgba(240,5,154,0.12)' : 'rgba(255,255,255,0.04)'}; border-color:${done ? 'rgba(31,204,116,0.5)' : isCurrent ? 'rgba(240,5,154,0.44)' : 'var(--dash-border)'}; border-style:solid; border-width:1.5px;">${done ? '✓' : meal.icon}</div>
-                <div style="flex:1;">
-                  <div class="title" style="color:${done ? 'var(--dash-muted)' : isCurrent ? '#f0059a' : 'var(--dash-text)'}; font-weight:${done ? 500 : 700}; font-size:16px;">${meal.nome}</div>
-                  <div style="color:var(--dash-muted); font-size:13px;">${meal.hora} · ${meal.desc}</div>
-                </div>
-                ${isCurrent && !done ? '<span style="background:rgba(240,5,154,0.12);border:1px solid rgba(240,5,154,0.35);border-radius:6px;padding:3px 8px;color:#f0059a;font-size:12px;font-weight:700;">Agora</span>' : ''}
-              </div>
-            `;
-          }).join('')}
-        </div>
-      </section>
-
-      <section>
-        <div style="display:flex;align-items:center;gap:10px;margin:18px 0 14px;">
-          <div style="width:38px;height:38px;border-radius:12px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.25);display:flex;align-items:center;justify-content:center;">✨</div>
-          <div style="color:var(--dash-text);font-weight:700;font-size:17px;">Dicas da Bela</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          ${this.dicas.map(dica => `
-            <div class="dash-card pad" style="display:flex;gap:14px;">
-              <span style="font-size:26px;flex-shrink:0;">${dica.e}</span>
-              <div style="flex:1;">
-                <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:3px;">${dica.ti}</div>
-                <div style="color:var(--dash-muted);font-size:14px;line-height:1.5;">${dica.tx}</div>
-                <div style="display:flex;gap:8px;margin-top:10px;">
-                  <button class="dash-chip ${dica.myVote === 'like' ? 'active' : ''}" data-tip-vote="${dica.id}:like" style="padding:6px 10px;font-size:12px;">👍 ${dica.likes}</button>
-                  <button class="dash-chip ${dica.myVote === 'dislike' ? 'active' : ''}" data-tip-vote="${dica.id}:dislike" style="padding:6px 10px;font-size:12px;">👎 ${dica.dislikes}</button>
-                </div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </section>
-    `;
-  }
-
-  renderEvolution() {
-    const cards = [
-      { label: 'Glicemia', value: '98', unit: 'mg/dL', delta: '▼ 50', color: '#1fcc74' },
-      { label: 'Peso', value: '79.6', unit: 'kg', delta: '▼ 4.4', color: '#1fcc74' },
-      { label: 'HbA1c', value: '6.1', unit: '%', delta: '▼ 0.8%', color: '#1fcc74' },
-    ];
-
-    const graphs = [
-      { key: 'glicemia', title: 'Glicemia em Jejum', ref: 'Ref: 70-99 mg/dL', color: '#f0059a', unit: 'mg/dL' },
-      { key: 'hba1c', title: 'Hemoglobina Glicada (HbA1c)', ref: 'Ref: &lt; 5,7%', color: '#a78bfa', unit: '%' },
-      { key: 'peso', title: 'Peso Corporal', ref: '', color: '#38bdf8', unit: 'kg' },
-    ];
-
-    return `
-      <section>
-        <div class="dash-section-title">📊 Minha Evolução</div>
-        <div class="dash-section-subtitle">Acompanhe o progresso dos seus resultados ao longo do programa</div>
-        <div class="dash-grid-3" style="margin-bottom:20px;">
-          ${cards.map(card => `
-            <div class="dash-card dash-stat">
-              <div class="dash-stat-label">${card.label}</div>
-              <div class="dash-stat-value">${card.value}<span style="font-size:11px;color:var(--dash-muted);margin-left:2px;">${card.unit}</span></div>
-              <div class="dash-stat-delta" style="color:${card.color};">${card.delta}</div>
-            </div>
-          `).join('')}
-        </div>
-        ${graphs.map(graph => `
-          <div class="dash-card pad" style="margin-bottom:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
-              <div>
-                <div style="color:var(--dash-text);font-weight:800;font-size:18px;">${graph.title}</div>
-                ${graph.ref ? `<div style="color:var(--dash-muted);font-size:13px;margin-top:2px;">${graph.ref}</div>` : ''}
-              </div>
-              <div style="text-align:right;">
-                <div style="color:${graph.color};font-weight:800;font-size:28px;">${((this.examResults||EXAM_RESULTS)[graph.key])[((this.examResults||EXAM_RESULTS)[graph.key]).length - 1].v}<span style="font-size:14px;margin-left:3px;">${graph.unit}</span></div>
-              </div>
-            </div>
-            ${renderSparkline(((this.examResults||EXAM_RESULTS)[graph.key]), graph.color, 110, 'var(--dash-muted)')}
-          </div>
-        `).join('')}
-      </section>
-    `;
-  }
-
-  _renderRecipePlanner(meals, recipesViewTabs) {
-    return `
-      <section>
-        <div class="dash-section-title">🗓️ Refeições do Dia</div>
-        <div class="dash-section-subtitle">Personalize quantas refeições quer exibir no seu painel inicial</div>
-        ${recipesViewTabs}
-        <div class="dash-card pad" style="margin-bottom:12px;">
-          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
-            ${meals.map(meal => `
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;">${meal.icon}</div>
-                <div style="flex:1;min-width:0;">
-                  <div style="color:var(--dash-text);font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${meal.nome}</div>
-                  <div style="color:var(--dash-muted);font-size:12px;">${meal.hora} · ${meal.desc}</div>
-                </div>
-                <button class="dash-ghost-btn" data-meal-remove="${meal.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;">Remover</button>
-              </div>
-            `).join('')}
-          </div>
-          <div style="display:grid;grid-template-columns:72px 1fr 92px;gap:8px;margin-bottom:8px;">
-            <input class="dash-input" data-meal-draft-icon value="${this.mealDraft.icon}" maxlength="2" placeholder="🍽️" style="text-align:center;padding:10px 8px;" />
-            <input class="dash-input" data-meal-draft-name value="${this.mealDraft.nome.replace(/"/g, '&quot;')}" placeholder="Nome da refeição" style="padding:10px 12px;" />
-            <input type="time" class="dash-input" data-meal-draft-time value="${this.mealDraft.hora}" style="padding:10px 12px;" />
-          </div>
-          <div style="display:flex;gap:8px;">
-            <input class="dash-input" data-meal-draft-desc value="${this.mealDraft.desc.replace(/"/g, '&quot;')}" placeholder="Descrição da refeição" style="padding:10px 12px;" />
-            <button class="dash-primary-btn" data-meal-add style="min-height:42px;padding:10px 14px;border-radius:10px;">Adicionar</button>
-          </div>
-        </div>
-      </section>
-    `;
-  }
-
-  _renderRecipeDetail(recipe) {
-    const ingredients = Array.isArray(recipe.ig) ? recipe.ig
-      : Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
-    const steps = Array.isArray(recipe.st) ? recipe.st
-      : Array.isArray(recipe.steps) ? recipe.steps : [];
-    const time = recipe.tm || recipe.prepTime || '—';
-    const kcal = recipe.kc ?? recipe.macros?.calories ?? recipe.calories ?? '—';
-    const category = recipe.ct || recipe.category || 'Receita';
-    const difficulty = recipe.df || recipe.difficulty || 'Fácil';
-    const emoji = recipe.e || recipe.emoji || '🍽️';
-    const name = recipe.nm || recipe.name || 'Receita';
-    return `
-      <section>
-        <button class="dash-ghost-btn" data-recipe-back style="margin-bottom:20px;padding:10px 18px;min-height:44px;border-radius:12px;">← Voltar às receitas</button>
-        <div class="dash-card pad">
-          <div style="font-size:52px;margin-bottom:12px;">${emoji}</div>
-          <div class="dash-section-title" style="font-size:23px;">${name}</div>
-          <div class="dash-chip-row" style="margin: 0 0 22px;">
-            <span class="dash-chip" style="background:rgba(240,5,154,0.1);border-color:rgba(240,5,154,0.25);color:#f0059a;">⏱ ${time}</span>
-            <span class="dash-chip" style="background:rgba(31,204,116,0.12);border-color:rgba(31,204,116,0.25);color:#1fcc74;">🔥 ${kcal} kcal</span>
-            <span class="dash-chip">${category}</span>
-            <span class="dash-chip">${difficulty}</span>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
-            <button class="dash-primary-btn" data-recipe-edit="${recipe.id}" style="min-height:44px;padding:10px 14px;border-radius:10px;">✏️ Editar receita</button>
-            <button class="dash-ghost-btn" data-recipe-remove="${recipe.id}" style="min-height:44px;padding:10px 14px;border-radius:10px;border-color:rgba(244,63,94,0.25);color:#f43f5e;">🗑 Remover receita</button>
-          </div>
-          <div style="background:rgba(240,5,154,0.06);border:1px solid rgba(240,5,154,0.16);border-radius:14px;padding:12px 14px;margin-bottom:18px;">
-            <div style="color:#f0059a;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;">Receita #${recipe.id}</div>
-            <div style="color:var(--dash-muted);font-size:13px;margin-top:4px;">Esse marcador único vai junto quando você mandar a receita para edição no chat.</div>
-          </div>
-          <div style="margin-bottom:22px;">
-            <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:12px;">🥘 Ingredientes</div>
-            ${ingredients.length ? ingredients.map(item => `<div style="display:flex;gap:10px;margin-bottom:9px;"><div style="width:7px;height:7px;border-radius:50%;background:#f0059a;flex-shrink:0;margin-top:8px;"></div><span style="color:var(--dash-muted);font-size:16px;">${item}</span></div>`).join('') : `<div style="color:var(--dash-muted);font-size:14px;font-style:italic;">Ingredientes ainda não disponíveis para esta receita.</div>`}
-          </div>
-          <div>
-            <div style="color:var(--dash-text);font-weight:800;font-size:18px;margin-bottom:12px;">👩‍🍳 Modo de preparo</div>
-            ${steps.length ? steps.map((step, index) => `<div style="display:flex;gap:14px;margin-bottom:16px;"><div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f0059a,#c0027c);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:13px;font-weight:800;">${index + 1}</div><span style="color:var(--dash-muted);font-size:15px;line-height:1.7;padding-top:4px;">${step}</span></div>`).join('') : `<div style="color:var(--dash-muted);font-size:14px;font-style:italic;">Modo de preparo ainda não disponível para esta receita.</div>`}
-          </div>
-        </div>
-      </section>
-    `;
-  }
-
-  _renderRecipeCatalog(recipesViewTabs) {
-    const filters = ['Todas', ...new Set(RECIPES.map(recipe => recipe.ct))];
-    const filtered = this.recipeFilter === 'Todas' ? RECIPES : RECIPES.filter(recipe => recipe.ct === this.recipeFilter);
-    return `
-      <section>
-        <div class="dash-section-title">🥗 Receitas do seu Cardápio</div>
-        <div class="dash-section-subtitle">Todas selecionadas especialmente para o controle glicêmico</div>
-        ${recipesViewTabs}
-        <div class="dash-chip-row" style="margin-bottom:18px;">
-          ${filters.map(filter => `<button class="dash-chip ${this.recipeFilter === filter ? 'active' : ''}" data-recipe-filter="${filter}">${filter}</button>`).join('')}
-        </div>
-        <div class="dash-recipe-grid">
-          ${filtered.map(recipe => `
-            <div class="dash-card dash-recipe-card" data-recipe-open="${recipe.id}">
-              <div style="font-size:38px;margin-bottom:10px;">${recipe.e}</div>
-              <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:4px;">${recipe.nm}</div>
-              <div style="color:var(--dash-muted);font-size:13px;margin-bottom:10px;">${recipe.ct}</div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">⏱ ${recipe.tm}</span>
-                <span class="dash-chip" style="padding:4px 10px;font-size:12px;">🔥 ${recipe.kc}</span>
-              </div>
-              <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                <button class="dash-ghost-btn" data-recipe-edit="${recipe.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;">✏️ Editar</button>
-                <button class="dash-ghost-btn" data-recipe-remove="${recipe.id}" style="min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;border-color:rgba(244,63,94,0.25);color:#f43f5e;">🗑 Remover</button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </section>
-    `;
-  }
-
-  renderRecipes() {
-    const meals = Array.isArray(this.dailyMeals) && this.dailyMeals.length ? this.dailyMeals : [];
-    const recipesViewTabs = `
-      <div class="dash-chip-row" style="margin-bottom:16px;">
-        <button class="dash-chip ${this.recipesView === 'catalogo' ? 'active' : ''}" data-recipes-view="catalogo">📚 Catálogo</button>
-        <button class="dash-chip ${this.recipesView === 'planner' ? 'active' : ''}" data-recipes-view="planner">🗓️ Refeições do Dia</button>
-      </div>
-    `;
-
-    if (this.recipesView === 'planner') {
-      return this._renderRecipePlanner(meals, recipesViewTabs);
-    }
-
-    if (!this.recipesUnlocked) {
-      return `
-        <section style="position:relative;min-height:520px;">
-          <div class="dash-section-title">🥗 Receitas do seu Cardápio</div>
-          <div class="dash-section-subtitle">Todas selecionadas especialmente para o controle glicêmico</div>
-          ${recipesViewTabs}
-          <div class="dash-card pad" style="position:absolute;inset:0;filter:blur(8px);opacity:0.4;pointer-events:none;padding-top:72px;overflow:hidden;">
-            <div class="dash-recipe-grid">
-              ${RECIPES.map(recipe => `
-                <div class="dash-card dash-recipe-card">
-                  <div style="font-size:38px;margin-bottom:10px;">${recipe.e}</div>
-                  <div style="color:var(--dash-text);font-weight:700;font-size:15px;margin-bottom:4px;">${recipe.nm}</div>
-                  <div style="color:var(--dash-muted);font-size:13px;">${recipe.ct}</div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-          <div class="dash-lock-panel">
-            <div class="dash-lock-card">
-              <div style="width:72px;height:72px;border-radius:50%;background:rgba(240,5,154,0.12);border:2px solid rgba(240,5,154,0.28);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">🔒</div>
-              <div style="color:var(--dash-text);font-weight:800;font-size:20px;margin-bottom:12px;">Recurso Bloqueado</div>
-              <p style="color:var(--dash-muted);font-size:15px;line-height:1.7;margin-bottom:28px;">Suas receitas e cardápio personalizado serão liberados automaticamente após sua Sessão Individual de Diagnóstico com a Guardiã.</p>
-              <div style="background:rgba(240,5,154,0.08);border:1px solid rgba(240,5,154,0.2);border-radius:14px;padding:12px 16px;margin-bottom:20px;">
-                <div style="color:#f0059a;font-size:14px;font-weight:600;">📅 Aguardando Sessão Individual de Diagnóstico</div>
-              </div>
-              <button class="dash-ghost-btn" data-recipes-unlock style="width:100%;font-size:14px;padding:12px;min-height:46px;">🔓 Demonstração (desbloquear para teste)</button>
-            </div>
-          </div>
-        </section>
-      `;
-    }
-
-    if (this.selectedRecipe) {
-      return this._renderRecipeDetail(this.selectedRecipe);
-    }
-
-    return this._renderRecipeCatalog(recipesViewTabs);
-  }
-
-  renderExams() {
-    const examChart = this.examTab === 'resultados' ? (this.examResults||EXAM_RESULTS) : null;
-    return `
-      <section>
-        <div class="dash-section-title">🔬 Exames e Resultados</div>
-        <div class="dash-section-subtitle">Pedidos da Dra. Jessica Benevides e seus resultados</div>
-        <div class="dash-chip-row" style="margin-bottom:22px;">
-          <button class="dash-chip ${this.examTab === 'pedidos' ? 'active' : ''}" data-exam-tab="pedidos">📋 Pedidos da Dra.</button>
-          <button class="dash-chip ${this.examTab === 'resultados' ? 'active' : ''}" data-exam-tab="resultados">📊 Meus Resultados</button>
-        </div>
-        ${this.examTab === 'pedidos' ? `
-          <div style="display:flex;flex-direction:column;gap:14px;">
-            <div class="dash-card pad" style="border-color: rgba(240,5,154,0.18); background: rgba(240,5,154,0.06);">
-              <p style="color:var(--dash-muted);font-size:14px;"><span style="color:#f0059a;font-weight:700;">Dra. Jessica Benevides</span> · CRM-SP 145.832 · Endocrinologista parceira da Mentoria 4D</p>
-            </div>
-            ${this.examOrders.map(order => {
-              const fileReady = Boolean(order.fileReady || order.pdfReady || order.fileUrl || order.driveFileUrl);
-              return `
-              <div class="dash-card pad">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-                  <div>
-                    <div style="color:var(--dash-text);font-weight:800;font-size:16px;">Pedido de ${order.dt}</div>
-                    <div style="color:var(--dash-muted);font-size:14px;margin-top:2px;">Dra. Jessica Benevides</div>
-                  </div>
-                  <span style="background:${order.st === 'Pendente' ? 'rgba(240,5,154,0.15)' : 'rgba(31,204,116,0.12)'};border:1px solid ${order.st === 'Pendente' ? 'rgba(240,5,154,0.28)' : 'rgba(31,204,116,0.32)'};border-radius:8px;padding:5px 12px;color:${order.st === 'Pendente' ? '#f0059a' : '#1fcc74'};font-size:13px;font-weight:700;">${order.st}</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px;">${order.ex.map(exam => `<div style="display:flex;gap:10px;align-items:center;"><div style="width:6px;height:6px;border-radius:50%;background:#f0059a;flex-shrink:0;"></div><span style="color:var(--dash-text);font-size:15px;">${exam}</span></div>`).join('')}</div>
-                <div class="dash-card pad" style="padding:10px 14px;border-radius:10px;">📋 <strong style="color:var(--dash-text);">Instruções:</strong> <span style="color:var(--dash-muted);font-size:14px;">${order.ins}</span></div>
-                <div style="margin-top:12px;display:flex;justify-content:flex-end;">
-                  <button class="dash-primary-btn ${fileReady ? '' : 'dash-hide-disabled'}" data-order-download="${order.id}" ${fileReady ? '' : 'disabled'} style="min-height:42px;padding:10px 14px;border-radius:10px;opacity:${fileReady ? 1 : 0.5};cursor:${fileReady ? 'pointer' : 'not-allowed'};">
-                    ${fileReady ? '📥 Baixar pedido (PDF)' : '🔒 Pedido indisponível'}
-                  </button>
-                </div>
-              </div>
-            `;
-            }).join('')}
-          </div>
-        ` : `
-          <div class="dash-card pad" style="margin-bottom:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
-              <div>
-                <div style="color:var(--dash-text);font-weight:800;font-size:18px;">Glicemia em Jejum</div>
-                <div style="color:var(--dash-muted);font-size:13px;margin-top:2px;">Ref: 70-99 mg/dL</div>
-              </div>
-              <div style="text-align:right;">
-                <div style="color:#1fcc74;font-weight:800;font-size:28px;">98<span style="font-size:14px;margin-left:3px;">mg/dL</span></div>
-              </div>
-            </div>
-            ${renderSparkline((this.examResults||EXAM_RESULTS).glicemia, '#f0059a', 110, 'var(--dash-muted)')}
-          </div>
-          <div class="dash-card pad" style="margin-bottom:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
-              <div>
-                <div style="color:var(--dash-text);font-weight:800;font-size:18px;">Hemoglobina Glicada (HbA1c)</div>
-                <div style="color:var(--dash-muted);font-size:13px;margin-top:2px;">Ref: &lt; 5,7%</div>
-              </div>
-              <div style="text-align:right;">
-                <div style="color:#a78bfa;font-weight:800;font-size:28px;">6.1<span style="font-size:14px;margin-left:3px;">%</span></div>
-              </div>
-            </div>
-            ${renderSparkline((this.examResults||EXAM_RESULTS).hba1c, '#a78bfa', 110, 'var(--dash-muted)')}
-          </div>
-          <div class="dash-card pad">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
-              <div>
-                <div style="color:var(--dash-text);font-weight:800;font-size:18px;">Peso Corporal</div>
-              </div>
-              <div style="text-align:right;">
-                <div style="color:#38bdf8;font-weight:800;font-size:28px;">79.6<span style="font-size:14px;margin-left:3px;">kg</span></div>
-              </div>
-            </div>
-            ${renderSparkline((this.examResults||EXAM_RESULTS).peso, '#38bdf8', 110, 'var(--dash-muted)')}
-          </div>
-        `}
-      </section>
-    `;
-  }
-
-  _renderAchievementCounter(claimedCount, totalCount) {
-    const pct = totalCount > 0 ? (claimedCount / totalCount) * 100 : 0;
-    return `
-      <div class="dash-ach-counter" style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(240,5,154,0.08),rgba(155,2,200,0.08));border:1px solid rgba(240,5,154,0.2);border-radius:14px;padding:14px 18px;margin-bottom:18px;">
-        <div style="font-size:32px;font-weight:900;color:#f0059a;">${claimedCount}<span style="font-size:18px;color:var(--dash-muted);font-weight:700;">/${totalCount}</span></div>
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:700;color:var(--dash-text);margin-bottom:6px;">Conquistas reivindicadas</div>
-          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
-            <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#f0059a,#9b02c8);border-radius:3px;transition:width 0.4s ease;box-shadow:0 0 8px rgba(240,5,154,0.5);"></div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  _renderPlatinumBadge(claimedCount, totalCount) {
-    if (claimedCount !== totalCount || totalCount === 0) return '';
-    return `
-      <div class="dash-platinum-badge" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);border-radius:18px;padding:24px;margin-bottom:20px;text-align:center;animation:achPlatinumShine 3s infinite;color:#1a1500;">
-        <div style="font-size:48px;margin-bottom:6px;">💎</div>
-        <div style="font-size:20px;font-weight:900;letter-spacing:2px;margin-bottom:4px;">PLATINA DESBLOQUEADA</div>
-        <div style="font-size:13px;font-weight:700;opacity:0.85;">Você reivindicou todas as ${totalCount} conquistas, incluindo as ocultas!</div>
-      </div>
-    `;
-  }
-
-  _renderAchievementCard(a) {
-    const bg = a.ok
-      ? (a.claimed ? 'linear-gradient(180deg,rgba(240,5,154,0.08),rgba(240,5,154,0.02))' : 'linear-gradient(180deg,rgba(240,5,154,0.18),rgba(240,5,154,0.06))')
-      : 'rgba(255,255,255,0.03)';
-    const borderColor = (a.ok && !a.claimed) ? 'rgba(240,5,154,0.6)' : (a.ok ? 'rgba(240,5,154,0.2)' : 'rgba(255,255,255,0.07)');
-    const animation = (a.ok && !a.claimed) ? 'animation:achGlowPulse 2s infinite;' : '';
-    let actionHTML;
-    if (a.ok && !a.claimed) {
-      actionHTML = `<button class="ach-claim-btn" data-claim-achievement="${a.id}" style="width:100%;margin-top:6px;padding:8px 10px;background:linear-gradient(135deg,#f0059a,#c0027c);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:0 2px 10px rgba(240,5,154,0.4);transition:transform 0.15s;">🎁 Reivindicar +${a.xp} XP</button>`;
-    } else if (a.ok && a.claimed) {
-      actionHTML = `<div style="font-size:11px;color:#34d399;font-weight:700;margin-top:4px;">✓ Reivindicado +${a.xp} XP</div>`;
-    } else if (a.hidden) {
-      actionHTML = `<div style="font-size:10px;color:var(--dash-muted);font-weight:600;margin-top:4px;">🔒 Oculta</div>`;
-    } else {
-      actionHTML = `<div style="font-size:10px;color:var(--dash-muted);font-weight:600;margin-top:4px;">+${a.xp} XP</div>`;
-    }
-    return `
-      <div class="dash-achievement-card ${a.ok ? 'unlocked' : ''} ${a.hidden ? 'hidden-locked' : ''} ${a.ok && !a.claimed ? 'pending-claim' : ''}" data-achievement-id="${a.id}" style="position:relative;background:${bg};border:1px solid ${borderColor};border-radius:16px;padding:16px 14px;text-align:center;transition:all 0.2s;${animation}">
-        <div style="font-size:34px;margin-bottom:8px;filter:${a.ok ? 'none' : 'grayscale(0.7)'};opacity:${a.ok ? 1 : 0.6};">${a.e}</div>
-        <div style="font-size:13px;font-weight:800;color:${a.ok ? 'var(--dash-text)' : 'rgba(255,255,255,0.6)'};margin-bottom:4px;line-height:1.2;">${a.t}</div>
-        <div style="font-size:11px;color:var(--dash-muted);line-height:1.35;margin-bottom:${a.ok ? '10px' : '6px'};">${a.d}</div>
-        ${actionHTML}
-      </div>
-    `;
-  }
-
-  renderConquests() {
-    const rankList = Array.isArray(this.ranking) && this.ranking.length ? this.ranking : RANKING;
-    const me = { ...(rankList.find(user => user.me) || rankList[Math.min(7, rankList.length - 1)] || {}), xp: this.xp, st: this.streak };
-    const topThree = rankList.length >= 3 ? [rankList[1], rankList[0], rankList[2]] : rankList.slice(0, 3);
-    // Build merged list: catalog is source of truth, user's unlocked data provides status
-    const unlockedMap = new Map((this.achievements || []).map(a => [a.id || a.achievementId, a]));
-
-    const allAchievements = ACHIEVEMENTS_CATALOG.map(catalog => {
-      const userData = unlockedMap.get(catalog.id);
-      const isUnlocked = !!userData;
-      const isClaimed = !!(userData?.claimed);
-      const isHidden = !!catalog.hidden && !isUnlocked;
-      return {
-        id: catalog.id,
-        e: isHidden ? '❓' : catalog.icon,
-        t: isHidden ? 'Conquista oculta' : catalog.title,
-        d: isHidden ? 'Continue jogando para descobrir...' : catalog.description,
-        ct: _achCategory(catalog.id),
-        xp: catalog.xp,
-        ok: isUnlocked,
-        claimed: isClaimed,
-        hidden: isHidden,
-      };
-    });
-
-    // Mostrar TODAS — ocultas viram placeholder com ❓.
-    const visibleAchievements = allAchievements;
-    const totalCount = ACHIEVEMENTS_CATALOG.length;
-    const claimedCount = allAchievements.filter(a => a.claimed).length;
-    const pendingClaims = allAchievements.filter(a => a.ok && !a.claimed).length;
-    const unlockedCount = allAchievements.filter(a => a.ok).length;
-
-    return `
-      <section>
-        <div class="dash-section-title">🏆 Conquistas & Ranking</div>
-        ${this._renderAchievementCounter(claimedCount, totalCount)}
-        ${this._renderPlatinumBadge(claimedCount, totalCount)}
-        <div class="dash-card pad" style="margin-bottom:20px;border-color: rgba(240,5,154,0.15); background: rgba(240,5,154,0.06); display:flex;align-items:center;gap:14px;">
-          <div class="dash-avatar" style="width:48px;height:48px;background:${me.col}22;border:2px solid ${me.col}55;">${me.e}</div>
-          <div style="flex:1;">
-            <div style="color:var(--dash-muted);font-size:13px;margin-bottom:2px;">Sua posição no ranking</div>
-            <div style="display:flex;align-items:baseline;gap:8px;"><span style="color:#f0059a;font-size:32px;font-weight:900;">#${me.p}</span><span style="color:var(--dash-text);font-size:16px;font-weight:700;">${me.nm}</span></div>
-          </div>
-          <div style="text-align:right;"><div style="color:#eab308;font-weight:800;font-size:18px;">${me.xp} XP</div><div style="color:var(--dash-muted);font-size:12px;">🔥 ${me.st} dias</div></div>
-        </div>
-        <div class="dash-grid-3" style="margin-bottom:18px;">
-          ${[
-            { l: 'XP Total', v: this.xp },
-            { l: 'Conquistas', v: unlockedCount },
-            { l: 'Streak', v: `${this.streak} dias` },
-          ].map(stat => `<div class="dash-card pad"><div style="color:var(--dash-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">${stat.l}</div><div style="color:var(--dash-text);font-weight:800;font-size:22px;line-height:1;">${stat.v}</div></div>`).join('')}
-        </div>
-        <div class="dash-chip-row" style="margin-bottom:20px;">
-          <button class="dash-chip ${this.communityTab === 'badges' ? 'active' : ''}" data-conquest-tab="badges">🏅 Minhas Medalhas</button>
-          <button class="dash-chip ${this.communityTab === 'ranking' ? 'active' : ''}" data-conquest-tab="ranking">🏆 Ranking</button>
-          <button class="dash-chip ${this.communityTab === 'comunidade' ? 'active' : ''}" data-conquest-tab="comunidade">🤝 Comunidade</button>
-        </div>
-        ${this.communityTab === 'badges' ? `
-          <div>
-            ${['jornada', 'engajamento', 'social'].map(category => {
-              const categoryItems = visibleAchievements.filter(a => a.ct === category);
-              if (!categoryItems.length) return '';
-              return `
-              <div style="margin-bottom:18px;">
-                <div style="color:var(--dash-muted);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">${category}</div>
-                <div class="dash-grid-2">
-                  ${categoryItems.map(a => this._renderAchievementCard(a)).join('')}
-                </div>
-              </div>
-            `}).join('')}
-          </div>
-        ` : this.communityTab === 'ranking' ? `
-          <div>
-            <div class="dash-card pad" style="margin-bottom:4px;">
-              <div style="text-align:center;color:var(--dash-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:18px;">🏆 Pódio do Mês</div>
-              <div style="display:flex;justify-content:center;align-items:flex-end;gap:14px;">
-                ${topThree.map((user, index) => {
-                  const colors = ['#94a3b8', '#eab308', '#b45309'];
-                  const heights = [90, 124, 76];
-                  const medals = ['🥈', '👑', '🥉'];
-                  return `
-                    <div style="display:flex;flex-direction:column;align-items:center;gap:7px;">
-                      <div class="dash-avatar" style="width:48px;height:48px;background:${user.col}22;border:2px solid ${user.col}55;">${user.e}</div>
-                      <div style="font-weight:800;font-size:13px;color:var(--dash-text);text-align:center;max-width:70px;">${user.nm.split(' ')[0]}</div>
-                      <div style="color:${colors[index]};font-size:11px;font-weight:600;">${user.xp} XP</div>
-                      <div style="width:68px;height:${heights[index]}px;border-radius:8px 8px 0 0;background:linear-gradient(180deg,${colors[index]}30,${colors[index]}10);border:1px solid ${colors[index]}40;display:flex;align-items:center;justify-content:center;"><span style="font-size:26px;">${medals[index]}</span></div>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              ${rankList.map(user => `
-                <div class="dash-card pad" style="display:flex;align-items:center;gap:12px;border-color:${user.me ? 'rgba(240,5,154,0.3)' : 'var(--dash-border)'};background:${user.me ? 'rgba(240,5,154,0.06)' : 'var(--dash-surface)'};">
-                  <div style="width:26px;text-align:center;">${user.p <= 3 ? ['🥇', '🥈', '🥉'][user.p - 1] : `<span style="color:${user.me ? '#f0059a' : 'var(--dash-muted)'};font-weight:800;font-size:14px;">#${user.p}</span>`}</div>
-                  <div class="dash-avatar" style="width:38px;height:38px;background:${user.col}22;border:2px solid ${user.col}55;">${user.e}</div>
-                  <div style="flex:1;"><div style="color:${user.me ? '#f0059a' : 'var(--dash-text)'};font-weight:700;font-size:15px;">${user.nm}${user.me ? ' (você)' : ''}</div><div style="color:var(--dash-muted);font-size:12px;">${user.nk} · 🔥${user.st}d</div></div>
-                  <div style="text-align:right;"><div style="color:${user.p === 1 ? '#eab308' : user.p === 2 ? '#94a3b8' : user.p === 3 ? '#b45309' : 'var(--dash-text)'};font-weight:800;font-size:15px;">${user.xp}</div><div style="color:var(--dash-muted);font-size:11px;">XP</div></div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        ` : `
-          <div style="display:flex;flex-direction:column;gap:12px;">
-            <p style="color:var(--dash-muted);font-size:14px;margin-bottom:4px;">Celebre as conquistas da comunidade! 💕</p>
-            ${this.communityFeed.map(item => `
-              <div class="dash-card pad">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-                  <div class="dash-avatar" style="width:40px;height:40px;background:${item.col}22;border:2px solid ${item.col}55;">${item.e}</div>
-                  <div><div style="color:var(--dash-text);font-weight:700;font-size:15px;">${item.u}</div><div style="color:var(--dash-muted);font-size:12px;">${item.t}</div></div>
-                </div>
-                <div class="dash-card pad" style="background:rgba(240,5,154,0.06);border-color:rgba(240,5,154,0.18);padding:12px 16px;margin-bottom:12px;display:flex;gap:12px;align-items:center;">
-                  <span style="font-size:26px;">${item.b}</span>
-                  <div><div style="color:var(--dash-muted);font-size:11px;font-weight:600;text-transform:uppercase;">Nova conquista</div><div style="color:#f0059a;font-weight:700;font-size:15px;">${item.bn}</div></div>
-                </div>
-                ${item.cm.length > 0 ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">${item.cm.map(comment => `<div style="display:flex;gap:8px;"><div style="width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--dash-muted);font-weight:700;flex-shrink:0;">${comment.u[0]}</div><div style="background:rgba(255,255,255,0.05);border-radius:0 10px 10px 10px;padding:6px 12px;"><span style="color:#f0059a;font-weight:700;font-size:13px;">${comment.u}: </span><span style="color:var(--dash-muted);font-size:13px;">${comment.t}</span></div></div>`).join('')}</div>` : ''}
-                ${this.commentOpenId === item.id ? `<div style="display:flex;gap:8px;margin-bottom:10px;"><input class="dash-input" data-community-comment-input placeholder="Escreva um comentário..." value="${this.commentText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}" style="flex:1;padding:9px 14px;font-size:14px;" /><button class="dash-primary-btn" data-community-comment-send style="border-radius:10px;padding:9px 14px;min-height:44px;font-size:14px;box-shadow:none;">➤</button><button class="dash-ghost-btn" data-community-comment-close style="padding:9px 12px;min-height:44px;border-radius:10px;">✕</button></div>` : ''}
-                <div style="display:flex;gap:8px;">
-                  <button class="dash-ghost-btn ${item.liked ? 'active' : ''}" data-community-like="${item.id}" style="padding:8px 16px;min-height:38px;border-radius:11px;background:${item.liked ? 'rgba(240,5,154,0.14)' : 'transparent'};border-color:${item.liked ? 'rgba(240,5,154,0.35)' : 'var(--dash-border)'};color:${item.liked ? '#f0059a' : 'var(--dash-text)'};">❤ ${item.lk}</button>
-                  <button class="dash-ghost-btn" data-community-toggle-comment="${item.id}" style="padding:8px 16px;min-height:38px;border-radius:11px;">💬 ${item.cm.length}</button>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        `}
-      </section>
-    `;
-  }
-
-  renderChat() {
-    const suggestions = ['O que posso comer agora?', 'Como está minha glicemia?', 'Sugestão para o jantar', 'Tenho fome fora do horário', 'Me ensine uma receita fácil'];
-    const markerCard = this.chatRecipeContext ? `
-      <div class="dash-card pad" style="margin:10px 14px 0;background:rgba(240,5,154,0.08);border-color:rgba(240,5,154,0.18);display:flex;gap:12px;align-items:center;">
-        <div style="width:42px;height:42px;border-radius:14px;background:rgba(240,5,154,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${this.chatRecipeContext.emoji}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="color:#f0059a;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;">Editando receita</div>
-          <div style="color:var(--dash-text);font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(this.chatRecipeContext.name)}</div>
-          <div style="color:var(--dash-muted);font-size:12px;margin-top:2px;">Marcador: [[RECIPE_EDIT:${escapeHTML(this.chatRecipeContext.id)}]]</div>
-        </div>
-        <button class="dash-ghost-btn" data-clear-chat-context style="min-height:36px;padding:8px 10px;border-radius:10px;font-size:12px;">Limpar</button>
-      </div>
-    ` : '';
-
-    const messagesHTML = this.chatHistory.length > 0
-      ? this.chatHistory.map(msg => {
-          const parsed = msg.role === 'user'
-            ? parseRecipeEditMarker(msg.content)
-            : { text: msg.content || msg.t || msg.text || msg.message || '', recipeId: null };
-          const isUser = msg.role === 'user';
-          const text = isUser && parsed.recipeId ? parsed.text : (msg.content || msg.t || msg.text || msg.message || '');
-          return `
-            <div class="message ${isUser ? 'user-message' : 'ai-message'} is-first">
-              <div class="message-avatar">${isUser ? '' : '👩‍⚕️'}</div>
-              <div class="message-bubble">${parsed.recipeId ? `<div style="background:rgba(240,5,154,0.12);border:1px solid rgba(240,5,154,0.24);color:#f0059a;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;display:inline-block;margin-bottom:6px;">Editando receita #${escapeHTML(parsed.recipeId)}</div><br/>` : ''}${escapeHTML(text)}</div>
-            </div>
-          `;
-        }).join('')
-      : this.homeChatMessages.map(msg => {
-          const isUser = msg.r === 'user';
-          return `
-            <div class="message ${isUser ? 'user-message' : 'ai-message'} is-first">
-              <div class="message-avatar">${isUser ? '' : '👩‍⚕️'}</div>
-              <div class="message-bubble">${escapeHTML(msg.t)}</div>
-            </div>
-          `;
-        }).join('');
-
-    const placeholder = this.chatRecipeContext
-      ? `Explique o que quer editar na receita #${this.chatRecipeContext.id}...`
-      : 'Escreva sua dúvida à IA da Mentoria 4D...';
-
-    return `
-      <div class="chat-screen-embedded">
-        <div class="chat-suggestions">
-          ${suggestions.map(suggestion => `<button class="suggestion-chip" data-chat-suggestion="${escapeHTML(suggestion)}">${escapeHTML(suggestion)}</button>`).join('')}
-        </div>
-        ${markerCard}
-        <div class="chat-messages" data-chat-list>
-          ${messagesHTML}
-        </div>
-        <div class="chat-input-area">
-          <textarea class="chat-textarea" data-chat-input rows="1" placeholder="${escapeHTML(placeholder)}">${escapeHTML(this.homeChatInput)}</textarea>
-          <button class="chat-send-btn" data-chat-send aria-label="Enviar mensagem">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  renderProfile() {
-    const achievementCards = (Array.isArray(this.achievements) && this.achievements.length ? this.achievements : BADGES)
-      .map(normalizeAchievement)
-      .filter(Boolean);
-    const unlockedCount = achievementCards.filter(badge => badge.ok).length;
-    return `
-      <section>
-        <div class="dash-card pad" style="margin-bottom:20px;background:rgba(240,5,154,0.06);border-color:rgba(240,5,154,0.18);display:flex;flex-direction:column;align-items:center;gap:14px;">
-          <div class="dash-avatar" style="width:80px;height:80px;background:${this.profileAvatar.color}22;border:2px solid ${this.profileAvatar.color}55;font-size:40px;">${this.profileAvatar.emoji}</div>
-          <div style="text-align:center;">
-            <div style="color:var(--dash-text);font-weight:800;font-size:22px;">Você</div>
-            <div style="color:var(--dash-muted);font-size:15px;">${this.profileAvatar.nick}</div>
-            <div style="color:${this.getLevel(this.xp).color};font-weight:700;font-size:14px;margin-top:4px;">Nível ${this.getLevel(this.xp).level} · ${this.getLevel(this.xp).title}</div>
-          </div>
-          <div style="display:flex;gap:24px;text-align:center;flex-wrap:wrap;justify-content:center;">
-            ${[{ l: 'XP Total', v: this.xp }, { l: 'Conquistas', v: unlockedCount }, { l: 'Streak', v: `${this.streak}🔥` }].map(stat => `<div><div style="color:var(--dash-text);font-weight:800;font-size:20px;">${stat.v}</div><div style="color:var(--dash-muted);font-size:13px;">${stat.l}</div></div>`).join('')}
-          </div>
-        </div>
-        <div class="dash-card pad">
-          <div style="color:var(--dash-text);font-weight:700;font-size:16px;margin-bottom:14px;">🎨 Escolha seu avatar</div>
-          <div class="dash-grid-3" style="grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom:16px;">
-            ${PROFILE_AVATARS.map(emoji => `<button class="dash-chip ${this.profileAvatar.emoji === emoji ? 'active' : ''}" data-avatar-emoji="${emoji}" style="aspect-ratio:1;border-radius:14px;font-size:24px;display:flex;align-items:center;justify-content:center;">${emoji}</button>`).join('')}
-            <button class="dash-chip" data-avatar-custom style="aspect-ratio:1;border-radius:14px;font-size:20px;display:flex;align-items:center;justify-content:center;">+</button>
-          </div>
-          <div style="color:var(--dash-text);font-weight:600;font-size:14px;margin-bottom:10px;">Cor do avatar</div>
-          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:center;">
-            ${PROFILE_COLORS.map(color => `<button class="dash-chip" data-avatar-color="${color}" style="width:40px;height:40px;padding:0;border-radius:50%;background:${color}33;border:3px solid ${this.profileAvatar.color === color ? color : 'transparent'};display:flex;align-items:center;justify-content:center;">${this.profileAvatar.color === color ? '✓' : ''}</button>`).join('')}
-            <label class="dash-chip dash-chip-chroma" style="position:relative;width:40px;height:40px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;border:3px solid ${!PROFILE_COLORS.includes(this.profileAvatar.color) ? this.profileAvatar.color : 'transparent'};background:conic-gradient(from 0deg,#ff0033,#ff8800,#ffee00,#26ff00,#00ffe1,#0066ff,#9900ff,#ff0077,#ff0033);flex-shrink:0;">
-              <span style="width:24px;height:24px;border-radius:50%;background:${this.profileAvatar.color};border:2px solid rgba(255,255,255,0.35);display:block;"></span>
-              <input type="color" data-avatar-color-input value="${this.profileAvatar.color}" style="position:absolute;width:1px;height:1px;opacity:0;border:0;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;" />
-            </label>
-          </div>
-          <div style="color:var(--dash-text);font-weight:600;font-size:14px;margin-bottom:8px;">Apelido público</div>
-          <input class="dash-input" data-avatar-nick value="${this.profileAvatar.nick}" placeholder="@seunome" maxlength="25" />
-        </div>
-        <button class="dash-primary-btn" data-profile-save style="width:100%;font-size:16px;margin:14px 0;">✓ Salvar meu perfil</button>
-        <div style="color:var(--dash-text);font-weight:700;font-size:16px;margin:14px 0 10px;">🎛️ Tema</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-          ${[
-            { mode: 'light', icon: '☀️', label: 'Claro' },
-            { mode: 'dark', icon: '🌙', label: 'Escuro' },
-            { mode: 'system', icon: '🖥️', label: 'Sistema' },
-          ].map(option => `
-            <button class="dash-chip ${this.themeMode === option.mode ? 'active' : ''}" data-theme-mode="${option.mode}" style="min-height:40px;padding:10px 14px;border-radius:12px;flex:1;justify-content:center;display:flex;align-items:center;gap:8px;${this.themeMode === option.mode ? 'color:#fff;' : ''}">${option.icon} ${option.label}</button>
-          `).join('')}
-        </div>
-        <button class="dash-card pad" data-logout style="width:100%;padding:14px 18px;border-radius:14px;border:1px solid rgba(244,63,94,0.25);background:rgba(244,63,94,0.07);cursor:pointer;display:flex;align-items:center;gap:12px;">
-          <span style="font-size:18px;color:#f43f5e;">🚪</span>
-          <div style="text-align:left;">
-            <div style="font-weight:700;font-size:15px;color:#f43f5e;">Sair da conta</div>
-            <div style="font-size:12px;color:rgba(244,63,94,0.6);margin-top:1px;">Encerrar sessão atual</div>
-          </div>
-        </button>
-      </section>
-    `;
   }
 
   _openEmojiPickerModal() {
@@ -1890,6 +1048,13 @@ export class DashboardScreen extends BaseScreen {
       if (panel) {
         const isOpen = panel.classList.toggle('is-open');
         if (bell) bell.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        if (isOpen) {
+          // focus close button when panel opens
+          requestAnimationFrame(() => {
+            const closeBtn = panel.querySelector('[data-close-notification-panel]');
+            if (closeBtn) closeBtn.focus();
+          });
+        }
       }
     });
 
@@ -1898,7 +1063,10 @@ export class DashboardScreen extends BaseScreen {
       const bell = this.element.querySelector('[data-toggle-notifications]');
       if (panel) {
         panel.classList.remove('is-open');
-        if (bell) bell.setAttribute('aria-expanded', 'false');
+        if (bell) {
+          bell.setAttribute('aria-expanded', 'false');
+          bell.focus();
+        }
       }
     });
 
@@ -1912,6 +1080,7 @@ export class DashboardScreen extends BaseScreen {
         if (isPanelOpen && isClickOutside) {
           panel.classList.remove('is-open');
           bell.setAttribute('aria-expanded', 'false');
+          bell.focus();
         }
       };
       document.addEventListener('mousedown', this._outsideClickHandler);
@@ -1920,8 +1089,13 @@ export class DashboardScreen extends BaseScreen {
       this._escHandler = (e) => {
         if (e.key === 'Escape') {
           const panel = this.element.querySelector('.dash-notification-panel');
+          const bell = this.element.querySelector('[data-toggle-notifications]');
           if (panel && panel.classList.contains('is-open')) {
             panel.classList.remove('is-open');
+            if (bell) {
+              bell.setAttribute('aria-expanded', 'false');
+              bell.focus();
+            }
           }
         }
       };
@@ -2012,7 +1186,7 @@ export class DashboardScreen extends BaseScreen {
         btn.innerHTML = '⏳ Reivindicando...';
 
         try {
-          const achievement = ACHIEVEMENTS_CATALOG.find(a => a.id === id);
+          const achievement = getAchievementsCatalog().find(a => a.id === id);
           const xpGained = achievement?.xp || 0;
           const profileBefore = await firestoreService.getUserProfile(this.currentUser.uid);
           const xpBefore = profileBefore?.xp || 0;
@@ -2055,10 +1229,10 @@ export class DashboardScreen extends BaseScreen {
         e.stopPropagation();
         const recipeId = recipeOfHourEl.getAttribute('data-recipe-of-hour');
         if (!recipeId) return;
-        // Search in user recipes first, then fall back to static RECIPES catalog
+        // Search in user recipes first, then fall back to appConfig recipes
         const pool = [
           ...(Array.isArray(this.recipes) ? this.recipes : []),
-          ...RECIPES,
+          ...getStaticRecipes(),
         ];
         const recipe = pool.find(item => item.id === recipeId);
         if (!recipe) {
@@ -2090,7 +1264,7 @@ export class DashboardScreen extends BaseScreen {
       card.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = card.getAttribute('data-recipe-open');
-        const pool = (Array.isArray(this.recipes) ? this.recipes : []).concat(RECIPES);
+        const pool = (Array.isArray(this.recipes) ? this.recipes : []).concat(getStaticRecipes());
         const recipe = pool.find(r => r.id === id);
         if (!recipe) return;
         this.recipeOriginNav = 'receitas';
@@ -2115,7 +1289,7 @@ export class DashboardScreen extends BaseScreen {
     this.element.querySelectorAll('[data-recipe-edit]').forEach(button => {
       button.addEventListener('click', event => {
         event.stopPropagation();
-        const recipeCatalog = Array.isArray(this.recipes) && this.recipes.length ? this.recipes : RECIPES;
+        const recipeCatalog = Array.isArray(this.recipes) && this.recipes.length ? this.recipes : getStaticRecipes();
         const recipe = recipeCatalog.find(item => item.id === button.getAttribute('data-recipe-edit'));
         if (recipe) this.openRecipeEditChat(recipe);
       });
@@ -2125,7 +1299,7 @@ export class DashboardScreen extends BaseScreen {
       button.addEventListener('click', async event => {
         event.stopPropagation();
         const id = button.getAttribute('data-recipe-remove');
-        const pool = [...(Array.isArray(this.recipes) ? this.recipes : []), ...RECIPES];
+        const pool = [...(Array.isArray(this.recipes) ? this.recipes : []), ...getStaticRecipes()];
         const recipe = pool.find(item => item.id === id);
         if (recipe) await this.removeRecipe(recipe);
       });
@@ -2152,7 +1326,7 @@ export class DashboardScreen extends BaseScreen {
         this.dailyMeals = this.dailyMeals.filter(meal => meal.id !== id);
         this.homeChecked.delete(id);
         State.set('dailyMeals', this.dailyMeals);
-        this.persistProfileFields({ dailyMeals: this.dailyMeals });
+        this.persistProfileFields({ dailyMeals: this.dailyMeals }, { silent: true });
         this.mountPreservingScroll();
       });
     });
@@ -2343,7 +1517,7 @@ export class DashboardScreen extends BaseScreen {
       button.addEventListener('click', () => {
         const feedId = button.getAttribute('data-community-like');
         this.communityFeed = this.communityFeed.map(item => item.id === feedId ? { ...item, lk: item.liked ? item.lk - 1 : item.lk + 1, liked: !item.liked } : item);
-        this.persistProfileFields({ communityFeed: this.communityFeed });
+        this.persistProfileFields({ communityFeed: this.communityFeed }, { silent: true });
         this.mountPreservingScroll();
       });
     });
@@ -2397,7 +1571,7 @@ export class DashboardScreen extends BaseScreen {
           return { ...item, likes, dislikes, myVote: vote };
         });
         State.set('belaTips', this.dicas);
-        this.persistProfileFields({ belaTips: this.dicas });
+        this.persistProfileFields({ belaTips: this.dicas }, { silent: true });
         this.mountPreservingScroll();
       });
     });

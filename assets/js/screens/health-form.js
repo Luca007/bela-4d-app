@@ -21,7 +21,7 @@ import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
 import { firestoreService } from '../services/firestore.js';
 import { notificationService } from '../modules/notifications.js';
-import { HEALTH_FORM_SECTIONS, DIAGNOSTIC_OPTIONS } from '../config/constants.js';
+import { HEALTH_FORM_SECTIONS, DIAGNOSTIC_OPTIONS, GENDER_OPTIONS } from '../config/constants.js';
 
 export class HealthFormScreen extends BaseScreen {
   constructor(params) {
@@ -32,9 +32,92 @@ export class HealthFormScreen extends BaseScreen {
     this.aiPrefillData = params.aiPrefillData || null; // dados pré-preenchidos pela IA
     this.isAiPrefilled = !!this.aiPrefillData;
     this.isSaving = false;
+    this._draftSaveTimer = null;
+    this._lastDraftHash = null;
 
     // Inicializa o formData com os dados pré-preenchidos pela IA (se houver)
     this.formData = this._initFormData();
+  }
+
+  /**
+   * Carrega rascunho salvo do Firestore. Rascunho > IA prefill > vazio.
+   * Chamado em mount() antes do primeiro render.
+   */
+  async _loadDraft() {
+    if (!this.uid) return;
+    try {
+      const saved = await firestoreService.getHealthForm(this.uid);
+      if (!saved || saved.completed) return; // só carrega draft incompleto
+      // Faz merge preservando estrutura — campos do draft sobrescrevem IA prefill
+      const cleaned = { ...saved };
+      delete cleaned.aiPrefilled;
+      delete cleaned.completed;
+      delete cleaned.draftSection;
+      delete cleaned.updatedAt;
+      delete cleaned.createdAt;
+      this.formData = { ...this.formData, ...cleaned };
+      if (Number.isInteger(saved.draftSection)) {
+        const s = Math.max(0, Math.min(this.totalSections - 1, saved.draftSection));
+        this.currentSection = s;
+      }
+      this._lastDraftHash = this._hashFormData();
+    } catch (e) {
+      console.warn('[HealthForm] loadDraft failed:', e);
+    }
+  }
+
+  _hashFormData() {
+    try { return JSON.stringify(this.formData) + '|' + this.currentSection; }
+    catch { return String(Date.now()); }
+  }
+
+  /**
+   * Salva rascunho de forma debounced (300ms). Não bloqueia UX.
+   * Skip se nada mudou desde o último save.
+   */
+  _scheduleDraftSave() {
+    if (!this.uid) return;
+    if (this._draftSaveTimer) clearTimeout(this._draftSaveTimer);
+    this._draftSaveTimer = setTimeout(() => {
+      const hash = this._hashFormData();
+      if (hash === this._lastDraftHash) return;
+      this._lastDraftHash = hash;
+      const dataToSave = this._cleanFormDataForSave();
+      firestoreService.saveHealthFormDraft(this.uid, dataToSave, this.currentSection)
+        .then(ok => { if (ok) this._showDraftSavedHint(); })
+        .catch(err => console.warn('[HealthForm] draft save failed:', err));
+    }, 300);
+  }
+
+  _cleanFormDataForSave() {
+    // Remove medications com nome vazio antes de gravar
+    const meds = Array.isArray(this.formData.medications)
+      ? this.formData.medications.filter(m => m && (m.name || '').trim())
+      : [];
+    return { ...this.formData, medications: meds };
+  }
+
+  _showDraftSavedHint() {
+    // Indicador discreto no canto inferior. Não bloqueia UX.
+    let hint = document.getElementById('draft-saved-hint');
+    if (!hint) {
+      hint = DOM.create('div');
+      hint.id = 'draft-saved-hint';
+      hint.style.cssText = `
+        position: fixed; bottom: 16px; right: 16px;
+        background: rgba(31,204,116,0.12);
+        border: 1px solid rgba(31,204,116,0.4);
+        color: #1fcc74; padding: 6px 12px; border-radius: 8px;
+        font-size: 11px; font-weight: 600;
+        z-index: 9998; opacity: 0; transition: opacity 0.25s;
+        pointer-events: none;
+      `;
+      document.body.appendChild(hint);
+    }
+    hint.textContent = '✓ Rascunho salvo';
+    hint.style.opacity = '1';
+    clearTimeout(this._hintTimer);
+    this._hintTimer = setTimeout(() => { hint.style.opacity = '0'; }, 1600);
   }
 
   _initFormData() {
@@ -306,7 +389,7 @@ export class HealthFormScreen extends BaseScreen {
 
     wrap.appendChild(this._textField('fullName', 'Nome completo', 'Ex: Maria da Silva', aiFields.has('fullName')));
     wrap.appendChild(this._dateField('birthDate', 'Data de nascimento', aiFields.has('birthDate')));
-    wrap.appendChild(this._radioGroup('gender', 'Sexo', ['Feminino', 'Masculino'], aiFields.has('gender')));
+    wrap.appendChild(this._radioGroup('gender', 'Sexo', GENDER_OPTIONS, aiFields.has('gender')));
 
     const measureRow = DOM.create('div');
     measureRow.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;';
@@ -344,6 +427,7 @@ export class HealthFormScreen extends BaseScreen {
         } else {
           this.formData.diagnostics = this.formData.diagnostics.filter(d => d !== opt);
         }
+        this._scheduleDraftSave();
       });
       row.appendChild(cb);
       row.appendChild(document.createTextNode(opt));
@@ -561,7 +645,10 @@ export class HealthFormScreen extends BaseScreen {
   _textField(key, label, placeholder = '', aiPrefilled = false) {
     const wrap = this._inputWrap(key, label, aiPrefilled);
     const input = this._styledInput('text', this.formData[key] || '', placeholder, aiPrefilled);
-    input.addEventListener('input', () => this.formData[key] = input.value);
+    input.addEventListener('input', () => {
+      this.formData[key] = input.value;
+      this._scheduleDraftSave();
+    });
     wrap.appendChild(input);
     return wrap;
   }
@@ -570,7 +657,10 @@ export class HealthFormScreen extends BaseScreen {
     const wrap = this._inputWrap(key, label, aiPrefilled);
     const input = this._styledInput('text', this.formData[key] || '', placeholder, aiPrefilled);
     input.inputMode = 'decimal';
-    input.addEventListener('input', () => this.formData[key] = input.value);
+    input.addEventListener('input', () => {
+      this.formData[key] = input.value;
+      this._scheduleDraftSave();
+    });
     wrap.appendChild(input);
     return wrap;
   }
@@ -578,7 +668,10 @@ export class HealthFormScreen extends BaseScreen {
   _dateField(key, label, aiPrefilled = false) {
     const wrap = this._inputWrap(key, label, aiPrefilled);
     const input = this._styledInput('date', this.formData[key] || '', '', aiPrefilled);
-    input.addEventListener('change', () => this.formData[key] = input.value);
+    input.addEventListener('change', () => {
+      this.formData[key] = input.value;
+      this._scheduleDraftSave();
+    });
     wrap.appendChild(input);
     return wrap;
   }
@@ -599,7 +692,10 @@ export class HealthFormScreen extends BaseScreen {
     `;
     ta.addEventListener('focus', () => ta.style.borderColor = '#f0059a');
     ta.addEventListener('blur', () => ta.style.borderColor = 'rgba(255,255,255,0.1)');
-    ta.addEventListener('input', () => this.formData[key] = ta.value);
+    ta.addEventListener('input', () => {
+      this.formData[key] = ta.value;
+      this._scheduleDraftSave();
+    });
     wrap.appendChild(ta);
     return wrap;
   }
@@ -631,6 +727,7 @@ export class HealthFormScreen extends BaseScreen {
           });
           row.style.borderColor = 'rgba(240,5,154,0.35)';
           row.style.background = 'rgba(240,5,154,0.06)';
+          this._scheduleDraftSave();
         }
       });
       if (rb.checked) {
@@ -671,6 +768,7 @@ export class HealthFormScreen extends BaseScreen {
         btn.style.borderColor = '#f0059a';
         btn.style.background = 'rgba(240,5,154,0.12)';
         btn.style.color = '#f0059a';
+        this._scheduleDraftSave();
       });
       row.appendChild(btn);
     });
@@ -709,6 +807,7 @@ export class HealthFormScreen extends BaseScreen {
         b.style.borderColor = '#f0059a';
         b.style.background = '#f0059a';
         b.style.color = 'white';
+        this._scheduleDraftSave();
       });
       btns.appendChild(b);
     });
@@ -741,10 +840,11 @@ export class HealthFormScreen extends BaseScreen {
           { key: 'time', ph: 'Horário' },
         ];
         fields.forEach(f => {
-          const inp = this._styledInput('text', med[f] || '', f.ph, false);
+          const inp = this._styledInput('text', med[f.key] || '', f.ph, false);
           inp.style.marginBottom = '0';
           inp.addEventListener('input', () => {
             this.formData.medications[i][f.key] = inp.value;
+            this._scheduleDraftSave();
           });
           row.appendChild(inp);
         });
@@ -754,6 +854,7 @@ export class HealthFormScreen extends BaseScreen {
         removeBtn.addEventListener('click', () => {
           this.formData.medications.splice(i, 1);
           renderRows();
+          this._scheduleDraftSave();
         });
         row.appendChild(removeBtn);
         table.appendChild(row);
@@ -768,6 +869,7 @@ export class HealthFormScreen extends BaseScreen {
     addBtn.addEventListener('click', () => {
       this.formData.medications.push({ name: '', dose: '', time: '' });
       renderRows();
+      this._scheduleDraftSave();
     });
     wrap.appendChild(addBtn);
     return wrap;
@@ -776,29 +878,53 @@ export class HealthFormScreen extends BaseScreen {
   // ─── NAVEGAÇÃO E SUBMIT ────────────────────────────────────
 
   _goToSection(index) {
+    // Salva rascunho antes de navegar entre seções
+    this._scheduleDraftSave();
     this.currentSection = index;
     this.container.innerHTML = '';
     this.container.appendChild(this.render());
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   _validateRequiredFields() {
+    // requiredMap inclui em qual seção está cada campo, para navegação automática
     const requiredMap = [
-      { key: 'fullName', label: 'Nome completo' },
-      { key: 'birthDate', label: 'Data de nascimento' },
-      { key: 'weight', label: 'Peso' },
-      { key: 'height', label: 'Altura' },
+      { key: 'fullName',  label: 'Nome completo',        section: 0 },
+      { key: 'birthDate', label: 'Data de nascimento',   section: 0 },
+      { key: 'gender',    label: 'Sexo',                 section: 0 },
+      { key: 'weight',    label: 'Peso',                 section: 0 },
+      { key: 'height',    label: 'Altura',               section: 0 },
     ];
 
     for (const field of requiredMap) {
       const value = String(this.formData[field.key] || '').trim();
       if (!value) {
         this._showErrorToast(`Por favor, preencha: ${field.label}`);
+        if (Number.isInteger(field.section) && field.section !== this.currentSection) {
+          this._goToSection(field.section);
+        }
+        return false;
+      }
+    }
+
+    // Validações de tipo numérico (campos críticos)
+    const numericFields = [
+      { key: 'weight', label: 'Peso', section: 0, min: 20, max: 400 },
+      { key: 'height', label: 'Altura', section: 0, min: 80, max: 250 },
+    ];
+    for (const f of numericFields) {
+      const raw = String(this.formData[f.key] || '').replace(',', '.').trim();
+      const n = parseFloat(raw);
+      if (Number.isNaN(n) || n < f.min || n > f.max) {
+        this._showErrorToast(`${f.label} inválido. Informe um número entre ${f.min} e ${f.max}.`);
+        if (f.section !== this.currentSection) this._goToSection(f.section);
         return false;
       }
     }
 
     if (!Array.isArray(this.formData.diagnostics) || this.formData.diagnostics.length === 0) {
-      this._showErrorToast('Selecione ao menos 1 diagnóstico.');
+      this._showErrorToast('Selecione ao menos 1 diagnóstico (ou "Nenhum" se não houver).');
+      if (this.currentSection !== 1) this._goToSection(1);
       return false;
     }
 
@@ -808,15 +934,26 @@ export class HealthFormScreen extends BaseScreen {
   async _submitForm() {
     if (!this._validateRequiredFields()) return;
     if (this.isSaving) return;
+    if (!this.uid) {
+      this._showErrorToast('Sessão expirou. Faça login novamente para enviar o formulário.');
+      return;
+    }
     this.isSaving = true;
 
     const submitBtn = this._submitBtn;
     const restoreBtn = submitBtn ? UIComponents.setButtonLoading(submitBtn, 'Salvando...') : null;
 
+    // Cancela qualquer auto-save pendente — vamos gravar como completed agora
+    if (this._draftSaveTimer) {
+      clearTimeout(this._draftSaveTimer);
+      this._draftSaveTimer = null;
+    }
+
     try {
+      const payload = this._cleanFormDataForSave();
       const saved = await firestoreService.saveHealthForm(
         this.uid,
-        this.formData,
+        payload,
         { aiPrefilled: this.isAiPrefilled, completed: true }
       );
 
@@ -828,9 +965,13 @@ export class HealthFormScreen extends BaseScreen {
           type: 'success',
         });
         this._showSuccessToast();
+        // Após save, status mudou para awaiting_menu_form — vamos para a tela
+        // de espera correspondente, deixando o app rotear via watcher.
         setTimeout(() => {
-          this.params.onNavigate?.('dashboard');
+          this.params.onNavigate?.('awaiting', { status: 'awaiting_menu_form' });
         }, 2000);
+      } else {
+        this._showErrorToast('Não foi possível salvar. Tente novamente.');
       }
     } catch (e) {
       console.error('[HealthForm] submit error:', e);
@@ -871,9 +1012,32 @@ export class HealthFormScreen extends BaseScreen {
     setTimeout(() => t.remove(), 4000);
   }
 
-  mount() {
+  async mount() {
     this.container = DOM.byId('app');
     this.container.innerHTML = '';
+    // Mostra placeholder enquanto carrega o rascunho do Firestore
+    const loading = DOM.create('div');
+    loading.style.cssText = 'min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--color-muted);font-size:13px;';
+    loading.textContent = 'Carregando…';
+    this.container.appendChild(loading);
+    await this._loadDraft();
+    // Guard contra race: destroy() pode ter sido chamado durante o await.
+    if (this._destroyed) return;
+    this.container.innerHTML = '';
     this.container.appendChild(this.render());
+  }
+
+  destroy() {
+    this._destroyed = true;
+    if (this._draftSaveTimer) {
+      clearTimeout(this._draftSaveTimer);
+      this._draftSaveTimer = null;
+    }
+    if (this._hintTimer) {
+      clearTimeout(this._hintTimer);
+      this._hintTimer = null;
+    }
+    const hint = document.getElementById('draft-saved-hint');
+    if (hint) hint.remove();
   }
 }

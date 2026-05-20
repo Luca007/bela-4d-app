@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TEST — Chat</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/dashboard.css">
+  <link rel="stylesheet" href="/assets/css/chat.css">
+  <link rel="stylesheet" href="/assets/css/recipes.css">
+  <link rel="stylesheet" href="/assets/css/food-search.css">
+  <link rel="stylesheet" href="/assets/css/gamification.css">
+  <link rel="stylesheet" href="/assets/css/forms.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+      "/assets/js/services/auth.js": "/test/mocks/auth.js",
+      "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+      "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+    }
+  }
+  </script>
+  <style>
+    body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', system-ui, sans-serif; margin: 0; }
+    #app { width: 100%; min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    import { ChatScreen } from '/assets/js/screens/chat.js';
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+    window.__screen = new ChatScreen({ onNavigate: (...a) => console.log('[NAV]', a) });
+    (async () => {
+      try {
+        // ChatScreen.mount() overrides BaseScreen.mount and doesn't call super,
+        // so we manually wire up the container + first render here.
+        const app = document.getElementById('app');
+        window.__screen.container = app;
+        const el = window.__screen.render();
+        app.innerHTML = '';
+        app.appendChild(el);
+        await window.__screen.mount();
+      } catch (e) { console.error('[TEST] chat mount err', e); document.getElementById('app').innerHTML = '<pre style="color:#fff;padding:20px;font-size:11px;">ERROR: ' + (e.message || e) + '</pre>'; }
+      window.__ready = true;
+    })();
+  </script>
+</body>
+</html>

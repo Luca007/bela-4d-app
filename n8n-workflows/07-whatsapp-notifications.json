@@ -1,5 +1,5 @@
 {
-  "name": "07 - WhatsApp Notifications (4D)",
+  "name": "4D - WhatsApp Notification",
   "nodes": [
     {
       "parameters": {
@@ -13,7 +13,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [240, 300],
-      "webhookId": "4d-send-whatsapp-notification"
+      "webhookId": "4d-send-whatsapp-notification",
+      "notes": "Caller: Firebase Functions sendWhatsAppNotification (callN8nWithRetry, sync). Payload: {uid, patient{uid,name,phone,email,status}, notification{title,message,type,priority,metadata}, timestamp}."
     },
     {
       "parameters": {
@@ -38,7 +39,7 @@
         "respondWith": "json",
         "responseBody": "={{ { success: false, error: 'unauthorized' } }}",
         "options": {
-          "responseCode": 403
+          "responseCode": 401
         }
       },
       "id": "unauthorized-response",
@@ -49,41 +50,76 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nconst uid = body.uid;\nconst phone = body.patient?.phone || body.phone;\nconst title = body.notification?.title || body.title || 'Atualização do Programa 4D';\nconst message = body.notification?.message || body.message || '';\nconst type = body.notification?.type || body.type || 'manual';\nconst priority = body.notification?.priority || body.priority || 'normal';\nconst actionUrl = body.notification?.actionUrl || body.actionUrl || '';\n\nif (!uid || !phone || !message) {\n  throw new Error('uid, phone e message são obrigatórios');\n}\n\n// Valida formato E.164 brasileiro\nconst phoneRegex = /^\\+55\\d{10,11}$/;\nif (!phoneRegex.test(phone)) {\n  throw new Error(`Telefone inválido: ${phone}. Esperado: +55XXXXXXXXXXX`);\n}\n\n// Formata mensagem WhatsApp (max 1000 chars)\nlet formatted = `🌸 *${title}*\\n\\n${message}`;\nif (actionUrl) formatted += `\\n\\n👉 ${actionUrl}`;\nif (formatted.length > 1000) formatted = formatted.substring(0, 997) + '...';\n\nreturn [{ json: { uid, phone, title, message: formatted, type, priority, actionUrl, timestamp: new Date().toISOString() } }];"
+        "values": {
+          "string": [
+            { "name": "uid", "value": "={{ $json.body.uid }}" },
+            { "name": "phoneRaw", "value": "={{ $json.body.patient?.phone || '' }}" },
+            { "name": "phone", "value": "={{ ($json.body.patient?.phone || '').replace(/[^0-9+]/g, '') }}" },
+            { "name": "title", "value": "={{ $json.body.notification?.title || 'Atualização do Programa 4D' }}" },
+            { "name": "message", "value": "={{ $json.body.notification?.message || '' }}" },
+            { "name": "type", "value": "={{ $json.body.notification?.type || 'manual' }}" },
+            { "name": "priority", "value": "={{ $json.body.notification?.priority || 'normal' }}" },
+            { "name": "actionUrl", "value": "={{ $json.body.notification?.metadata?.actionUrl || '' }}" },
+            { "name": "formattedMessage", "value": "={{ ('🌸 *' + ($json.body.notification?.title || 'Atualização do Programa 4D') + '*\\n\\n' + ($json.body.notification?.message || '') + (($json.body.notification?.metadata?.actionUrl) ? '\\n\\n👉 ' + $json.body.notification.metadata.actionUrl : '')).substring(0, 1000) }}" }
+          ]
+        },
+        "options": { "dotNotation": false }
       },
-      "id": "extract-validate",
-      "name": "Extrai e Valida Dados",
-      "type": "n8n-nodes-base.code",
+      "id": "set-extract",
+      "name": "Set: Extrai e Formata",
+      "type": "n8n-nodes-base.set",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [680, 300],
+      "notes": "Substitui Code antigo. Sanitiza telefone (só dígitos e +), monta mensagem WhatsApp truncada a 1000 chars."
     },
     {
       "parameters": {
         "conditions": {
-          "string": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.phone }}",
-              "operation": "isNotEmpty"
+              "id": "uid-present",
+              "leftValue": "={{ $json.uid }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            },
+            {
+              "id": "phone-e164",
+              "leftValue": "={{ $json.phone }}",
+              "rightValue": "^\\+55\\d{10,11}$",
+              "operator": { "type": "string", "operation": "regex" }
+            },
+            {
+              "id": "message-present",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
             }
-          ]
+          ],
+          "combinator": "and"
         }
       },
-      "id": "check-phone",
-      "name": "Telefone Válido?",
+      "id": "check-payload",
+      "name": "Payload Válido?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [900, 300]
+      "typeVersion": 2,
+      "position": [900, 300],
+      "notes": "Valida uid presente + phone formato E.164 BR (+55DDDNÚMERO) + message não vazia. Substitui validação que estava no Code."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'invalid-phone' } }}",
+        "responseBody": "={{ { success: false, error: 'invalid-payload', detail: { uid: $json.uid, phone: $json.phoneRaw, hasMessage: !!$json.message } } }}",
         "options": {
           "responseCode": 400
         }
       },
-      "id": "invalid-phone-response",
-      "name": "Resposta: Telefone Inválido",
+      "id": "invalid-payload-response",
+      "name": "Resposta: Payload Inválido",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [1120, 460]
@@ -94,52 +130,30 @@
         "nodeCredentialType": "twilioApi",
         "operation": "send",
         "from": "whatsapp:{{ $env.TWILIO_WHATSAPP_FROM }}",
-        "to": "whatsapp:{{ $json.phone }}",
-        "message": "={{ $json.message }}"
+        "to": "=whatsapp:{{ $json.phone }}",
+        "message": "={{ $json.formattedMessage }}"
       },
       "id": "send-whatsapp",
       "name": "Envia WhatsApp (Twilio)",
       "type": "n8n-nodes-base.twilio",
       "typeVersion": 1,
-      "position": [1120, 300],
+      "position": [1120, 240],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput",
       "credentials": {
         "twilioApi": {
           "id": "twilio-creds",
           "name": "Twilio WhatsApp"
         }
-      }
-    },
-    {
-      "parameters": {
-        "method": "PATCH",
-        "url": "=https://firestore.googleapis.com/v1/projects/{{ $env.FIREBASE_PROJECT_ID }}/databases/(default)/documents/users/{{ $('Extrai e Valida Dados').item.json.uid }}/notifications/{{ $now.toMillis() }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "oAuth2Api",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "fields",
-              "value": "={{ JSON.stringify({ status: { stringValue: 'sent' }, messageId: { stringValue: $json.sid || '' }, sentAt: { timestampValue: new Date().toISOString() } }) }}"
-            }
-          ]
-        },
-        "options": {}
       },
-      "id": "update-firestore-sent",
-      "name": "Atualiza Firestore: Enviado",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1340, 200],
-      "continueOnFail": true
+      "notes": "Justificativa: Twilio é nó nativo. Evolution API (alternativa local) exigiria HTTP raw — manter Twilio como padrão."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { success: true, messageId: $('Envia WhatsApp (Twilio)').item.json.sid, phone: $('Extrai e Valida Dados').item.json.phone, timestamp: $now.toISO() } }}",
+        "responseBody": "={{ { success: true, messageId: $json.sid, phone: $('Set: Extrai e Formata').item.json.phone, providerResponse: { sid: $json.sid, status: $json.status, dateCreated: $json.dateCreated }, timestamp: $now.toISO() } }}",
         "options": {
           "responseCode": 200
         }
@@ -148,21 +162,23 @@
       "name": "Resposta: Sucesso",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1560, 200]
+      "position": [1340, 200],
+      "notes": "Caller (sendWhatsAppNotification helper) grava result inteiro em providerResponse no Firestore."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { success: false, error: $input.first().json.error?.message || 'whatsapp-send-failed', phone: $('Extrai e Valida Dados').item.json.phone } }}",
+        "responseBody": "={{ { success: false, error: 'whatsapp-send-failed', detail: $json.error?.message || 'unknown', phone: $('Set: Extrai e Formata').item.json.phone } }}",
         "options": {
-          "responseCode": 500
+          "responseCode": 502
         }
       },
       "id": "error-response",
       "name": "Resposta: Erro de Envio",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1340, 460]
+      "position": [1340, 340],
+      "notes": "Chega aqui pela saída de erro do Twilio (onError=continueErrorOutput)."
     }
   ],
   "connections": {
@@ -173,32 +189,25 @@
     },
     "Valida Webhook Secret": {
       "main": [
-        [{ "node": "Extrai e Valida Dados", "type": "main", "index": 0 }],
+        [{ "node": "Set: Extrai e Formata", "type": "main", "index": 0 }],
         [{ "node": "Resposta: Não Autorizado", "type": "main", "index": 0 }]
       ]
     },
-    "Extrai e Valida Dados": {
+    "Set: Extrai e Formata": {
       "main": [
-        [{ "node": "Telefone Válido?", "type": "main", "index": 0 }]
+        [{ "node": "Payload Válido?", "type": "main", "index": 0 }]
       ]
     },
-    "Telefone Válido?": {
+    "Payload Válido?": {
       "main": [
         [{ "node": "Envia WhatsApp (Twilio)", "type": "main", "index": 0 }],
-        [{ "node": "Resposta: Telefone Inválido", "type": "main", "index": 0 }]
+        [{ "node": "Resposta: Payload Inválido", "type": "main", "index": 0 }]
       ]
     },
     "Envia WhatsApp (Twilio)": {
       "main": [
-        [{ "node": "Atualiza Firestore: Enviado", "type": "main", "index": 0 }]
-      ],
-      "error": [
+        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }],
         [{ "node": "Resposta: Erro de Envio", "type": "main", "index": 0 }]
-      ]
-    },
-    "Atualiza Firestore: Enviado": {
-      "main": [
-        [{ "node": "Resposta: Sucesso", "type": "main", "index": 0 }]
       ]
     }
   },
@@ -211,16 +220,29 @@
   "staticData": null,
   "tags": ["programa-4d", "whatsapp", "notificacoes"],
   "pinData": {},
+  "versionId": "a7b8c9d0-e1f2-a3b4-c5d6-e7f8a9b0c1d2",
+  "id": "whatsapp-notification-007",
   "_meta": {
-    "description": "Recebe pedidos de notificação do Firebase Functions e envia via WhatsApp Business (Twilio). Valida o webhook secret, o formato do telefone (+55XXXXXXXXXXX) e faz 3 tentativas automáticas em caso de falha. Atualiza status no Firestore após envio.",
+    "description": "Envia notificações WhatsApp via Twilio. Valida X-Webhook-Secret, sanitiza telefone, valida E.164 BR (+55DDDNÚMERO), formata mensagem com emoji+actionUrl, 3 retries com backoff. Resposta inclui providerResponse (sid, status) que é gravada no Firestore pelo caller.",
     "envVars": {
       "WEBHOOK_SECRET": "Mesmo valor de N8N_WEBHOOK_SECRET no Firebase Functions",
-      "TWILIO_WHATSAPP_FROM": "Ex: whatsapp:+14155238886 (número Twilio sandbox ou produção)",
-      "FIREBASE_PROJECT_ID": "Ex: bela-4d-app"
+      "TWILIO_WHATSAPP_FROM": "Número Twilio sandbox ou produção (sem prefixo whatsapp:)"
     },
     "credentials": {
       "twilioApi": "Criar em n8n → Credentials → Twilio API com Account SID e Auth Token"
     },
-    "importInstructions": "1. Importar este JSON no n8n (Workflows → Import). 2. Configurar credenciais Twilio. 3. Definir variáveis de ambiente. 4. Ativar o workflow."
+    "changelog_2026_05_20": [
+      "REFACTOR: nó Code (extrair+validar+formatar) substituído por Set + IF (regex E.164)",
+      "BUG FIX: removido nó Atualiza Firestore (HTTP raw com OAuth genérico) — caller (sendWhatsAppNotification helper) já grava providerResponse no Firestore com Admin SDK; este nó duplicava persistência",
+      "REFACTOR: error handling via Twilio onError=continueErrorOutput (era 'error' connection legacy)",
+      "FEATURE: sanitiza telefone removendo espaços/parênteses/traços antes de validar regex",
+      "FEATURE: actionUrl agora vem de notification.metadata.actionUrl (alinhado com payload do caller)",
+      "NAMING: workflow renomeado para '4D - WhatsApp Notification'"
+    ],
+    "follow_ups": [
+      "Considerar substituir Twilio por Evolution API self-hosted (justificaria nó HTTP raw — sem nó nativo no n8n)",
+      "Adicionar Wait + segunda tentativa se Twilio retornar status 'undelivered' após 30s (webhook do Twilio é fora de escopo aqui)"
+    ],
+    "importInstructions": "1. Importar este JSON no n8n. 2. Configurar credencial Twilio API. 3. Definir env WEBHOOK_SECRET e TWILIO_WHATSAPP_FROM. 4. NÃO ATIVAR — usuário ativa após verificar credenciais."
   }
 }

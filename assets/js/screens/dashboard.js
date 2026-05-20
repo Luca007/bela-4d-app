@@ -3,10 +3,22 @@ import { DOM, State } from '../utils/helpers.js';
 import { Colors } from '../config/colors.js';
 import { UIComponents } from '../modules/components.js';
 import { BaseScreen } from '../modules/navigator.js';
-import { NAV_ITEMS, SCREENS } from '../config/constants.js';
+import { SCREENS } from '../config/constants.js';
 import { authService } from '../services/auth.js';
 import { firestoreService } from '../services/firestore.js';
 import { createHeaderBar, createBreadcrumb, createStatusBadge } from './shared.js';
+
+// NAV_ITEMS local — a constante foi removida de constants.js (substituída por getNavItems()
+// que lê do Firestore). Esta tela legada (dashboard.js) mantém seu próprio array.
+const NAV_ITEMS = [
+  { id: 'home', label: 'Início', icon: 'home' },
+  { id: 'perfil', label: 'Meu Perfil', icon: 'user' },
+  { id: 'receitas', label: 'Receitas', icon: 'book-open' },
+  { id: 'avaliador', label: 'Avaliador', icon: 'utensils' },
+  { id: 'exames', label: 'Exames', icon: 'bar-chart-2' },
+  { id: 'ranking', label: 'Ranking', icon: 'trophy' },
+  { id: 'chat', label: 'Chat', icon: 'message-circle' },
+];
 
 export class DashboardScreen extends BaseScreen {
   constructor(params) {

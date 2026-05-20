@@ -10,7 +10,9 @@ import {
   ONBOARDING_STEPS,
   DIAGNOSTIC_OPTIONS,
   GENDER_OPTIONS,
-  ACTIVITY_LEVELS
+  ACTIVITY_LEVELS,
+  SCREENS,
+  USER_STATUS
 } from '../config/constants.js';
 import { notificationService } from '../modules/notifications.js';
 
@@ -18,21 +20,24 @@ export class OnboardingScreen extends BaseScreen {
   constructor(params) {
     super(params);
     this.currentStep = 0;
+    this._autoSaveTimer = null;
+    this._draftKey = 'bela4d_onboarding_draft';
+    this._restoreDraft();
     this.formData = {
-      name: 'Maria Silva',
-      birthDate: '1990-05-15',
-      gender: 'Feminino',
-      weight: '75',
-      height: '165',
-      waist: '82',
-      diagnostics: ['Diabetes tipo 2', 'Hipertensão arterial'],
-      otherConditions: 'Nenhuma',
-      medications: 'Metformina',
-      glucose: '145',
-      hba1c: '7.2',
+      name: '',
+      birthDate: '',
+      gender: '',
+      weight: '',
+      height: '',
+      waist: '',
+      diagnostics: [],
+      otherConditions: '',
+      medications: '',
+      glucose: '',
+      hba1c: '',
       sleep: 3,
       stress: 2,
-      activity: 'Regular 3 a 4× por semana'
+      activity: ''
     };
   }
 
@@ -94,39 +99,101 @@ export class OnboardingScreen extends BaseScreen {
     
     this.stepContent = stepContent;
     this.nextBtn = nextBtn;
-    
+
+    // Sincroniza rascunho do Firestore (se mais recente que localStorage)
+    this._syncDraftFromFirestore();
+
     return screen;
   }
 
   createProgressSteps() {
     const container = DOM.create('div', 'progress-steps');
+    DOM.setStyle(container, {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+      gap: '0',
+      marginBottom: '20px',
+      flexWrap: 'nowrap',
+      padding: '0',
+    });
     
     ONBOARDING_STEPS.forEach((step, index) => {
       const stepEl = DOM.create('div', 'step');
+      DOM.setStyle(stepEl, {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        flex: '1',
+        minWidth: '0',
+        position: 'relative',
+      });
       if (index === this.currentStep) stepEl.classList.add('active');
       if (index < this.currentStep) stepEl.classList.add('completed');
       
       const circle = DOM.create('div', 'step-circle');
+      DOM.setStyle(circle, {
+        width: '32px', height: '32px',
+        borderRadius: '50%',
+        background: index <= this.currentStep
+          ? `linear-gradient(135deg, ${Colors.pink}, #c0027c)`
+          : 'rgba(255,255,255,0.06)',
+        border: `2px solid ${index <= this.currentStep ? Colors.pink : Colors.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: index <= this.currentStep ? '#fff' : Colors.muted,
+        fontWeight: '700', fontSize: '13px',
+        flexShrink: '0',
+        marginBottom: '6px',
+        boxShadow: index <= this.currentStep ? `0 0 12px ${Colors.pinkGlow}` : 'none',
+        zIndex: '1',
+      });
       if (index < this.currentStep) {
         circle.innerHTML = '✓';
-        circle.style.display = 'flex';
-        circle.style.alignItems = 'center';
-        circle.style.justifyContent = 'center';
+        circle.style.fontSize = '14px';
       } else {
         circle.textContent = index + 1;
       }
       
       const label = DOM.create('span', 'step-label');
       label.textContent = step;
+      DOM.setStyle(label, {
+        color: index === this.currentStep ? Colors.pinkLight : Colors.muted,
+        fontSize: '11px',
+        fontWeight: index === this.currentStep ? '700' : '500',
+        textAlign: 'center',
+        lineHeight: '1.3',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        padding: '0 2px',
+      });
+      
+      // Linha conectora entre steps
+      const lineWrapper = DOM.create('div');
+      DOM.setStyle(lineWrapper, {
+        display: 'flex', alignItems: 'center',
+        flex: index < ONBOARDING_STEPS.length - 1 ? '1' : '0',
+        minWidth: index < ONBOARDING_STEPS.length - 1 ? '16px' : '0',
+        maxWidth: index < ONBOARDING_STEPS.length - 1 ? '40px' : '0',
+        margin: '0 2px',
+      });
+      if (index < ONBOARDING_STEPS.length - 1) {
+        const line = DOM.create('div', 'step-line');
+        DOM.setStyle(line, {
+          width: '100%', height: '2px',
+          background: index < this.currentStep ? Colors.pink : Colors.border,
+          borderRadius: '1px',
+          marginBottom: '22px',
+        });
+        lineWrapper.appendChild(line);
+      }
       
       stepEl.appendChild(circle);
       stepEl.appendChild(label);
       container.appendChild(stepEl);
-      
       if (index < ONBOARDING_STEPS.length - 1) {
-        const line = DOM.create('div', 'step-line');
-        if (index < this.currentStep) line.style.background = Colors.pink;
-        container.appendChild(line);
+        container.appendChild(lineWrapper);
       }
     });
     
@@ -178,14 +245,21 @@ export class OnboardingScreen extends BaseScreen {
     // Name
     const nameLabel = UIComponents.label('Nome completo');
     const nameInput = UIComponents.textInput('Seu nome completo', this.formData.name);
-    nameInput.addEventListener('input', (e) => this.formData.name = e.target.value);
+    nameInput.addEventListener('input', (e) => { this.formData.name = e.target.value; this._onFieldChange(); });
     container.appendChild(nameLabel);
     container.appendChild(nameInput);
     
     // Birth Date
     const dateLabel = UIComponents.label('Data de nascimento');
-    const dateInput = UIComponents.textInput('DD/MM/AAAA', this.formData.birthDate);
-    dateInput.addEventListener('input', (e) => this.formData.birthDate = e.target.value);
+    const today = new Date();
+    const minDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+    const maxDate = new Date(today.getFullYear() - 13, today.getMonth(), today.getDate());
+    const fmtIso = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const dateInput = UIComponents.dateInput(this.formData.birthDate, {
+      min: fmtIso(minDate),
+      max: fmtIso(maxDate),
+    });
+    dateInput.addEventListener('change', (e) => { this.formData.birthDate = e.target.value; this._onFieldChange(); });
     container.appendChild(dateLabel);
     container.appendChild(dateInput);
     
@@ -208,8 +282,8 @@ export class OnboardingScreen extends BaseScreen {
       
       btn.addEventListener('click', () => {
         this.formData.gender = gender;
-        this.element.querySelector('.onboarding-content').innerHTML = '';
-        this.render();
+        this._onFieldChange();
+        this.mount();
       });
       
       genderContainer.appendChild(btn);
@@ -232,7 +306,7 @@ export class OnboardingScreen extends BaseScreen {
       const fieldContainer = DOM.create('div');
       const label = UIComponents.label(field.label);
       const input = UIComponents.numberInput(field.placeholder, this.formData[field.key]);
-      input.addEventListener('input', (e) => this.formData[field.key] = e.target.value);
+      input.addEventListener('input', (e) => { this.formData[field.key] = e.target.value; this._onFieldChange(); });
       fieldContainer.appendChild(label);
       fieldContainer.appendChild(input);
       measurementsGrid.appendChild(fieldContainer);
@@ -285,8 +359,8 @@ export class OnboardingScreen extends BaseScreen {
         } else {
           this.formData.diagnostics.push(diagnostic);
         }
-        this.element.querySelector('.onboarding-content').innerHTML = '';
-        this.render();
+        this._onFieldChange();
+        this.mount();
       });
       
       diagGrid.appendChild(btn);
@@ -297,14 +371,14 @@ export class OnboardingScreen extends BaseScreen {
     // Other Conditions
     const otherLabel = UIComponents.label('Outras condições — escreva com suas palavras');
     const otherInput = UIComponents.textarea('Ex: Tenho refluxo, sofri cirurgia em 2022...', this.formData.otherConditions);
-    otherInput.addEventListener('input', (e) => this.formData.otherConditions = e.target.value);
+    otherInput.addEventListener('input', (e) => { this.formData.otherConditions = e.target.value; this._onFieldChange(); });
     container.appendChild(otherLabel);
     container.appendChild(otherInput);
     
     // Medications
     const medLabel = UIComponents.label('Medicamentos e suplementos contínuos');
     const medInput = UIComponents.textarea('Ex: Metformina 850mg — 2x ao dia', this.formData.medications);
-    medInput.addEventListener('input', (e) => this.formData.medications = e.target.value);
+    medInput.addEventListener('input', (e) => { this.formData.medications = e.target.value; this._onFieldChange(); });
     container.appendChild(medLabel);
     container.appendChild(medInput);
   }
@@ -372,7 +446,7 @@ export class OnboardingScreen extends BaseScreen {
       input.style.color = Colors.pink;
       input.style.textAlign = 'center';
       input.style.padding = '12px 16px';
-      input.addEventListener('input', (e) => this.formData[field.key] = e.target.value);
+      input.addEventListener('input', (e) => { this.formData[field.key] = e.target.value; this._onFieldChange(); });
       
       const unitLabel = DOM.create('span');
       unitLabel.style.color = Colors.muted;
@@ -441,6 +515,7 @@ export class OnboardingScreen extends BaseScreen {
     input.addEventListener('input', (e) => {
       this.formData[slider.key] = parseInt(e.target.value);
       value.textContent = this.formData[slider.key];
+      this._onFieldChange();
     });
     card.appendChild(input);
 
@@ -484,8 +559,8 @@ export class OnboardingScreen extends BaseScreen {
 
       btn.addEventListener('click', () => {
         this.formData.activity = activity;
-        this.element.querySelector('.onboarding-content').innerHTML = '';
-        this.render();
+        this._onFieldChange();
+        this.mount();
       });
 
       actContainer.appendChild(btn);
@@ -580,6 +655,79 @@ export class OnboardingScreen extends BaseScreen {
     return container;
   }
 
+  // ─── Auto-save: persiste rascunho a cada mudança de campo ───
+
+  /** Disparado por todo campo ao mudar — debounce 1s */
+  _onFieldChange() {
+    if (this._autoSaveTimer) clearTimeout(this._autoSaveTimer);
+    this._autoSaveTimer = setTimeout(() => this._autoSave(), 1000);
+  }
+
+  /** Salva rascunho no Firestore (principal) + localStorage (fallback offline) */
+  async _autoSave() {
+    const user = authService.getCurrentUser();
+    if (!user) return;
+    const draft = { ...this.formData, _updatedAt: Date.now(), _step: this.currentStep };
+
+    // Sempre salva no localStorage (fallback offline)
+    try { localStorage.setItem(this._draftKey, JSON.stringify(draft)); } catch (_) {}
+
+    // Tenta salvar no Firestore
+    try {
+      await firestoreService.saveOnboardingDraft?.(user.uid, draft);
+    } catch (_) {
+      // Offline ou erro — localStorage já tem o backup
+    }
+  }
+
+  /** Restaura rascunho do Firestore (preferencial) ou localStorage (fallback) */
+  _restoreDraft() {
+    // Tenta localStorage primeiro (síncrono, funciona offline e antes do login)
+    try {
+      const local = localStorage.getItem(this._draftKey);
+      if (local) {
+        const draft = JSON.parse(local);
+        if (draft && typeof draft === 'object') {
+          Object.assign(this.formData, draft);
+          delete this.formData._updatedAt;
+          delete this.formData._step;
+          if (draft._step !== undefined && draft._step >= 0) this.currentStep = draft._step;
+        }
+      }
+    } catch (_) {}
+  }
+
+  /** Chamado no mount: tenta restaurar do Firestore se mais recente que localStorage */
+  async _syncDraftFromFirestore() {
+    const user = authService.getCurrentUser();
+    if (!user) return;
+    try {
+      const firestoreDraft = await firestoreService.getOnboardingDraft(user.uid);
+      if (!firestoreDraft || !firestoreDraft._updatedAt) return;
+      const local = (() => { try { return JSON.parse(localStorage.getItem(this._draftKey)); } catch (_) { return null; } })();
+      if (!local || !local._updatedAt || firestoreDraft._updatedAt > local._updatedAt) {
+        Object.assign(this.formData, firestoreDraft);
+        delete this.formData._updatedAt;
+        delete this.formData._step;
+        if (firestoreDraft._step !== undefined && firestoreDraft._step >= 0) {
+          this.currentStep = firestoreDraft._step;
+        }
+        // Atualiza localStorage com a versão mais recente
+        try { localStorage.setItem(this._draftKey, JSON.stringify({ ...this.formData, _updatedAt: firestoreDraft._updatedAt })); } catch (_) {}
+        this.mount(); // re-render
+      }
+    } catch (_) {}
+  }
+
+  /** Remove rascunho após submit bem-sucedido */
+  _clearDraft() {
+    try { localStorage.removeItem(this._draftKey); } catch (_) {}
+    const user = authService.getCurrentUser();
+    if (user) {
+      firestoreService.deleteOnboardingDraft?.(user.uid).catch(() => {});
+    }
+  }
+
   async nextStep() {
     if (!this._validateCurrentStep()) return;
 
@@ -634,13 +782,16 @@ export class OnboardingScreen extends BaseScreen {
       weight: 'Peso',
       height: 'Altura',
       diagnostics: 'Diagnóstico',
+      sleep: 'Qualidade do Sono',
+      stress: 'Nível de Estresse',
+      activity: 'Atividade Física',
     };
 
     const requiredByStep = [
       ['name', 'birthDate', 'gender', 'weight', 'height'], // step 0
       ['diagnostics'],                                       // step 1
-      [],                                                    // step 2 — optional
-      [],                                                    // step 3 — optional
+      [],                                                    // step 2 — opcional
+      ['sleep', 'stress', 'activity'],                       // step 3 — obrigatório
     ];
 
     const required = requiredByStep[this.currentStep] || [];
@@ -685,6 +836,9 @@ export class OnboardingScreen extends BaseScreen {
         throw new Error('Erro ao salvar dados');
       }
 
+      // Update user status to awaiting_onboarding
+      await firestoreService.updateUserStatus(user.uid, USER_STATUS.AWAITING_ONBOARDING);
+
       // Update user profile with onboarding status
       await firestoreService.saveUserProfile(user.uid, {
         onboardingCompleted: true,
@@ -696,9 +850,12 @@ export class OnboardingScreen extends BaseScreen {
       Session.set('onboardingData', this.formData);
       State.set('onboardingData', this.formData);
 
-      // Navigate to next screen
+      // Limpa rascunho (não precisa mais)
+      this._clearDraft();
+
+      // Navigate to awaiting screen (scheduling meeting)
       setTimeout(() => {
-        this.params.onNavigate('cardapio', this.formData);
+        this.params.onNavigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_ONBOARDING });
       }, 300);
     } catch (error) {
       console.error('Error completing onboarding:', error);

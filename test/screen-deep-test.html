@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><title>TEST — Deep</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <script type="importmap">
+  { "imports": {
+    "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+    "/assets/js/services/auth.js": "/test/mocks/auth.js",
+    "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+    "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+  } }
+  </script>
+  <style>body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', sans-serif; margin: 0; } #app { min-height: 50vh; } #r { padding: 12px; font-size: 12px; background: #111; color: #0f0; font-family: monospace; white-space: pre-wrap; }</style>
+</head>
+<body>
+  <div id="app"></div>
+  <pre id="r">…</pre>
+  <script type="module">
+    const r = document.getElementById('r'); const out = [];
+    const log = m => { out.push(m); r.textContent = out.join('\n'); };
+    const errs = [];
+    window.addEventListener('error', e => errs.push(`ERR ${e.message}`));
+    window.addEventListener('unhandledrejection', e => errs.push(`REJ ${e.reason?.message || e.reason}`));
+
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+
+    async function load(path, cls, params = {}) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      const mod = await import(path);
+      const Cls = mod[cls] || mod.default;
+      const screen = new Cls({ onNavigate: (target, p) => log(`  nav→${target} ${p ? JSON.stringify(p) : ''}`), ...params });
+      screen.element = screen.render?.();
+      if (screen.element) app.appendChild(screen.element);
+      if (screen.mount) await screen.mount();
+      await new Promise(r => setTimeout(r, 200));
+      return screen;
+    }
+
+    async function tap(selector, name) {
+      const el = document.querySelector(selector);
+      if (!el) { log(`  ✗ NOT FOUND: ${name} (${selector})`); return null; }
+      const eBefore = errs.length;
+      el.click();
+      await new Promise(r => setTimeout(r, 100));
+      const newErrs = errs.slice(eBefore);
+      if (newErrs.length) log(`  ✗ ${name}: ${newErrs[0]}`);
+      else log(`  ✓ ${name}`);
+      return el;
+    }
+    async function type(selector, val, name) {
+      const el = document.querySelector(selector);
+      if (!el) { log(`  ✗ NO INPUT: ${name}`); return; }
+      el.value = val;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 60));
+      log(`  ✓ typed ${name}="${val}"`);
+    }
+
+    (async () => {
+      // ────── LOGIN ──────
+      log('\n══ LOGIN ══');
+      const eBefore = errs.length;
+      await load('/assets/js/screens/login.js', 'LoginScreen');
+      await type('input[type="email"]', 'test@bela4d.com', 'email');
+      await type('input[type="password"]', '12345678', 'senha');
+      // Não clicar Entrar (faria nav); clicar "Esqueci"
+      const recoverLink = Array.from(document.querySelectorAll('button, a')).find(b => /esqueci/i.test(b.textContent));
+      if (recoverLink) {
+        recoverLink.click();
+        await new Promise(r => setTimeout(r, 150));
+        await type('input[placeholder*="email"]', 'reset@x.com', 'recover email');
+        const sendBtn = Array.from(document.querySelectorAll('button')).find(b => /enviar link/i.test(b.textContent));
+        if (sendBtn) { sendBtn.click(); await new Promise(r => setTimeout(r, 250)); log('  ✓ recover sent'); }
+        const cancelBtn = Array.from(document.querySelectorAll('button')).find(b => /cancelar/i.test(b.textContent));
+        if (cancelBtn) cancelBtn.click();
+      } else log('  ✗ no recover link');
+
+      // ────── ONBOARDING ──────
+      log('\n══ ONBOARDING ══');
+      const ob = await load('/assets/js/screens/onboarding.js', 'OnboardingScreen');
+      // Step 1 (Identificação): preencher campos obrigatórios e avançar
+      await type('input[name="name"], #name, [data-field="name"]', 'João da Silva', 'name');
+      await type('input[type="date"]', '1990-03-15', 'birthDate');
+      // Click gender Masculino
+      const masc = Array.from(document.querySelectorAll('button, label')).find(b => /^Masculino/.test(b.textContent.trim()));
+      if (masc) { masc.click(); log('  ✓ click Masculino'); }
+      await type('input[name="weight"], #weight', '78', 'weight');
+      await type('input[name="height"], #height', '175', 'height');
+      // Click "Próximo"
+      const nextBtn = Array.from(document.querySelectorAll('button')).find(b => /próximo/i.test(b.textContent));
+      if (nextBtn) { nextBtn.click(); await new Promise(r => setTimeout(r, 200)); log('  step now: ' + ob.currentStep); }
+      else log('  ✗ no Próximo button');
+
+      // ────── HEALTH FORM ──────
+      log('\n══ HEALTH FORM ══');
+      const hf = await load('/assets/js/screens/health-form.js', 'HealthFormScreen');
+      // Try to submit empty — should fail validation
+      const subBtn = Array.from(document.querySelectorAll('button')).find(b => /enviar|salvar|finalizar/i.test(b.textContent.trim()));
+      log('  submit btn label: ' + (subBtn ? subBtn.textContent.trim().slice(0, 40) : 'NONE'));
+      // navigate sections
+      const dots = document.querySelectorAll('[id^="health-form-section"]');
+      log('  sections rendered: ' + dots.length);
+
+      // ────── FORMS multi-step ──────
+      log('\n══ FORMS ══');
+      const fm = await load('/assets/js/screens/forms.js', 'FormsScreen');
+      log('  current step: ' + fm.currentFormStep);
+
+      // ────── CARDÁPIO ──────
+      log('\n══ CARDÁPIO ══');
+      const cd = await load('/assets/js/screens/cardapio.js', 'CardapioScreen');
+      // tap Perder peso
+      const objBtn = Array.from(document.querySelectorAll('button')).find(b => /perder peso/i.test(b.textContent));
+      if (objBtn) objBtn.click(); await new Promise(r => setTimeout(r, 50));
+      log('  objective: ' + cd.selectedObjective);
+      // tap allowed food
+      const fileBtn = Array.from(document.querySelectorAll('button')).find(b => /^Filé de frango/.test(b.textContent.trim()));
+      if (fileBtn) { fileBtn.click(); await new Promise(r => setTimeout(r, 50)); }
+      log('  selectedAllowed: ' + JSON.stringify(cd.selectedAllowed));
+
+      // ────── DASHBOARD V2 ──────
+      log('\n══ DASHBOARD V2 ══');
+      const dv = await load('/assets/js/screens/dashboard-v2.js', 'DashboardV2Screen');
+      log('  buttons: ' + document.querySelectorAll('button').length);
+      // Tap navigation tabs (bottom nav)
+      const navItems = document.querySelectorAll('[data-tab], .nav-item');
+      log('  nav items: ' + navItems.length);
+      for (let i = 0; i < Math.min(navItems.length, 7); i++) {
+        const tab = navItems[i];
+        const eb = errs.length;
+        tab.click();
+        await new Promise(r => setTimeout(r, 200));
+        const ne = errs.slice(eb);
+        log(`  tab[${i}] "${tab.dataset.tab || tab.textContent.trim().slice(0,15)}": ${ne.length ? '✗ '+ne[0] : '✓'}`);
+      }
+      // Open drawer
+      const drawerBtn = document.querySelector('#open-drawer-btn, [data-action="open-drawer"]');
+      if (drawerBtn) {
+        const eb = errs.length;
+        drawerBtn.click();
+        await new Promise(r => setTimeout(r, 200));
+        log('  drawer toggle: ' + (errs.slice(eb).length ? '✗' : '✓'));
+      }
+
+      // ────── CHAT ──────
+      log('\n══ CHAT ══');
+      await load('/assets/js/screens/chat.js', 'ChatScreen');
+      await type('input, textarea', 'Olá, posso comer banana?', 'mensagem');
+      const sendBtn = document.querySelector('[id*="send"], button[aria-label*="send"]');
+      const sendByText = Array.from(document.querySelectorAll('button')).find(b => /^(➤|enviar|send)/i.test(b.textContent.trim()));
+      const sb = sendBtn || sendByText;
+      if (sb) { sb.click(); await new Promise(r => setTimeout(r, 300)); log('  ✓ enviado'); }
+      else log('  ✗ no send button');
+
+      // ────── EXAM UPLOAD ──────
+      log('\n══ EXAM UPLOAD ══');
+      await load('/assets/js/screens/exam-upload.js', 'ExamUploadScreen');
+      log('  buttons: ' + document.querySelectorAll('button').length);
+      log('  file inputs: ' + document.querySelectorAll('input[type="file"]').length);
+
+      // ────── AWAITING + agendamento ──────
+      log('\n══ AWAITING (scheduling) ══');
+      const aw = await load('/assets/js/screens/awaiting.js', 'AwaitingScreen', { status: 'awaiting_onboarding' });
+      // Quick entry: digitar data e horário
+      const dt = new Date(); dt.setDate(dt.getDate() + 7);
+      while (dt.getDay() === 0 || dt.getDay() === 6) dt.setDate(dt.getDate() + 1);
+      const iso = dt.toISOString().slice(0, 10);
+      await type('#meeting-date-input', iso, 'quick date');
+      await type('#meeting-time-input', '10:30', 'quick time');
+      log('  selectedDate=' + aw.selectedDate + ' selectedTime=' + aw.selectedTime);
+      // Submit
+      await tap('#schedule-meeting-btn', 'Agendar reunião');
+      await new Promise(r => setTimeout(r, 400));
+      // Verify rendered confirmation
+      const h1 = document.querySelector('h1');
+      log('  after submit h1: ' + (h1?.textContent || 'NONE'));
+
+      // ────── DONE ──────
+      log('\n══ TOTAL JS ERRORS: ' + errs.length + ' ══');
+      errs.forEach((e, i) => log(`  [${i}] ${e}`));
+      window.__done = true;
+    })();
+  </script>
+</body>
+</html>

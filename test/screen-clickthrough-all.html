@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>TEST — Click All Screens</title>
+  <link rel="stylesheet" href="/assets/css/reset.css">
+  <link rel="stylesheet" href="/assets/css/variables.css">
+  <link rel="stylesheet" href="/assets/css/animations.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <script type="importmap">
+  { "imports": {
+    "/assets/js/services/firestore.js": "/test/mocks/firestore.js",
+    "/assets/js/services/auth.js": "/test/mocks/auth.js",
+    "/assets/js/services/n8n.js": "/test/mocks/n8n.js",
+    "/assets/js/modules/notifications.js": "/test/mocks/notifications.js"
+  } }
+  </script>
+  <style>body { background: var(--color-bg); color: var(--color-text); font-family: 'DM Sans', sans-serif; margin: 0; padding: 12px; } #app { min-height: 50vh; } #report { padding: 12px; font-size: 13px; line-height: 1.6; max-width: 720px; background: #111; color: #0f0; border-radius: 8px; margin-top: 12px; white-space: pre-wrap; font-family: monospace; }</style>
+</head>
+<body>
+  <div id="app"></div>
+  <pre id="report">Loading…</pre>
+  <script type="module">
+    const report = document.getElementById('report');
+    const out = [];
+    const log = (m) => { out.push(m); report.textContent = out.join('\n'); console.log(m); };
+    const errors = [];
+    window.addEventListener('error', e => { errors.push(`${e.message} @ ${e.filename}:${e.lineno}`); });
+    window.addEventListener('unhandledrejection', e => { errors.push(`Promise: ${e.reason}`); });
+
+    import { Session, State } from '/assets/js/utils/helpers.js';
+    Session.set('userId', 'test-user-uid-123');
+    State.set('currentUser', { uid: 'test-user-uid-123', email: 'test@bela4d.com' });
+
+    async function testScreen(name, importPath, className, screenParams = {}) {
+      log(`\n=== ${name} ===`);
+      const errorsBefore = errors.length;
+      try {
+        const mod = await import(importPath);
+        const Cls = mod[className] || mod.default;
+        if (!Cls) { log(`  FAIL: class ${className} not exported`); return; }
+        const app = document.getElementById('app');
+        app.innerHTML = '';
+        const screen = new Cls({ onNavigate: (...a) => log('  → nav: ' + JSON.stringify(a)), ...screenParams });
+        screen.element = screen.render?.();
+        if (screen.element) app.appendChild(screen.element);
+        if (screen.mount) await screen.mount();
+        await new Promise(r => setTimeout(r, 200));
+        const buttons = app.querySelectorAll('button:not([disabled])');
+        const inputs = app.querySelectorAll('input, select, textarea');
+        log(`  rendered: ${app.children.length} children`);
+        log(`  buttons: ${buttons.length} | inputs: ${inputs.length}`);
+        // Test click on each button without navigating away
+        let clickErrors = 0;
+        for (let i = 0; i < Math.min(buttons.length, 5); i++) {
+          const b = buttons[i];
+          try {
+            const labelText = (b.textContent || b.title || b.id || '').slice(0, 30).trim();
+            b.click();
+            log(`  click[${i}] "${labelText}" OK`);
+          } catch (e) {
+            log(`  click[${i}] FAIL: ${e.message}`);
+            clickErrors++;
+          }
+          await new Promise(r => setTimeout(r, 30));
+        }
+        screen.destroy?.();
+        const newErrs = errors.slice(errorsBefore);
+        if (newErrs.length) {
+          newErrs.forEach(e => log(`  ERR: ${e}`));
+        } else {
+          log(`  ✅ no JS errors`);
+        }
+      } catch (e) {
+        log(`  IMPORT/RENDER FAIL: ${e.message}`);
+        log(`  stack: ${e.stack?.split('\n').slice(0, 3).join(' | ')}`);
+      }
+    }
+
+    (async () => {
+      await testScreen('Login',          '/assets/js/screens/login.js',       'LoginScreen');
+      await testScreen('Onboarding',     '/assets/js/screens/onboarding.js',  'OnboardingScreen');
+      await testScreen('HealthForm',     '/assets/js/screens/health-form.js', 'HealthFormScreen');
+      await testScreen('Forms',          '/assets/js/screens/forms.js',       'FormsScreen');
+      await testScreen('ExamUpload',     '/assets/js/screens/exam-upload.js', 'ExamUploadScreen');
+      await testScreen('Cardapio',       '/assets/js/screens/cardapio.js',    'CardapioScreen');
+      await testScreen('Chat',           '/assets/js/screens/chat.js',        'ChatScreen');
+      await testScreen('Dashboard',      '/assets/js/screens/dashboard.js',   'DashboardScreen');
+      await testScreen('DashboardV2',    '/assets/js/screens/dashboard-v2.js','DashboardV2Screen');
+      await testScreen('Awaiting',       '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'awaiting_onboarding' });
+      await testScreen('Awaiting/exam',  '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'pending_blood_test' });
+      await testScreen('Awaiting/req',   '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'exam_request_sent', examRequest: { id: 'r1', fileUrl: '#' } });
+      await testScreen('Awaiting/proc',  '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'processing_blood_test' });
+      await testScreen('Awaiting/menu',  '/assets/js/screens/awaiting.js',    'AwaitingScreen', { status: 'awaiting_menu_form' });
+      log('\n=== DONE ===');
+      log('Total JS errors: ' + errors.length);
+      window.__done = true;
+    })();
+  </script>
+</body>
+</html>
