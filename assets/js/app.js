@@ -60,7 +60,10 @@ class App {
           if (this._currentScreenId === SCREENS.ONBOARDING) return;
           this.navigate(SCREENS.ONBOARDING);
         } else {
-          // Onboarding já feito → agendar reunião
+          // Onboarding já feito → tela de agendar reunião (Google Calendar).
+          // Trava: se já estamos no awaiting, NÃO re-rotear (evita flash
+          // e re-mount da tela após login → handleAuthStateChange).
+          if (this._currentScreenId === SCREENS.AWAITING) return;
           this.navigate(SCREENS.AWAITING, { status: USER_STATUS.AWAITING_ONBOARDING });
         }
       },
@@ -128,6 +131,31 @@ class App {
   }
 
   async navigate(screenId, params = {}) {
+    // ─────────────────────────────────────────────────────────────────────
+    // Trava de segurança: usuários cujo status não é 'active' NÃO podem
+    // acessar o dashboard. Isso protege contra:
+    //   1. Telas legadas (ex.: login.js) que navegavam manualmente para
+    //      dashboard sem consultar o status real do usuário.
+    //   2. Race conditions onde o State.userProfile chega antes do
+    //      routeByStatus terminar.
+    //   3. Tentativas de manipular o cliente para pular etapas do fluxo.
+    //
+    // O acesso ao dashboard só é liberado quando o ADMIN ajusta
+    // manualmente o status no Firestore (após reunião de onboarding etc.).
+    // ─────────────────────────────────────────────────────────────────────
+    if (screenId === SCREENS.DASHBOARD) {
+      const profile = State.get('userProfile');
+      const status = profile?.status;
+      if (status && status !== USER_STATUS.ACTIVE) {
+        console.warn(`[App] Navegação para dashboard bloqueada — status: ${status}. Redirecionando via routeByStatus.`);
+        const uid = Session.get?.('userId') || this.currentUser?.uid;
+        if (uid) {
+          await this.routeByStatus(uid);
+          return;
+        }
+      }
+    }
+
     const ScreenClass = await this._loadScreen(screenId);
     if (!ScreenClass) {
       console.error(`[App] Screen not found: ${screenId}`);

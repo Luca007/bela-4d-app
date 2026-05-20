@@ -34,6 +34,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
 import { getLevels, getAchievementsCatalog, getXpEvents as getXpEventsFromConfig } from '../config/constants.js';
+import { State } from '../utils/helpers.js';
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -276,6 +277,14 @@ export class FirestoreService {
   /** Atualiza só o status do usuário */
   async updateUserStatus(uid, status) {
     this._cacheDelete(`profile_${uid}`);
+    // Sincroniza State.userProfile local — necessário para que a trava
+    // anti-bypass em app.navigate() (que bloqueia dashboard se
+    // status !== 'active') receba o status atualizado imediatamente,
+    // sem precisar esperar um round-trip no Firestore.
+    try {
+      const profile = State.get?.('userProfile') || {};
+      State.set?.('userProfile', { ...profile, status });
+    } catch (_) { /* State pode não estar inicializado em contextos isolados */ }
     return this._run(async () => {
       await updateDoc(this.userRef(uid), { status, updatedAt: serverTimestamp() });
       return true;

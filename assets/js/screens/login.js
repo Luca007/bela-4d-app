@@ -361,19 +361,30 @@ export class LoginScreen extends BaseScreen {
       const result = await authService.login(this.email, this.password);
 
       if (result.success) {
-        const userProfile = await firestoreService.getUserProfile(result.uid);
-
         // Toast efêmero de boas-vindas (não persistir)
         notificationService.toast('Bem-vinda! 🌸', { type: 'success' });
 
-        if (userProfile && userProfile.onboardingCompleted) {
-          Session.set('onboardingCompleted', true);
-          State.set('userProfile', userProfile);
-          this.params.onNavigate('dashboard');
-        } else {
-          Session.set('onboardingCompleted', false);
-          this.params.onNavigate('onboarding');
-        }
+        // ─────────────────────────────────────────────────────────────────
+        // NÃO navegamos manualmente daqui. O app.handleAuthStateChange()
+        // dispara automaticamente após o Firebase confirmar o login e
+        // chama routeByStatus(), que respeita o `status` real do usuário
+        // (awaiting_onboarding, pending_blood_test, active, etc.).
+        //
+        // CÓDIGO ANTIGO (BUG): decidia destino baseado APENAS em
+        // onboardingCompleted, ignorando `status`. Isso fazia com que
+        // um usuário com status='awaiting_onboarding' e
+        // onboardingCompleted=true (formulário feito, reunião pendente)
+        // pulasse a tela de agendamento e fosse direto pro dashboard.
+        //
+        // const userProfile = await firestoreService.getUserProfile(result.uid);
+        // if (userProfile && userProfile.onboardingCompleted) {
+        //   Session.set('onboardingCompleted', true);
+        //   State.set('userProfile', userProfile);
+        //   this.params.onNavigate('dashboard');
+        // } else {
+        //   Session.set('onboardingCompleted', false);
+        //   this.params.onNavigate('onboarding');
+        // }
       } else {
         this.showError(this._friendlyAuthError(result.error));
         this.resetLoginButton();
