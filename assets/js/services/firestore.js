@@ -452,6 +452,36 @@ export class FirestoreService {
     }, 'saveOnboardingData', false);
   }
 
+  /** Salva rascunho parcial do onboarding (auto-save a cada campo) */
+  async saveOnboardingDraft(uid, draft) {
+    if (!uid) return false;
+    return this._run(async () => {
+      const draftRef = doc(this.db, 'users', uid, 'onboardingDraft', 'current');
+      await setDoc(draftRef, { ...draft, updatedAt: serverTimestamp() }, { merge: true });
+      return true;
+    }, 'saveOnboardingDraft', false);
+  }
+
+  /** Recupera rascunho salvo do onboarding */
+  async getOnboardingDraft(uid) {
+    if (!uid) return null;
+    return this._run(async () => {
+      const draftRef = doc(this.db, 'users', uid, 'onboardingDraft', 'current');
+      const snap = await getDoc(draftRef);
+      return snap.exists() ? snap.data() : null;
+    }, 'getOnboardingDraft');
+  }
+
+  /** Remove rascunho após submit bem-sucedido */
+  async deleteOnboardingDraft(uid) {
+    if (!uid) return false;
+    return this._run(async () => {
+      const draftRef = doc(this.db, 'users', uid, 'onboardingDraft', 'current');
+      await deleteDoc(draftRef);
+      return true;
+    }, 'deleteOnboardingDraft', false);
+  }
+
   async saveOnboardingInterview(uid, data) {
     return this._run(async () => {
       const ref = this.subDoc(uid, 'onboardingInterview', 'data');

@@ -20,6 +20,9 @@ export class OnboardingScreen extends BaseScreen {
   constructor(params) {
     super(params);
     this.currentStep = 0;
+    this._autoSaveTimer = null;
+    this._draftKey = 'bela4d_onboarding_draft';
+    this._restoreDraft();
     this.formData = {
       name: '',
       birthDate: '',
@@ -96,7 +99,10 @@ export class OnboardingScreen extends BaseScreen {
     
     this.stepContent = stepContent;
     this.nextBtn = nextBtn;
-    
+
+    // Sincroniza rascunho do Firestore (se mais recente que localStorage)
+    this._syncDraftFromFirestore();
+
     return screen;
   }
 
@@ -180,7 +186,7 @@ export class OnboardingScreen extends BaseScreen {
     // Name
     const nameLabel = UIComponents.label('Nome completo');
     const nameInput = UIComponents.textInput('Seu nome completo', this.formData.name);
-    nameInput.addEventListener('input', (e) => this.formData.name = e.target.value);
+    nameInput.addEventListener('input', (e) => { this.formData.name = e.target.value; this._onFieldChange(); });
     container.appendChild(nameLabel);
     container.appendChild(nameInput);
     
@@ -194,7 +200,7 @@ export class OnboardingScreen extends BaseScreen {
       min: fmtIso(minDate),
       max: fmtIso(maxDate),
     });
-    dateInput.addEventListener('change', (e) => this.formData.birthDate = e.target.value);
+    dateInput.addEventListener('change', (e) => { this.formData.birthDate = e.target.value; this._onFieldChange(); });
     container.appendChild(dateLabel);
     container.appendChild(dateInput);
     
@@ -217,6 +223,7 @@ export class OnboardingScreen extends BaseScreen {
       
       btn.addEventListener('click', () => {
         this.formData.gender = gender;
+        this._onFieldChange();
         this.mount();
       });
       
@@ -240,7 +247,7 @@ export class OnboardingScreen extends BaseScreen {
       const fieldContainer = DOM.create('div');
       const label = UIComponents.label(field.label);
       const input = UIComponents.numberInput(field.placeholder, this.formData[field.key]);
-      input.addEventListener('input', (e) => this.formData[field.key] = e.target.value);
+      input.addEventListener('input', (e) => { this.formData[field.key] = e.target.value; this._onFieldChange(); });
       fieldContainer.appendChild(label);
       fieldContainer.appendChild(input);
       measurementsGrid.appendChild(fieldContainer);
@@ -293,6 +300,7 @@ export class OnboardingScreen extends BaseScreen {
         } else {
           this.formData.diagnostics.push(diagnostic);
         }
+        this._onFieldChange();
         this.mount();
       });
       
@@ -304,14 +312,14 @@ export class OnboardingScreen extends BaseScreen {
     // Other Conditions
     const otherLabel = UIComponents.label('Outras condições — escreva com suas palavras');
     const otherInput = UIComponents.textarea('Ex: Tenho refluxo, sofri cirurgia em 2022...', this.formData.otherConditions);
-    otherInput.addEventListener('input', (e) => this.formData.otherConditions = e.target.value);
+    otherInput.addEventListener('input', (e) => { this.formData.otherConditions = e.target.value; this._onFieldChange(); });
     container.appendChild(otherLabel);
     container.appendChild(otherInput);
     
     // Medications
     const medLabel = UIComponents.label('Medicamentos e suplementos contínuos');
     const medInput = UIComponents.textarea('Ex: Metformina 850mg — 2x ao dia', this.formData.medications);
-    medInput.addEventListener('input', (e) => this.formData.medications = e.target.value);
+    medInput.addEventListener('input', (e) => { this.formData.medications = e.target.value; this._onFieldChange(); });
     container.appendChild(medLabel);
     container.appendChild(medInput);
   }
@@ -379,7 +387,7 @@ export class OnboardingScreen extends BaseScreen {
       input.style.color = Colors.pink;
       input.style.textAlign = 'center';
       input.style.padding = '12px 16px';
-      input.addEventListener('input', (e) => this.formData[field.key] = e.target.value);
+      input.addEventListener('input', (e) => { this.formData[field.key] = e.target.value; this._onFieldChange(); });
       
       const unitLabel = DOM.create('span');
       unitLabel.style.color = Colors.muted;
@@ -448,6 +456,7 @@ export class OnboardingScreen extends BaseScreen {
     input.addEventListener('input', (e) => {
       this.formData[slider.key] = parseInt(e.target.value);
       value.textContent = this.formData[slider.key];
+      this._onFieldChange();
     });
     card.appendChild(input);
 
@@ -491,6 +500,7 @@ export class OnboardingScreen extends BaseScreen {
 
       btn.addEventListener('click', () => {
         this.formData.activity = activity;
+        this._onFieldChange();
         this.mount();
       });
 
@@ -584,6 +594,79 @@ export class OnboardingScreen extends BaseScreen {
     container.appendChild(info);
     
     return container;
+  }
+
+  // ─── Auto-save: persiste rascunho a cada mudança de campo ───
+
+  /** Disparado por todo campo ao mudar — debounce 1s */
+  _onFieldChange() {
+    if (this._autoSaveTimer) clearTimeout(this._autoSaveTimer);
+    this._autoSaveTimer = setTimeout(() => this._autoSave(), 1000);
+  }
+
+  /** Salva rascunho no Firestore (principal) + localStorage (fallback offline) */
+  async _autoSave() {
+    const user = authService.getCurrentUser();
+    if (!user) return;
+    const draft = { ...this.formData, _updatedAt: Date.now(), _step: this.currentStep };
+
+    // Sempre salva no localStorage (fallback offline)
+    try { localStorage.setItem(this._draftKey, JSON.stringify(draft)); } catch (_) {}
+
+    // Tenta salvar no Firestore
+    try {
+      await firestoreService.saveOnboardingDraft?.(user.uid, draft);
+    } catch (_) {
+      // Offline ou erro — localStorage já tem o backup
+    }
+  }
+
+  /** Restaura rascunho do Firestore (preferencial) ou localStorage (fallback) */
+  _restoreDraft() {
+    // Tenta localStorage primeiro (síncrono, funciona offline e antes do login)
+    try {
+      const local = localStorage.getItem(this._draftKey);
+      if (local) {
+        const draft = JSON.parse(local);
+        if (draft && typeof draft === 'object') {
+          Object.assign(this.formData, draft);
+          delete this.formData._updatedAt;
+          delete this.formData._step;
+          if (draft._step !== undefined && draft._step >= 0) this.currentStep = draft._step;
+        }
+      }
+    } catch (_) {}
+  }
+
+  /** Chamado no mount: tenta restaurar do Firestore se mais recente que localStorage */
+  async _syncDraftFromFirestore() {
+    const user = authService.getCurrentUser();
+    if (!user) return;
+    try {
+      const firestoreDraft = await firestoreService.getOnboardingDraft(user.uid);
+      if (!firestoreDraft || !firestoreDraft._updatedAt) return;
+      const local = (() => { try { return JSON.parse(localStorage.getItem(this._draftKey)); } catch (_) { return null; } })();
+      if (!local || !local._updatedAt || firestoreDraft._updatedAt > local._updatedAt) {
+        Object.assign(this.formData, firestoreDraft);
+        delete this.formData._updatedAt;
+        delete this.formData._step;
+        if (firestoreDraft._step !== undefined && firestoreDraft._step >= 0) {
+          this.currentStep = firestoreDraft._step;
+        }
+        // Atualiza localStorage com a versão mais recente
+        try { localStorage.setItem(this._draftKey, JSON.stringify({ ...this.formData, _updatedAt: firestoreDraft._updatedAt })); } catch (_) {}
+        this.mount(); // re-render
+      }
+    } catch (_) {}
+  }
+
+  /** Remove rascunho após submit bem-sucedido */
+  _clearDraft() {
+    try { localStorage.removeItem(this._draftKey); } catch (_) {}
+    const user = authService.getCurrentUser();
+    if (user) {
+      firestoreService.deleteOnboardingDraft?.(user.uid).catch(() => {});
+    }
   }
 
   async nextStep() {
@@ -704,6 +787,9 @@ export class OnboardingScreen extends BaseScreen {
       Session.set('onboardingCompleted', true);
       Session.set('onboardingData', this.formData);
       State.set('onboardingData', this.formData);
+
+      // Limpa rascunho (não precisa mais)
+      this._clearDraft();
 
       // Navigate to awaiting screen (scheduling meeting)
       setTimeout(() => {
