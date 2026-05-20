@@ -148,21 +148,42 @@ async function doLogin(page) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function openDrawer(page) {
-  const drawerBtn = await page.$('[data-open-drawer], [class*="menu"], button[class*="hamburger"]');
-  if (drawerBtn) {
+  // Open drawer via toggle, then WAIT for data-nav-item to appear (robust to race conditions)
+  const drawerBtn = await page.$('[data-open-drawer]');
+  if (!drawerBtn) return false;
+  try {
+    await drawerBtn.click();
+    // Wait for nav items to actually appear in the DOM
     try {
-      await drawerBtn.click();
-      await page.waitForTimeout(700);
+      await page.waitForSelector('[data-nav-item]', { timeout: 3000 });
+      await page.waitForTimeout(200);
       return true;
-    } catch {}
-  }
-  return false;
+    } catch {
+      // Nav items didn't appear — maybe drawer was already open (toggle closed it).
+      // Click toggle again to re-open.
+      try {
+        await drawerBtn.click();
+        await page.waitForSelector('[data-nav-item]', { timeout: 3000 });
+        await page.waitForTimeout(200);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  } catch { return false; }
 }
 
 async function navTo(page, navId) {
-  await openDrawer(page);
-  await page.waitForTimeout(300);
-  const result = await clickAndShot(page, `[data-nav-item="${navId}"]`, `drawer-${navId}-${LABEL}`, { wait: 500 });
+  let result = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const opened = await openDrawer(page);
+    if (!opened) { await page.waitForTimeout(500); continue; }
+    await page.waitForTimeout(300);
+    result = await clickAndShot(page, `[data-nav-item="${navId}"]`, `drawer-${navId}-${LABEL}`, { wait: 500 });
+    if (result) break;
+    // First attempt failed — retry logic (toggle might have flipped)
+    await page.waitForTimeout(500);
+  }
   // Close drawer if still open
   await page.waitForTimeout(500);
   const closeBtn = await page.$('[data-close-drawer]');
@@ -512,9 +533,17 @@ async function captureActive(page) {
   const page = await ctx.newPage();
   attachListeners(page);
 
-  // Service worker unregister + dark theme pre-set
+  // Clear Firebase Auth persistence + service worker + dark theme pre-set
   await page.addInitScript(() => {
     try { localStorage.setItem('gmp-theme-mode', 'dark'); } catch {}
+    // Clear stale Firebase Auth sessions to prevent login race conditions
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('firebase:authUser:')).forEach(k => localStorage.removeItem(k));
+    } catch {}
+    try {
+      const req = indexedDB.deleteDatabase('firebaseLocalStorageDb');
+      req.onsuccess = req.onerror = () => {};
+    } catch {}
     navigator.serviceWorker?.getRegistrations?.()?.then?.(regs => regs.forEach(r => r.unregister()));
   });
 
