@@ -543,14 +543,19 @@ async function seed(idToken, uid) {
     { title: '🌸 Bem-vinda ao Programa 4D!', message: 'Sua jornada de saúde começa agora. Explore o app e fale com sua Guardiã.', type: 'welcome', priority: 'high', read: true, createdAt: daysAgo(35) },
     { title: '🏆 Conquista: Primeiro Passo', message: 'Você completou o onboarding! +100 XP', type: 'achievement', priority: 'normal', read: true, createdAt: daysAgo(30) },
     { title: '📋 Exames processados', message: 'Seus exames de sangue foram analisados. Confira os resultados!', type: 'exam', priority: 'high', read: true, createdAt: daysAgo(28) },
-    { title: '🦉 Coruja Noturna', message: 'Nova conquista pendente: acessar entre 23h-5h (+75 XP)', type: 'achievement', priority: 'normal', read: false, createdAt: daysAgo(5) },
+    { title: '🦉 Conquista desbloqueada: Coruja Noturna', message: 'Parabéns! Você acessou entre 23h e 5h em 3 dias diferentes! +75 XP', type: 'achievement-unlocked', priority: 'high', read: false, createdAt: daysAgo(7) },
+    { title: '🧪 Exame pronto para coleta', message: 'Seu pedido de exames de sangue está liberado. Compareça ao laboratório.', type: 'exame-ready', priority: 'urgent', read: false, createdAt: daysAgo(6) },
+    { title: '💬 Nova mensagem da Guardiã', message: 'Sua Guardiã de Saúde enviou uma nova mensagem sobre seu progresso semanal.', type: 'chat-new-message', priority: 'normal', read: false, createdAt: daysAgo(4) },
+    { title: '📊 Relatório Semanal disponível', message: 'Seu relatório de progresso da semana já está pronto. Veja suas conquistas!', type: 'weekly-report', priority: 'normal', read: false, createdAt: daysAgo(2) },
     { title: '⭐ Nível 3 alcançado!', message: 'Parabéns! Você chegou ao nível 3: Guardiã da Saúde', type: 'level_up', priority: 'high', read: false, createdAt: daysAgo(3) },
+    { title: '⭐ Subiu para o Nível 4!', message: '+200 XP! Você desbloqueou o título Mestra da Saúde. Continue assim! 🎉', type: 'level-up', priority: 'urgent', read: false, createdAt: daysAgo(1) },
+    { title: '📋 Exame de sangue disponível', message: 'Resultado do exame recente já disponível para visualização.', type: 'exame-ready', priority: 'high', read: false, createdAt: daysAgo(0) },
   ];
 
   for (const n of notifications) {
     await addDoc(idToken, U('notifications'), n);
   }
-  console.log('    ✅ 5 notificações (2 não lidas)');
+  console.log('    ✅ 11 notificações (8 não lidas — achievement-unlocked, exame-ready, chat-new-message, weekly-report, level-up)');
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 13. AÇÕES PENDENTES
@@ -622,7 +627,7 @@ async function seed(idToken, uid) {
   console.log('║  Chat:            8 mensagens (4 trocas)                    ║');
   console.log('║  Receitas:        4 (2 favoritas)                           ║');
   console.log('║  Conquistas:      6 (3 reivindicadas, 3 pendentes)         ║');
-  console.log('║  Notificações:    5 (2 não lidas)                           ║');
+  console.log('║  Notificações:    11 (8 não lidas — 5 tipos)                    ║');
   console.log('║  Peso:            80→76.5 kg (-3.5 kg)                      ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
 }

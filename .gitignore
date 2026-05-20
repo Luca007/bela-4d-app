@@ -19,5 +19,45 @@ package-lock.json
 **/.env.*
 **/serviceAccountKey*.json
 **/firebase-adminsdk*.json
-**/*-private-key.json
+**/*firebase-adminsdk*.json
+**/*-adminsdk*.json
+**/*-service-account*.json
+**/*-private-key*.json
+**/google-credentials*.json
 test-admin.js
+
+# Firebase local state / cache
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+**/.firebaserc.local
+
+# Backup files (índices de deploy, .bak antigos)
+**/*.bak
+**/*.deploy-*.bak
+
+# Helper scripts one-off com paths hardcoded para SA
+/check_apis.py
+/deploy-awardXp.sh
+/enable-gcp-apis.sh
+/firebase-login-ci.sh
+/redeploy-functions.sh
+scripts/check-iam.js
+scripts/check-all-iam.js
+scripts/check-secrets.js
+scripts/check-playwright.js
+scripts/check-pw2.js
+scripts/find-playwright.js
+scripts/get-token.js
+scripts/get-iam-token.js
+scripts/bela-auth-check.js
+scripts/debug-login-dom.js
+
+# Artefatos vazios no root (npm sem uso)
+/package.json
+/package-lock.json
+
+# Tokens / credenciais comuns de CI
+**/*.token
+**/*-token.json
+**/access_token*.json

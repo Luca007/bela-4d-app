@@ -20,8 +20,8 @@ const fs = require('fs');
 const path = require('path');
 
 const BASE_URL = process.argv.find(a => a.startsWith('--url='))?.split('=')[1] || 'http://localhost:8090';
-const OUT_DIR = '/tmp/app-screenshots-v3';
-const AUDIT_DIR = '/tmp/app-audit-v3';
+const OUT_DIR = '/tmp/audit-v4/screenshots';
+const AUDIT_DIR = '/tmp/audit-v4/';
 const CREDS = { email: 'teste@gmail.com', password: 'Teste@01' };
 
 fs.mkdirSync(OUT_DIR, { recursive: true });

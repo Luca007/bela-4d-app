@@ -15,7 +15,7 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
-const { defineSecret } = require('firebase-functions/params');
+// defineSecret removido temporariamente para deploy (Secret Manager sem permissão)
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const axios = require('axios');
@@ -110,18 +110,18 @@ const VALID_EVENTS = new Set([
 // ─────────────────────────────────────────────
 // SECRETS — definir via: firebase functions:secrets:set N8N_BASE_URL
 // ─────────────────────────────────────────────
-const secretN8nBaseUrl = defineSecret('N8N_BASE_URL');
-const secretN8nWebhookSecret = defineSecret('N8N_WEBHOOK_SECRET');
+// secretN8nBaseUrl — em runtime usa process.env direto (definido no deploy)
+// secretN8nWebhookSecret — em runtime usa process.env direto
 
 const REGION = 'southamerica-east1';
-const SECRETS = [secretN8nBaseUrl, secretN8nWebhookSecret];
+// SECRETS array removido temporariamente para deploy
 
 // Resolvidos em runtime (dentro das funções, não no topo do módulo)
 function getN8nBaseUrl() {
-  return secretN8nBaseUrl.value() || process.env.N8N_BASE_URL || 'https://SEU-N8N.cloud/webhook';
+  return process.env.N8N_BASE_URL || 'https://SEU-N8N.cloud/webhook';
 }
 function getN8nWebhookSecret() {
-  return secretN8nWebhookSecret.value() || process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO';
+  return process.env.N8N_WEBHOOK_SECRET || 'TROQUE-EM-PRODUCAO';
 }
 function getN8nHeaders() {
   return { 'Content-Type': 'application/json', 'X-Webhook-Secret': getN8nWebhookSecret() };
@@ -255,7 +255,7 @@ function verifyWebhookSecret(req) {
 // ─────────────────────────────────────────────
 // 1. PROCESSAR TRANSCRIÇÃO DO GOOGLE MEET
 // ─────────────────────────────────────────────
-exports.processOnboardingTranscript = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.processOnboardingTranscript = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { transcriptText, driveFileUrl } = request.data;
@@ -307,7 +307,7 @@ exports.processOnboardingTranscript = onCall({ region: REGION, secrets: SECRETS 
 // ─────────────────────────────────────────────
 // 2. PROCESSAR EXAME DE SANGUE
 // ─────────────────────────────────────────────
-exports.processBloodTest = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.processBloodTest = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { bloodTestId, driveFileUrl } = request.data;
@@ -349,7 +349,7 @@ exports.processBloodTest = onCall({ region: REGION, secrets: SECRETS }, async (r
 // ─────────────────────────────────────────────
 // 3. GERAR PEDIDO DE EXAMES (sem exame disponível)
 // ─────────────────────────────────────────────
-exports.generateExamRequest = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.generateExamRequest = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
 
@@ -398,7 +398,7 @@ exports.generateExamRequest = onCall({ region: REGION, secrets: SECRETS }, async
 // ─────────────────────────────────────────────
 // 4. AGENTE DE CHAT IA (função principal do app)
 // ─────────────────────────────────────────────
-exports.agentChatMessage = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.agentChatMessage = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { message, sessionId } = request.data;
@@ -476,7 +476,7 @@ exports.agentChatMessage = onCall({ region: REGION, secrets: SECRETS }, async (r
 // ─────────────────────────────────────────────
 // 5. GERAR RECEITA (chamada direta, sem chat)
 // ─────────────────────────────────────────────
-exports.generateRecipe = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.generateRecipe = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { preferences } = request.data;
@@ -523,7 +523,7 @@ exports.generateRecipe = onCall({ region: REGION, secrets: SECRETS }, async (req
 // ─────────────────────────────────────────────
 // 5. REMOVER RECEITA
 // ─────────────────────────────────────────────
-exports.deleteRecipe = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.deleteRecipe = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { recipeId } = request.data;
@@ -555,7 +555,7 @@ exports.deleteRecipe = onCall({ region: REGION, secrets: SECRETS }, async (reque
 // ─────────────────────────────────────────────
 // 5b. CLAIM ACHIEVEMENT (award XP only when user claims)
 // ─────────────────────────────────────────────
-exports.claimAchievement = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.claimAchievement = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Login required');
 
@@ -592,7 +592,7 @@ exports.claimAchievement = onCall({ region: REGION, secrets: SECRETS }, async (r
 // ─────────────────────────────────────────────
 // 6. AVALIADOR DE ALIMENTOS
 // ─────────────────────────────────────────────
-exports.evaluateFood = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.evaluateFood = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { foodName, quantity } = request.data;
@@ -632,7 +632,7 @@ exports.evaluateFood = onCall({ region: REGION, secrets: SECRETS }, async (reque
 // ─────────────────────────────────────────────
 // 7. DOWNLOAD PDF DE PEDIDO DE EXAME
 // ─────────────────────────────────────────────
-exports.downloadExamPdf = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.downloadExamPdf = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Login necessário');
 
@@ -652,7 +652,7 @@ exports.downloadExamPdf = onCall({ region: REGION, secrets: SECRETS }, async (re
 // ─────────────────────────────────────────────
 // 8. CALLBACKS HTTP (n8n -> Firebase)
 // ─────────────────────────────────────────────
-exports.onTranscriptCallback = onRequest({ region: REGION, secrets: SECRETS }, async (req, res) => {
+exports.onTranscriptCallback = onRequest({ region: REGION }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', getN8nBaseUrl().replace(/\/webhook.*$/, ''));
   res.set('Access-Control-Allow-Methods', 'POST');
   if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
@@ -720,7 +720,7 @@ exports.onTranscriptCallback = onRequest({ region: REGION, secrets: SECRETS }, a
   }
 });
 
-exports.onBloodTestCallback = onRequest({ region: REGION, secrets: SECRETS }, async (req, res) => {
+exports.onBloodTestCallback = onRequest({ region: REGION }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', getN8nBaseUrl().replace(/\/webhook.*$/, ''));
   res.set('Access-Control-Allow-Methods', 'POST');
   if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
@@ -867,7 +867,7 @@ async function sendWhatsAppNotification(uid, profile, notification, metadata = {
   return result;
 }
 
-exports.sendPatientNotification = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.sendPatientNotification = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { title, message, type = 'manual', priority = 'normal', metadata = {} } = request.data || {};
@@ -973,7 +973,7 @@ exports.updateGlobalRanking = onSchedule(
 // ─────────────────────────────────────────────
 // recordSectionVisit — registra visita a uma aba do dashboard
 // ─────────────────────────────────────────────
-exports.recordSectionVisit = onCall({ region: REGION, secrets: SECRETS }, async (request) => {
+exports.recordSectionVisit = onCall({ region: REGION }, async (request) => {
   requireAuth(request.auth);
   const uid = request.auth.uid;
   const { sectionId } = request.data;
@@ -1000,7 +1000,7 @@ exports.recordSectionVisit = onCall({ region: REGION, secrets: SECRETS }, async 
 // evaluateTimeBasedAchievements — scheduled daily
 // ─────────────────────────────────────────────
 exports.evaluateTimeBasedAchievements = onSchedule(
-  { schedule: 'every 24 hours', timeZone: 'America/Sao_Paulo', region: REGION, secrets: SECRETS },
+  { schedule: 'every 24 hours', timeZone: 'America/Sao_Paulo', region: REGION },
   async () => {
     log('info', 'Running evaluateTimeBasedAchievements');
     const usersSnap = await db.collection('users').limit(500).get();
@@ -1047,7 +1047,7 @@ exports.evaluateTimeBasedAchievements = onSchedule(
  *   curl -X POST https://southamerica-east1-bela-4d-app.cloudfunctions.net/seedAppConfig \
  *     -H "X-Webhook-Secret: $N8N_WEBHOOK_SECRET"
  */
-exports.seedAppConfig = onRequest({ region: REGION, secrets: SECRETS }, async (req, res) => {
+exports.seedAppConfig = onRequest({ region: REGION }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', getN8nBaseUrl().replace(/\/webhook.*$/, ''));
   res.set('Access-Control-Allow-Methods', 'POST');
   if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
