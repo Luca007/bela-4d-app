@@ -82,6 +82,10 @@ export class AwaitingScreen extends BaseScreen {
       background: var(--color-bg);
     `;
 
+    // OLD: card.border usava 'rgba(255,255,255,0.08)' hard-coded — invisível no tema claro.
+    // Substituído por var(--color-border) (tema-aware). background mantém var(--color-surface)
+    // (referência herdada; se não estiver definido em variables.css, cai para inherit/transparent).
+    // OLD: const card = DOM.create('div'); card.style.cssText = `background: var(--color-surface); ... border: 1px solid rgba(255,255,255,0.08); ...`;
     const card = DOM.create('div');
     card.style.cssText = `
       background: var(--color-surface);
@@ -90,7 +94,7 @@ export class AwaitingScreen extends BaseScreen {
       max-width: 480px;
       width: 100%;
       text-align: center;
-      border: 1px solid rgba(255,255,255,0.08);
+      border: 1px solid var(--color-border);
       box-shadow: var(--shadow-xl);
     `;
 
@@ -314,10 +318,13 @@ export class AwaitingScreen extends BaseScreen {
     wrap.appendChild(summary);
 
     // ─── PASSO 2: Calendário em grade (alternativa visual) ───
+    // OLD: step2Label.background = 'rgba(255,255,255,0.08)' — invisível no tema claro.
+    // Substituído por var(--color-glass).
+    // OLD: step2Label.style.cssText = `... background: rgba(255,255,255,0.08); color: var(--color-muted); ...`;
     const step2Label = DOM.create('div');
     step2Label.style.cssText = `
       display: inline-flex; align-items: center; gap: 6px;
-      background: rgba(255,255,255,0.08); color: var(--color-muted);
+      background: var(--color-glass); color: var(--color-muted);
       padding: 3px 10px; border-radius: 20px;
       font-size: 10px; font-weight: 700;
       letter-spacing: 0.6px; text-transform: uppercase;
@@ -326,11 +333,13 @@ export class AwaitingScreen extends BaseScreen {
     step2Label.textContent = '② Ou navegue pelo calendário';
     wrap.appendChild(step2Label);
 
+    // OLD: calendar.background/border usavam rgba(255,255,255,...) hard-coded — substituídos por tokens.
+    // OLD: calendar.style.cssText = `background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); ...`;
     const calendar = DOM.create('div');
     calendar.id = 'meeting-calendar';
     calendar.style.cssText = `
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--color-glass);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
       padding: 14px;
       margin-bottom: 16px;
@@ -414,6 +423,11 @@ export class AwaitingScreen extends BaseScreen {
     dateLabel.htmlFor = 'meeting-date-input';
     dateWrap.appendChild(dateLabel);
 
+    // OLD: dateInput.background/border + color-scheme: dark hard-coded — quebrava no tema claro.
+    // Substituídos por var(--color-glass) / var(--color-border); color-scheme passa a 'light dark'
+    // para que o picker nativo do navegador respeite o tema do sistema.
+    // OLD: dateInput.style.cssText = `... background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); ... color-scheme: dark;`;
+    // OLD: dateInput.addEventListener('blur', () => dateInput.style.borderColor = 'rgba(255,255,255,0.1)');
     const dateInput = DOM.create('input');
     dateInput.type = 'date';
     dateInput.id = 'meeting-date-input';
@@ -424,8 +438,8 @@ export class AwaitingScreen extends BaseScreen {
       width: 100%;
       padding: 10px 12px;
       box-sizing: border-box;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--color-glass);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       color: var(--color-text);
       font-size: 13px;
@@ -433,10 +447,10 @@ export class AwaitingScreen extends BaseScreen {
       font-family: inherit;
       outline: none;
       cursor: pointer;
-      color-scheme: dark;
+      color-scheme: light dark;
     `;
-    dateInput.addEventListener('focus', () => dateInput.style.borderColor = '#f0059a');
-    dateInput.addEventListener('blur', () => dateInput.style.borderColor = 'rgba(255,255,255,0.1)');
+    dateInput.addEventListener('focus', () => dateInput.style.borderColor = 'var(--color-pink)');
+    dateInput.addEventListener('blur', () => dateInput.style.borderColor = 'var(--color-border)');
     dateInput.addEventListener('change', () => this._onQuickDateChange(dateInput));
     dateWrap.appendChild(dateInput);
     row.appendChild(dateWrap);
@@ -449,6 +463,9 @@ export class AwaitingScreen extends BaseScreen {
     timeLabel.htmlFor = 'meeting-time-input';
     timeWrap.appendChild(timeLabel);
 
+    // OLD: timeInput tinha as mesmas cores hard-coded do dateInput — substituído por tokens.
+    // OLD: timeInput.style.cssText = `... background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); ... color-scheme: dark;`;
+    // OLD: timeInput.addEventListener('blur', () => timeInput.style.borderColor = 'rgba(255,255,255,0.1)');
     const timeInput = DOM.create('input');
     timeInput.type = 'time';
     timeInput.id = 'meeting-time-input';
@@ -460,8 +477,8 @@ export class AwaitingScreen extends BaseScreen {
       width: 100%;
       padding: 10px 12px;
       box-sizing: border-box;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--color-glass);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       color: var(--color-text);
       font-size: 13px;
@@ -469,10 +486,10 @@ export class AwaitingScreen extends BaseScreen {
       font-family: inherit;
       outline: none;
       cursor: pointer;
-      color-scheme: dark;
+      color-scheme: light dark;
     `;
-    timeInput.addEventListener('focus', () => timeInput.style.borderColor = '#f0059a');
-    timeInput.addEventListener('blur', () => timeInput.style.borderColor = 'rgba(255,255,255,0.1)');
+    timeInput.addEventListener('focus', () => timeInput.style.borderColor = 'var(--color-pink)');
+    timeInput.addEventListener('blur', () => timeInput.style.borderColor = 'var(--color-border)');
     timeInput.addEventListener('change', () => this._onQuickTimeChange(timeInput));
     timeWrap.appendChild(timeInput);
     row.appendChild(timeWrap);
@@ -698,12 +715,17 @@ export class AwaitingScreen extends BaseScreen {
       const isDisabled = isWeekend || isBeforeMin || isAfterMax;
       const isSelected = this.selectedDate === iso;
 
+      // OLD: borders/backgrounds/cores da célula usavam rgba(255,255,255,...) hard-coded e #f0059a literal.
+      // Substituídos por var(--color-border), var(--color-glass), var(--color-pink) e var(--color-muted)
+      // (este último p/ dias desabilitados, opacizado para sinalizar inatividade).
+      // OLD: cell.style.cssText = `... border: 1px solid ${isSelected ? '#f0059a' : 'rgba(255,255,255,0.06)'}; background: ${isSelected ? '#f0059a' : (isDisabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)')}; color: ${isSelected ? '#fff' : (isDisabled ? 'rgba(255,255,255,0.18)' : 'var(--color-text)')}; ...`;
       cell.style.cssText = `
         aspect-ratio: 1;
         border-radius: 8px; font-size: 13px; font-weight: 600;
-        border: 1px solid ${isSelected ? '#f0059a' : 'rgba(255,255,255,0.06)'};
-        background: ${isSelected ? '#f0059a' : (isDisabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)')};
-        color: ${isSelected ? '#fff' : (isDisabled ? 'rgba(255,255,255,0.18)' : 'var(--color-text)')};
+        border: 1px solid ${isSelected ? 'var(--color-pink)' : 'var(--color-border)'};
+        background: ${isSelected ? 'var(--color-pink)' : 'var(--color-glass)'};
+        color: ${isSelected ? '#fff' : 'var(--color-text)'};
+        ${isDisabled ? 'opacity: 0.35;' : ''}
         cursor: ${isDisabled ? 'not-allowed' : 'pointer'};
         transition: all 0.15s;
         font-family: inherit;
@@ -729,11 +751,15 @@ export class AwaitingScreen extends BaseScreen {
           if (dInput) dInput.value = this.selectedDate || '';
           if (tInput) tInput.value = this.selectedTime || '';
         });
+        // OLD: hover/leave usavam rgba(240,5,154,0.18) / rgba(255,255,255,0.04) literais.
+        // O hover rosa (color-pink-glow) é universal entre temas; o estado normal volta para var(--color-glass).
+        // OLD: cell.addEventListener('mouseenter', () => { if (!isSelected) cell.style.background = 'rgba(240,5,154,0.18)'; });
+        // OLD: cell.addEventListener('mouseleave', () => { if (!isSelected) cell.style.background = 'rgba(255,255,255,0.04)'; });
         cell.addEventListener('mouseenter', () => {
-          if (!isSelected) cell.style.background = 'rgba(240,5,154,0.18)';
+          if (!isSelected) cell.style.background = 'var(--color-pink-glow)';
         });
         cell.addEventListener('mouseleave', () => {
-          if (!isSelected) cell.style.background = 'rgba(255,255,255,0.04)';
+          if (!isSelected) cell.style.background = 'var(--color-glass)';
         });
       } else {
         cell.disabled = true;
@@ -746,21 +772,26 @@ export class AwaitingScreen extends BaseScreen {
   }
 
   _navButton(label, onClick) {
+    // OLD: background/border do botão de navegação do calendário usavam rgba(255,255,255,...) hard-coded.
+    // Substituídos por var(--color-glass) / var(--color-border). hover usa var(--color-pink).
+    // OLD: b.style.cssText = `... background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); ...`;
+    // OLD: b.addEventListener('mouseenter', () => { if (!b.disabled) b.style.borderColor = '#f0059a'; });
+    // OLD: b.addEventListener('mouseleave', () => { b.style.borderColor = 'rgba(255,255,255,0.1)'; });
     const b = DOM.create('button');
     b.type = 'button';
     b.textContent = label;
     b.style.cssText = `
       width: 32px; height: 32px; border-radius: 8px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--color-glass);
+      border: 1px solid var(--color-border);
       color: var(--color-text); font-size: 18px; font-weight: 700;
       cursor: pointer; font-family: inherit;
       display: flex; align-items: center; justify-content: center;
       transition: all 0.15s;
     `;
     b.addEventListener('click', onClick);
-    b.addEventListener('mouseenter', () => { if (!b.disabled) b.style.borderColor = '#f0059a'; });
-    b.addEventListener('mouseleave', () => { b.style.borderColor = 'rgba(255,255,255,0.1)'; });
+    b.addEventListener('mouseenter', () => { if (!b.disabled) b.style.borderColor = 'var(--color-pink)'; });
+    b.addEventListener('mouseleave', () => { b.style.borderColor = 'var(--color-border)'; });
     return b;
   }
 
@@ -785,11 +816,13 @@ export class AwaitingScreen extends BaseScreen {
     host.appendChild(label);
 
     if (!this.selectedDate) {
+      // OLD: hint usava rgba(255,255,255,0.03) / 0.1 hard-coded — substituído por tokens tema-aware.
+      // OLD: hint.style.cssText = `... background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.1); ...`;
       const hint = DOM.create('div');
       hint.style.cssText = `
         font-size: 12px; color: var(--color-muted);
-        padding: 12px; background: rgba(255,255,255,0.03);
-        border: 1px dashed rgba(255,255,255,0.1);
+        padding: 12px; background: var(--color-glass);
+        border: 1px dashed var(--color-border);
         border-radius: 8px; text-align: center;
       `;
       hint.textContent = 'Selecione uma data primeiro';
@@ -803,12 +836,14 @@ export class AwaitingScreen extends BaseScreen {
       display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
     `;
     if (!slots.length) {
+      // OLD: empty.background = 'rgba(255,255,255,0.03)' — substituído por var(--color-glass).
+      // OLD: empty.style.cssText = `... background: rgba(255,255,255,0.03); ...`;
       const empty = DOM.create('div');
       empty.style.cssText = `
         grid-column: 1 / -1;
         font-size: 12px; color: var(--color-muted);
         padding: 12px; text-align: center;
-        background: rgba(255,255,255,0.03);
+        background: var(--color-glass);
         border-radius: 8px;
       `;
       empty.textContent = 'Nenhum horário disponível nesta data.';
@@ -816,6 +851,11 @@ export class AwaitingScreen extends BaseScreen {
     }
     slots.forEach(t => {
       const isSelected = this.selectedTime === t;
+      // OLD: border/background do slot usavam '#f0059a' / 'rgba(255,255,255,...)' hard-coded.
+      // Substituídos por var(--color-pink) / var(--color-border) / var(--color-glass).
+      // OLD: b.style.cssText = `... border: 1px solid ${isSelected ? '#f0059a' : 'rgba(255,255,255,0.1)'}; background: ${isSelected ? '#f0059a' : 'rgba(255,255,255,0.05)'}; ...`;
+      // OLD: b.addEventListener('mouseenter', () => { if (!isSelected) b.style.borderColor = '#f0059a'; });
+      // OLD: b.addEventListener('mouseleave', () => { if (!isSelected) b.style.borderColor = 'rgba(255,255,255,0.1)'; });
       const b = DOM.create('button');
       b.type = 'button';
       b.textContent = t;
@@ -823,8 +863,8 @@ export class AwaitingScreen extends BaseScreen {
       b.style.cssText = `
         padding: 10px 6px; border-radius: 8px;
         font-size: 13px; font-weight: 700; font-family: inherit;
-        border: 1px solid ${isSelected ? '#f0059a' : 'rgba(255,255,255,0.1)'};
-        background: ${isSelected ? '#f0059a' : 'rgba(255,255,255,0.05)'};
+        border: 1px solid ${isSelected ? 'var(--color-pink)' : 'var(--color-border)'};
+        background: ${isSelected ? 'var(--color-pink)' : 'var(--color-glass)'};
         color: ${isSelected ? '#fff' : 'var(--color-text)'};
         cursor: pointer; transition: all 0.15s;
       `;
@@ -838,10 +878,10 @@ export class AwaitingScreen extends BaseScreen {
         if (tInput) tInput.value = this.selectedTime || '';
       });
       b.addEventListener('mouseenter', () => {
-        if (!isSelected) b.style.borderColor = '#f0059a';
+        if (!isSelected) b.style.borderColor = 'var(--color-pink)';
       });
       b.addEventListener('mouseleave', () => {
-        if (!isSelected) b.style.borderColor = 'rgba(255,255,255,0.1)';
+        if (!isSelected) b.style.borderColor = 'var(--color-border)';
       });
       grid.appendChild(b);
     });
@@ -1203,10 +1243,14 @@ export class AwaitingScreen extends BaseScreen {
     }
 
     if (config.steps?.length) {
+      // OLD: stepsWrap.background/border + row.borderBottom usavam rgba(255,255,255,...) hard-coded.
+      // Substituídos por var(--color-glass) / var(--color-border) — tema-aware.
+      // OLD: stepsWrap.style.cssText = `background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); ...`;
+      // OLD: row.style.cssText = `... ${i < config.steps.length - 1 ? 'border-bottom: 1px solid rgba(255,255,255,0.04);' : ''}`;
       const stepsWrap = DOM.create('div');
       stepsWrap.style.cssText = `
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.06);
+        background: var(--color-glass);
+        border: 1px solid var(--color-border);
         border-radius: 12px;
         padding: 16px;
         margin-bottom: 24px;
@@ -1219,7 +1263,7 @@ export class AwaitingScreen extends BaseScreen {
           align-items: center;
           gap: 12px;
           padding: 8px 0;
-          ${i < config.steps.length - 1 ? 'border-bottom: 1px solid rgba(255,255,255,0.04);' : ''}
+          ${i < config.steps.length - 1 ? 'border-bottom: 1px solid var(--color-border);' : ''}
         `;
         const icon = DOM.create('span');
         icon.style.cssText = 'font-size: 18px; flex-shrink: 0; width: 28px; text-align: center;';

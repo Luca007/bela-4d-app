@@ -1,11 +1,16 @@
 /* Forms Screen Styles */
 
+/* OLD: background hard-coded em dark — quebrava no tema claro
+.forms-container {
+  background: linear-gradient(135deg, #0a0e27 0%, #1a0a2e 100%);
+}
+*/
 .forms-container {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #0a0e27 0%, #1a0a2e 100%);
-  color: var(--text-primary);
+  background: var(--color-bg);
+  color: var(--color-text);
   padding-bottom: 40px;
 }
 
@@ -17,7 +22,7 @@
 }
 
 .forms-header h1 {
-  color: var(--text-primary);
+  color: var(--color-text);
   font-size: 28px;
   font-weight: 800;
   margin-bottom: 8px;
@@ -25,7 +30,7 @@
 }
 
 .forms-header p {
-  color: var(--text-muted);
+  color: var(--color-muted);
   font-size: 14px;
   margin: 0;
 }
@@ -39,6 +44,9 @@
   animation: fadeUp 0.35s ease;
 }
 
+/* OLD: gradiente bottom hard-coded (dark only)
+.forms-nav { background: linear-gradient(180deg, transparent 0%, rgba(10, 14, 39, 0.95) 50%, rgba(10, 14, 39, 1) 100%); }
+*/
 .forms-nav {
   padding: 24px;
   display: flex;
@@ -46,7 +54,7 @@
   border-top: 1px solid var(--color-border);
   position: sticky;
   bottom: 0;
-  background: linear-gradient(180deg, transparent 0%, rgba(10, 14, 39, 0.95) 50%, rgba(10, 14, 39, 1) 100%);
+  background: var(--color-bg);
   margin-top: 40px;
 }
 
@@ -67,19 +75,39 @@
 }
 
 /* =============================================
-   FORM PROGRESS STEPS — breadcrumb com círculos
-   numerados, labels e linhas conectoras
+   FORM PROGRESS STEPS — Stepper moderno (Stripe/Linear-style)
+   - 100% via CSS vars: funciona em [data-theme='light'] e 'dark'
+   - O JS aplica APENAS .active / .completed / aria-* (sem estilo inline)
+   - Responsivo: labels completas (>=768px), abreviadas (480-767),
+     só círculos + caption da etapa atual (<480px)
    ============================================= */
 
 .form-progress-steps {
+  --fp-track: var(--color-border);
+  --fp-track-fill: var(--color-pink);
+  --fp-circle-bg: var(--color-glass);
+  --fp-circle-fg: var(--color-muted);
+  --fp-circle-border: var(--color-border);
+  --fp-label: var(--color-muted);
+  --fp-label-active: var(--color-text);
+  --fp-success: var(--color-success, #1fcc74);
+
   display: flex;
   align-items: flex-start;
   justify-content: center;
   gap: 0;
-  margin-bottom: 20px;
-  padding: 0 16px;
+  margin: 4px auto 24px;
+  padding: 8px 20px 4px;
+  max-width: 720px;
+  width: 100%;
   flex-wrap: nowrap;
-  overflow: hidden;
+  box-sizing: border-box;
+  /* Reset list (estrutura semântica <ol><li>) */
+  list-style: none;
+}
+
+.form-progress-steps li {
+  list-style: none;
 }
 
 .fp-step {
@@ -95,100 +123,164 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   font-size: 13px;
+  line-height: 1;
   flex-shrink: 0;
-  margin-bottom: 6px;
-  transition: all 0.3s ease;
+  margin-bottom: 8px;
+  background: var(--fp-circle-bg);
+  border: 1.5px solid var(--fp-circle-border);
+  color: var(--fp-circle-fg);
+  box-shadow: none;
+  transition:
+    background var(--transition-base, 0.22s ease),
+    border-color var(--transition-base, 0.22s ease),
+    color var(--transition-base, 0.22s ease),
+    box-shadow var(--transition-base, 0.22s ease),
+    transform var(--transition-base, 0.22s ease);
 }
 
+/* Estado: ativo — destaque rosa, leve glow, escala sutil */
 .fp-step.active .fp-step-circle {
-  box-shadow: 0 0 16px rgba(240,5,154,0.5);
+  background: linear-gradient(135deg, var(--color-pink), #c0027c);
+  border-color: var(--color-pink);
+  color: #fff;
+  box-shadow: 0 0 0 4px var(--color-pink-glow), 0 4px 14px var(--color-pink-glow);
+  transform: scale(1.06);
 }
+
+/* Estado: completo — check verde, sem brilho excessivo */
 .fp-step.completed .fp-step-circle {
-  box-shadow: 0 0 8px rgba(34,197,94,0.4);
+  background: var(--fp-success);
+  border-color: var(--fp-success);
+  color: #fff;
+}
+
+/* Foco acessível (teclado) */
+.fp-step:focus-within .fp-step-circle {
+  outline: 2px solid var(--color-pink);
+  outline-offset: 3px;
 }
 
 .fp-step-label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   text-align: center;
   line-height: 1.3;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 2px;
-  transition: color 0.3s ease;
+  padding: 0 4px;
+  color: var(--fp-label);
+  letter-spacing: 0.1px;
+  transition: color var(--transition-base, 0.22s ease), font-weight 0.2s ease;
+}
+
+.fp-step.completed .fp-step-label {
+  color: var(--fp-label);
 }
 
 .fp-step.active .fp-step-label {
+  color: var(--fp-label-active);
   font-weight: 700;
 }
 
+/* Connector — track cinza + fill rosa quando completed */
 .fp-step-line-wrapper {
   display: flex;
   align-items: center;
   flex: 1 1 0;
-  min-width: 12px;
-  max-width: 36px;
-  margin: 0 2px;
+  min-width: 14px;
+  max-width: 64px;
+  margin: 15px 4px 0; /* alinha com o centro do círculo (32/2 - 1 = 15) */
 }
 
 .fp-step-line {
+  position: relative;
   width: 100%;
   height: 2px;
   border-radius: 1px;
-  margin-bottom: 22px;
-  transition: background 0.3s ease;
+  background: var(--fp-track);
+  overflow: hidden;
 }
 
-/* ---------- Mobile: labels abreviadas ---------- */
-@media (max-width: 640px) {
+/* O fill: barra que cresce de 0 a 100% quando a etapa anterior está completed */
+.fp-step-line::after {
+  content: '';
+  position: absolute;
+  inset: 0 100% 0 0;
+  background: linear-gradient(90deg, var(--color-pink), var(--color-pink-light, #ff4dc4));
+  border-radius: 1px;
+  transition: right 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fp-step-line.is-filled::after {
+  right: 0;
+}
+
+/* Caption da etapa atual (visível só no mobile) */
+.fp-step-current-caption {
+  display: none;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 4px auto 18px;
+  padding: 0 16px;
+  letter-spacing: 0.1px;
+}
+
+.fp-step-current-caption .fp-step-current-prefix {
+  color: var(--color-muted);
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+/* ---------- Tablet (480–767px): labels abreviadas ---------- */
+@media (max-width: 767px) {
   .form-progress-steps {
-    padding: 0 8px;
+    padding: 8px 12px 4px;
+  }
+
+  /* Esconde texto completo (data-full) e mostra a abreviação (data-short) */
+  .fp-step-label {
+    font-size: 0;
+  }
+  .fp-step-label::after {
+    content: attr(data-short);
+    font-size: 11px;
+    font-weight: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+  }
+
+  .fp-step-line-wrapper {
+    min-width: 10px;
+    max-width: 48px;
+    margin: 14px 2px 0;
+  }
+}
+
+/* ---------- Mobile (<480px): só círculos + caption da etapa atual ---------- */
+@media (max-width: 479px) {
+  .form-progress-steps {
+    padding: 8px 8px 0;
+    gap: 0;
   }
 
   .fp-step-circle {
     width: 28px;
     height: 28px;
-    font-size: 11px;
-  }
-
-  .fp-step-label {
-    font-size: 10px;
-  }
-
-  /* Mostra abreviação no mobile */
-  .fp-step-label::after {
-    content: attr(data-short);
-  }
-  .fp-step-label {
-    font-size: 0; /* esconde o texto original (data-full) */
-  }
-
-  .fp-step-line-wrapper {
-    min-width: 8px;
-    max-width: 24px;
-    margin: 0 1px;
-  }
-}
-
-/* ---------- Very small: esconde labels ---------- */
-@media (max-width: 400px) {
-  .form-progress-steps {
-    padding: 0 4px;
-    gap: 2px;
-  }
-
-  .fp-step-circle {
-    width: 24px;
-    height: 24px;
-    font-size: 10px;
+    font-size: 12px;
     margin-bottom: 0;
+  }
+
+  .fp-step.active .fp-step-circle {
+    transform: scale(1.08);
   }
 
   .fp-step-label {
@@ -197,12 +289,24 @@
 
   .fp-step-line-wrapper {
     min-width: 6px;
-    max-width: 16px;
-    margin: 0 1px;
+    max-width: none;
+    margin: 13px 2px 0;
   }
 
-  .fp-step-line {
-    margin-bottom: 12px;
+  .fp-step-current-caption {
+    display: block;
+  }
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .fp-step-circle,
+  .fp-step-label,
+  .fp-step-line::after {
+    transition: none;
+  }
+  .fp-step.active .fp-step-circle {
+    transform: none;
   }
 }
 
@@ -236,7 +340,7 @@
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: rgba(255,255,255,0.55);
+  color: var(--color-muted);
   margin-bottom: 8px;
   font-weight: 600;
 }
@@ -244,7 +348,7 @@
 .form-progress-bar {
   width: 100%;
   height: 6px;
-  background: rgba(255,255,255,0.08);
+  background: var(--color-border);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -289,7 +393,7 @@ textarea.field-error {
 }
 
 .forms-content h3 {
-  color: var(--text-primary);
+  color: var(--color-text);
   font-size: 16px;
   font-weight: 700;
   margin-bottom: 16px;
@@ -297,7 +401,7 @@ textarea.field-error {
 }
 
 .forms-content h4 {
-  color: var(--text-primary);
+  color: var(--color-text);
   font-size: 14px;
   font-weight: 700;
   margin-bottom: 12px;
@@ -305,7 +409,7 @@ textarea.field-error {
 }
 
 .forms-content p {
-  color: var(--text-muted);
+  color: var(--color-muted);
   font-size: 14px;
   line-height: 1.6;
   margin: 0 0 20px 0;
@@ -314,7 +418,7 @@ textarea.field-error {
 /* Form fields */
 .forms-content label {
   display: block;
-  color: var(--text-muted);
+  color: var(--color-muted);
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
@@ -333,13 +437,19 @@ textarea.field-error {
   padding: 12px 14px;
   border-radius: 12px;
   border: 1.5px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
+  background: var(--color-glass);
+  color: var(--color-text);
   font-size: 14px;
   font-family: inherit;
   transition: all 0.3s ease;
   margin-bottom: 16px;
   box-sizing: border-box;
+}
+
+.forms-content input::placeholder,
+.forms-content textarea::placeholder {
+  color: var(--color-muted);
+  opacity: 0.7;
 }
 
 .forms-content input[type="text"]:focus,

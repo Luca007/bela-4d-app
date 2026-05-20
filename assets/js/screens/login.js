@@ -99,6 +99,8 @@ export class LoginScreen extends BaseScreen {
     DOM.setStyle(passWrap, { position: 'relative', width: '100%' });
     DOM.setStyle(passInput, { paddingRight: '48px', width: '100%', boxSizing: 'border-box' });
 
+    // OLD: cores hard-coded ('rgba(255,255,255,0.55)' / background hover) — quebravam no tema claro.
+    // Agora usamos var(--color-muted) e var(--color-glass) para o hover.
     const toggleBtn = DOM.create('button');
     toggleBtn.type = 'button';
     toggleBtn.setAttribute('aria-label', 'Mostrar/ocultar senha');
@@ -112,7 +114,7 @@ export class LoginScreen extends BaseScreen {
       border: 'none',
       borderRadius: '8px',
       background: 'transparent',
-      color: 'rgba(255,255,255,0.55)',
+      color: 'var(--color-muted)',
       cursor: 'pointer',
       display: 'flex',
       alignItems: 'center',
@@ -127,9 +129,9 @@ export class LoginScreen extends BaseScreen {
       const showing = passInput.type === 'text';
       passInput.type = showing ? 'password' : 'text';
       toggleBtn.innerHTML = showing ? eyeClosed : eyeOpen;
-      toggleBtn.style.color = showing ? 'rgba(255,255,255,0.55)' : Colors.pink;
+      toggleBtn.style.color = showing ? 'var(--color-muted)' : 'var(--color-pink)';
     });
-    toggleBtn.addEventListener('mouseenter', () => { toggleBtn.style.background = 'rgba(255,255,255,0.06)'; });
+    toggleBtn.addEventListener('mouseenter', () => { toggleBtn.style.background = 'var(--color-glass)'; });
     toggleBtn.addEventListener('mouseleave', () => { toggleBtn.style.background = 'transparent'; });
 
     passWrap.appendChild(passInput);
