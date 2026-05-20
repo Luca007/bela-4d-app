@@ -56,6 +56,7 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 const consoleLog = [];
 const pageErrors = [];
 const clickAudit = [];
+const networkErrors = [];
 
 function attachListeners(page) {
   page.on('console', msg => {
@@ -63,6 +64,25 @@ function attachListeners(page) {
   });
   page.on('pageerror', err => {
     pageErrors.push({ message: err.message.slice(0, 300), ts: Date.now() });
+  });
+  page.on('response', resp => {
+    const status = resp.status();
+    if (status >= 400) {
+      networkErrors.push({
+        url: resp.url().slice(0, 200),
+        status,
+        ok: resp.ok(),
+        ts: Date.now(),
+      });
+    }
+  });
+  page.on('requestfailed', req => {
+    networkErrors.push({
+      url: req.url().slice(0, 200),
+      status: 0,
+      failure: req.failure()?.errorText?.slice(0, 150) || 'unknown',
+      ts: Date.now(),
+    });
   });
 }
 
@@ -584,6 +604,14 @@ async function captureActive(page) {
 
   const totalShots = fs.readdirSync(OUT_DIR).filter(f => f.endsWith('.png')).length;
 
+  // Deduplicate network errors by URL+status
+  const uniqueNetErrors = [];
+  const seen = new Set();
+  for (const ne of networkErrors) {
+    const key = ne.url + '|' + (ne.status || ne.failure);
+    if (!seen.has(key)) { seen.add(key); uniqueNetErrors.push(ne); }
+  }
+
   const summary = [
     `# Bela 4D — Screenshot QA v6 Report (${STATE}, ${VIEWPORT_TYPE})`,
     ``,
@@ -595,6 +623,8 @@ async function captureActive(page) {
     `- Page JS errors: ${pageErrors.length}`,
     `- Console warnings: ${warnings.length}`,
     `- Click failures: ${clickFails.length}`,
+    `- Network 4xx/5xx errors: ${uniqueNetErrors.length}`,
+    ...(uniqueNetErrors.length ? uniqueNetErrors.map(ne => `  - ${ne.status} ${ne.url}${ne.failure ? ' (' + ne.failure + ')' : ''}`) : []),
     ``,
   ].join('\n');
 
@@ -608,11 +638,13 @@ async function captureActive(page) {
       pageErrors: pageErrors.length,
       consoleWarnings: warnings.length,
       clickFailures: clickFails.length,
+      networkErrors: uniqueNetErrors.length,
     },
     consoleErrors: errors,
     pageErrors: pageErrors,
     consoleWarnings: warnings,
     clickFailures: clickFails,
+    networkErrors: uniqueNetErrors,
     allConsoleLogs: consoleLog.map(l => ({ type: l.type, text: l.text })),
   }, null, 2));
 
